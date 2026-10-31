@@ -1,15 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { signedPhotoUrls } from "../../lib/data/students";
+import { photoUrlsFor } from "../../lib/data/students";
 import { cn } from "./ui/utils";
 
-/** Signed photo links for a set of storage paths. Cached just under their one-hour life. */
-export function usePhotoUrls(paths: (string | null | undefined)[]): Record<string, string> {
-  const unique = [...new Set(paths.filter((p): p is string => !!p))].sort();
+/**
+ * Expiring photo links for the given students (pass only those who have a photo).
+ * Cached just under the links' one-hour life. If photos are unavailable the
+ * avatars simply show initials, so there is no retry.
+ */
+export function usePhotoUrls(studentIds: (string | null | undefined)[]): Record<string, string> {
+  const unique = [...new Set(studentIds.filter((p): p is string => !!p))].sort();
   const { data } = useQuery({
     queryKey: ["photo-urls", unique],
-    queryFn: () => signedPhotoUrls(unique),
+    queryFn: () => photoUrlsFor(unique),
     enabled: unique.length > 0,
     staleTime: 50 * 60_000,
+    retry: false,
   });
   return data ?? {};
 }

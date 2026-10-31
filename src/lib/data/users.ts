@@ -3,6 +3,7 @@
 // through the manage-users Edge Function, which holds the service key and repeats
 // the permission checks the browser cannot be trusted with.
 import { supabase } from "../supabase";
+import { invokeFunction } from "./functions";
 import type { AppRole } from "../permissions";
 
 export interface UserRow {
@@ -69,23 +70,8 @@ export async function listUnlinkedStudents(): Promise<Linkable[]> {
 
 // ─── Calls to the Edge Function ──────────────────────────────────────────────
 
-async function call(body: Record<string, unknown>): Promise<{ id?: string }> {
-  const { data, error } = await supabase.functions.invoke("manage-users", { body });
-  if (error) {
-    // The function answers with { error: "..." } and a status; surface that message.
-    let message = "Something went wrong. Please try again.";
-    const ctx = (error as { context?: Response }).context;
-    if (ctx && typeof ctx.json === "function") {
-      try {
-        const parsed = (await ctx.json()) as { error?: string };
-        if (parsed.error) message = parsed.error;
-      } catch {
-        /* keep the generic message */
-      }
-    }
-    throw new Error(message);
-  }
-  return (data ?? {}) as { id?: string };
+function call(body: Record<string, unknown>): Promise<{ id?: string }> {
+  return invokeFunction<{ id?: string }>("manage-users", body);
 }
 
 export interface NewUser {

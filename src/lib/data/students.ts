@@ -1,6 +1,7 @@
 // Data layer for students. RLS decides which students each role can see, so a
 // teacher's list contains only the pupils they teach.
 import { supabase } from "../supabase";
+import { invokeFunction } from "./functions";
 
 function check<T>(res: { data: T; error: unknown }): NonNullable<T> {
   if (res.error) throw res.error;
@@ -178,41 +179,47 @@ export async function listStudents(f: StudentFilters): Promise<{ rows: StudentRo
 }
 
 // ─── Photos ──────────────────────────────────────────────────────────────────
-// Private bucket; the browser only ever holds short-lived signed links.
+// Stored privately in Cloudinary. The browser never holds the API secret: the
+// student-photo function signs each upload and hands out expiring view links, and
+// only for students the signed-in user is allowed to see.
 
-const PHOTO_BUCKET = "student-photos";
-const PHOTO_TTL_SECONDS = 3600;
-
-/** Signed links for several photos at once, keyed by storage path. */
-export async function signedPhotoUrls(paths: string[]): Promise<Record<string, string>> {
-  if (paths.length === 0) return {};
-  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(paths, PHOTO_TTL_SECONDS);
-  if (error) throw error;
-  const out: Record<string, string> = {};
-  for (const item of data ?? []) {
-    if (item.path && item.signedUrl) out[item.path] = item.signedUrl;
-  }
-  return out;
+/** Expiring links for several students' photos at once, keyed by student id. */
+export async function photoUrlsFor(studentIds: string[]): Promise<Record<string, string>> {
+  if (studentIds.length === 0) return {};
+  const res = await invokeFunction<{ urls: Record<string, string> }>("student-photo", { action: "view_urls", studentIds });
+  return res.urls;
 }
 
-/** Store a (already resized) photo and record its path on the student. */
-export async function uploadStudentPhoto(studentId: string, photo: Blob): Promise<string> {
-  const path = `${studentId}/photo.jpg`;
-  const up = await supabase.storage.from(PHOTO_BUCKET).upload(path, photo, {
-    upsert: true,
-    contentType: "image/jpeg",
-    cacheControl: "3600",
-  });
-  if (up.error) throw up.error;
-  check(await supabase.from("students").update({ photo_url: path }).eq("id", studentId));
-  return path;
+interface UploadSignature {
+  cloudName: string;
+  apiKey: string;
+  signature: string;
+  timestamp: number;
+  public_id: string;
+  type: string;
+  overwrite: string;
+  invalidate: string;
 }
 
-export async function removeStudentPhoto(studentId: string) {
-  const path = `${studentId}/photo.jpg`;
-  const rm = await supabase.storage.from(PHOTO_BUCKET).remove([path]);
-  if (rm.error) throw rm.error;
-  check(await supabase.from("students").update({ photo_url: null }).eq("id", studentId));
+/** Upload an (already resized) photo straight to Cloudinary, then record that the student has one. */
+export async function uploadStudentPhoto(studentId: string, photo: Blob): Promise<void> {
+  const s = await invokeFunction<UploadSignature>("student-photo", { action: "sign_upload", studentId });
+  const form = new FormData();
+  form.append("file", photo);
+  form.append("api_key", s.apiKey);
+  form.append("timestamp", String(s.timestamp));
+  form.append("signature", s.signature);
+  form.append("public_id", s.public_id);
+  form.append("type", s.type);
+  form.append("overwrite", s.overwrite);
+  form.append("invalidate", s.invalidate);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${s.cloudName}/image/upload`, { method: "POST", body: form });
+  if (!res.ok) throw new Error("The photo could not be uploaded.");
+  check(await supabase.from("students").update({ photo_url: s.public_id }).eq("id", studentId));
+}
+
+export async function removeStudentPhoto(studentId: string): Promise<void> {
+  await invokeFunction("student-photo", { action: "delete", studentId });
 }
 
 // ─── Admitting a student ─────────────────────────────────────────────────────
@@ -534,8 +541,8 @@ export async function removeStudentGuardian(studentId: string, guardianId: strin
  * Developer only, and only for a student with no history (a test or duplicate
  * admission). Anyone with attendance, grades or billing is archived instead.
  */
-export async function deleteStudent(studentId: string, photoPath: string | null) {
+export async function deleteStudent(studentId: string, hadPhoto: boolean) {
   check(await supabase.rpc("delete_student_if_unused", { p_student: studentId }));
-  // The record is gone; tidy the photo too. A leftover file is harmless, so ignore failure.
-  if (photoPath) await supabase.storage.from(PHOTO_BUCKET).remove([photoPath]).catch(() => undefined);
+  // The record is gone; remove the photo too. A leftover file is harmless, so ignore failure.
+  if (hadPhoto) await invokeFunction("student-photo", { action: "delete_orphan", studentId }).catch(() => undefined);
 }

@@ -1,6 +1,6 @@
-"""End-to-end test of the manage-users Edge Function against the linked Supabase project.
+"""End-to-end test of the manage-users and student-photo Edge Functions against the linked Supabase project.
 
-Run:  python supabase/tests/manage_users_e2e.py
+Run:  python supabase/tests/functions_e2e.py
 Needs the Supabase CLI logged in and linked, and .env.local at the repo root.
 
 Creates temporary zz-*@example.test accounts (one admin, one developer), signs in as
@@ -48,6 +48,10 @@ def sign_in(email, pw):
 
 def fn(token, **body):
     return post("/functions/v1/manage-users", body, token)
+
+
+def photo(token, **body):
+    return post("/functions/v1/student-photo", body, token)
 
 
 results = []
@@ -139,6 +143,19 @@ try:
     check("deactivated teacher cannot sign in", sign_in("zz-teacher@example.test", pw_new)[0] >= 400, True)
     check("admin reactivates the teacher", fn(admin_t, action="set_active", userId=teacher_id, active=True)[0], 200)
     check("reactivated teacher can sign in", sign_in("zz-teacher@example.test", pw_new)[0], 200)
+
+    # student photos: permission checks run before Cloudinary is touched, so they
+    # hold whether or not the Cloudinary secrets have been set (503 = not set up yet)
+    real = re.search(r'"id":\s*"([0-9a-f-]{36})"', sql("select id from public.students order by created_at limit 1"))
+    check("photo: no token is refused", photo(None, action="view_urls", studentIds=[])[0], 401)
+    check("photo: unknown action is refused", photo(admin_t, action="nope")[0], 400)
+    check("photo: teacher cannot sign an upload", photo(teacher_t, action="sign_upload", studentId=real.group(1) if real else NIL)[0], 403)
+    check("photo: admin gets 404 for an unknown student", photo(admin_t, action="sign_upload", studentId=NIL)[0], 404)
+    if real:
+        check("photo: admin can ask to upload for a real student", photo(admin_t, action="sign_upload", studentId=real.group(1))[0] in (200, 503), True)
+        code, body = photo(teacher_t, action="view_urls", studentIds=[real.group(1)])
+        check("photo: a teacher who cannot see the student gets no link", code == 503 or body.get("urls") == {}, True)
+    check("photo: delete_orphan is developer only", photo(admin_t, action="delete_orphan", studentId=NIL)[0], 403)
 
     # password reset
     pw_reset = secrets.token_urlsafe(14)
