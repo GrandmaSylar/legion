@@ -1,0 +1,80 @@
+/* Light mode tokens. Dark is the default defined in theme.css (:root / .dark). */
+html.light {
+  --background: #f4f4f9;
+  --foreground: #14141f;
+  --card: #ffffff;
+  --card-foreground: #14141f;
+  --popover: #ffffff;
+  --popover-foreground: #14141f;
+  --secondary: #ebebf3;
+  --secondary-foreground: #14141f;
+  --muted: #ebebf3;
+  --muted-foreground: #5a5a74;
+  --border: rgba(20, 20, 40, 0.12);
+  --input: #e4e4ee;
+  --input-background: #ffffff;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #14141f;
+  --sidebar-accent: #ebebf3;
+  --sidebar-accent-foreground: #14141f;
+  --sidebar-border: rgba(20, 20, 40, 0.12);
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 8px 32px rgba(40, 40, 80, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+:root,
+html.dark {
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/*
+ * .surface is the one panel style used by cards, the sidebar and the header.
+ * Flat: a solid card with a hairline border (cheap to paint, high contrast).
+ * Glass: translucent with a blurred backdrop, on top of the tinted backdrop below.
+ */
+.surface {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+html[data-surface="glass"] body {
+  background:
+    radial-gradient(60rem 40rem at 10% -10%, color-mix(in srgb, var(--primary) 35%, transparent), transparent 60%),
+    radial-gradient(50rem 40rem at 100% 10%, color-mix(in srgb, var(--chart-3) 22%, transparent), transparent 60%),
+    radial-gradient(50rem 40rem at 50% 120%, color-mix(in srgb, var(--chart-5) 22%, transparent), transparent 60%),
+    var(--background);
+  background-attachment: fixed;
+}
+
+html[data-surface="glass"] .surface {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+
+/* Respect the OS setting even if glass was chosen earlier. */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-surface="glass"] .surface {
+    background: var(--card);
+    border-color: var(--border);
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
