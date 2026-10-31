@@ -10,6 +10,9 @@ import ComingSoon from "./pages/ComingSoon";
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Settings = lazy(() => import("./pages/Settings"));
+const StudentsList = lazy(() => import("./pages/students/StudentsList"));
+const AddStudent = lazy(() => import("./pages/students/AddStudent"));
+const StudentDetail = lazy(() => import("./pages/students/StudentDetail"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -64,6 +67,8 @@ export default function App() {
                             <Dashboard />
                           ) : item.id === "settings" ? (
                             <Settings />
+                          ) : item.id === "students" ? (
+                            <StudentsList />
                           ) : (
                             <ComingSoon title={item.label} />
                           )}
@@ -71,6 +76,22 @@ export default function App() {
                       }
                     />
                   ))}
+                  <Route
+                    path="/students/new"
+                    element={
+                      <RequireRole allowed={["school_admin", "receptionist"]}>
+                        <AddStudent />
+                      </RequireRole>
+                    }
+                  />
+                  <Route
+                    path="/students/:id"
+                    element={
+                      <RequireRole allowed={["school_admin", "principal", "teacher", "receptionist", "accountant", "parent", "student"]}>
+                        <StudentDetail />
+                      </RequireRole>
+                    }
+                  />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
