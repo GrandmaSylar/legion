@@ -62,9 +62,24 @@ export const NAV: NavItem[] = [
   { id: "fees", label: "Fees", path: "/fees", roles: ["school_admin", "accountant", "parent"], built: false },
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: false },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: false },
+  { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true },
   { id: "settings", label: "Settings", path: "/settings", roles: ["school_admin"], built: true },
 ];
 
-export function navFor(roles: AppRole[]): NavItem[] {
-  return NAV.filter((item) => hasAnyRole(roles, item.roles));
+/**
+ * A user's own switches (profile.modules) can only narrow what their role
+ * allows. null means "everything the role allows"; Overview is always on.
+ */
+export function canSee(item: NavItem, roles: AppRole[], modules: string[] | null): boolean {
+  if (!hasAnyRole(roles, item.roles)) return false;
+  return modules === null || item.id === "dashboard" || modules.includes(item.id);
+}
+
+export function navFor(roles: AppRole[], modules: string[] | null = null): NavItem[] {
+  return NAV.filter((item) => canSee(item, roles, modules));
+}
+
+/** Sections a person with these roles could be given. Overview is always included. */
+export function assignableModules(roles: AppRole[]): NavItem[] {
+  return NAV.filter((item) => item.id !== "dashboard" && hasAnyRole(roles, item.roles));
 }

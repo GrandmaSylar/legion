@@ -12,17 +12,24 @@ export interface Profile {
   schoolId: string;
   schoolName: string;
   brandPrimary: string | null;
+  isActive: boolean;
+  /** Sections the user has switched on; null means everything their role allows. */
+  modules: string[] | null;
 }
 
-type Status = "loading" | "signedOut" | "signedIn";
+type Status = "loading" | "signedOut" | "signedIn" | "deactivated";
 
 interface AuthState {
   status: Status;
   profile: Profile | null;
   roles: AppRole[];
+  /** True until a user given a temporary password chooses their own. */
+  mustChangePassword: boolean;
   /** Returns an error message, or null on success. */
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  /** Sets a new password and clears the temporary-password flag. Returns an error message, or null. */
+  changePassword: (newPassword: string) => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -31,7 +38,7 @@ async function loadProfile(userId: string): Promise<{ profile: Profile; roles: A
   const [{ data: p }, { data: r }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, email, school_id, schools(name, brand_colors)")
+      .select("id, full_name, email, school_id, is_active, modules, schools(name, brand_colors)")
       .eq("id", userId)
       .maybeSingle(),
     supabase.from("user_roles").select("role").eq("profile_id", userId),
@@ -47,6 +54,8 @@ async function loadProfile(userId: string): Promise<{ profile: Profile; roles: A
       schoolId: p.school_id,
       schoolName: school?.name ?? "",
       brandPrimary: brand.primary ?? null,
+      isActive: p.is_active,
+      modules: (p.modules as string[] | null) ?? null,
     },
     roles: (r ?? []).map((x) => x.role as AppRole),
   };
@@ -98,11 +107,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  const changePassword = useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      return /different|same/i.test(error.message)
+        ? "Choose a password you have not used before."
+        : "The password could not be changed. Try a longer or less common one.";
+    }
+    // The flag lives in app metadata, which only the server can change.
+    const cleared = await supabase.functions.invoke("manage-users", { body: { action: "clear_password_flag" } });
+    if (cleared.error) return "Your password was changed, but the account could not be updated. Sign in again.";
+    await supabase.auth.refreshSession();
+    return null;
+  }, []);
+
   const value = useMemo<AuthState>(() => {
     let status: Status = "loading";
-    if (sessionReady && profileReady) status = session && loaded ? "signedIn" : "signedOut";
-    return { status, profile: loaded?.profile ?? null, roles: loaded?.roles ?? [], signIn, signOut };
-  }, [sessionReady, profileReady, session, loaded, signIn, signOut]);
+    if (sessionReady && profileReady) {
+      if (!session || !loaded) status = "signedOut";
+      else status = loaded.profile.isActive ? "signedIn" : "deactivated";
+    }
+    const mustChangePassword = session?.user.app_metadata?.must_change_password === true;
+    return {
+      status, profile: loaded?.profile ?? null, roles: loaded?.roles ?? [], mustChangePassword,
+      signIn, signOut, changePassword,
+    };
+  }, [sessionReady, profileReady, session, loaded, signIn, signOut, changePassword]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
