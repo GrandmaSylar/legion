@@ -34,7 +34,7 @@ function Stat({
   return (
     <section
       className={cn(
-        "lift relative isolate flex min-h-44 flex-col overflow-hidden rounded-[1.75rem] p-6",
+        "lift relative isolate flex flex-col overflow-hidden rounded-3xl p-4 sm:min-h-44 sm:rounded-[1.75rem] sm:p-6",
         hero ? "text-white shadow-lg shadow-primary/30" : "surface",
       )}
       style={{
@@ -47,18 +47,18 @@ function Stat({
       <Icon
         aria-hidden
         strokeWidth={1.4}
-        className="pointer-events-none absolute -bottom-6 -right-5 -z-10 size-36 -rotate-12 opacity-[0.16]"
+        className="pointer-events-none absolute -bottom-3 -right-3 -z-10 size-20 -rotate-12 opacity-[0.16] sm:-bottom-6 sm:-right-5 sm:size-36"
         style={{ color: hero ? "#fff" : accent }}
       />
-      <div className={cn("text-sm font-medium", hero ? "text-white/85" : "text-muted-foreground")}>{label}</div>
-      <div className="mt-auto pt-6 text-5xl font-extrabold leading-none tracking-tight tabular-nums">
-        {value === null ? <Skeleton className="h-11 w-24" /> : value}
+      <div className={cn("text-xs font-medium sm:text-sm", hero ? "text-white/85" : "text-muted-foreground")}>{label}</div>
+      <div className="mt-auto pt-2 text-3xl font-extrabold leading-none tracking-tight tabular-nums sm:pt-6 sm:text-5xl">
+        {value === null ? <Skeleton className="h-8 w-16 sm:h-11 sm:w-24" /> : value}
       </div>
-      <div className="mt-4 min-h-6">
+      <div className="mt-2 sm:mt-4 sm:min-h-6">
         {value === null ? (
-          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-20 sm:h-5 sm:w-32" />
         ) : hint ? (
-          <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", pill)}>
+          <span className={cn("inline-flex max-w-full items-center gap-1 rounded-xl px-2 py-0.5 text-[11px] font-medium leading-tight sm:rounded-full sm:px-2.5 sm:py-1 sm:text-xs", pill)}>
             {hintTone === "up" ? <ArrowUpRight className="size-3" aria-hidden /> : null}
             {hint}
           </span>
@@ -74,8 +74,8 @@ function Panel({
   title, icon: Icon, action, className = "", children,
 }: { title: string; icon: LucideIcon; action?: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <section className={`surface lift p-5 ${className}`}>
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section className={`surface lift p-4 sm:p-5 ${className}`}>
+      <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
         <h2 className="flex items-center gap-2 text-base font-semibold">
           <Icon className="size-4 text-primary" aria-hidden /> {title}
         </h2>
@@ -161,11 +161,11 @@ function QuickActionsPanel() {
                   <a.icon className="size-5" aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2 text-sm font-medium">
+                  <span className="flex flex-wrap items-center gap-x-2 text-sm font-medium">
                     {a.label}
                     {a.soon ? <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Soon</span> : null}
                   </span>
-                  <span className="block truncate text-xs text-muted-foreground">{a.hint}</span>
+                  <span className="block break-words text-xs text-muted-foreground">{a.hint}</span>
                 </span>
                 <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
               </Link>
@@ -190,8 +190,8 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
   return (
     <Panel title="Today" icon={CalendarCheck} className="lg:col-span-3">
       <div className="grid gap-5 lg:grid-cols-[14rem_1fr]">
-        <div className="flex items-center gap-4 rounded-2xl bg-primary/10 p-4 lg:flex-col lg:items-start">
-          <div className="text-5xl font-bold leading-none tabular-nums text-primary">{now.getDate()}</div>
+        <div className="flex items-center gap-3 rounded-2xl bg-primary/10 p-3 sm:gap-4 sm:p-4 lg:flex-col lg:items-start">
+          <div className="text-4xl font-bold leading-none tabular-nums text-primary sm:text-5xl">{now.getDate()}</div>
           <div>
             <div className="text-sm font-semibold">{now.toLocaleDateString(undefined, { weekday: "long" })}</div>
             <div className="text-xs text-muted-foreground">{now.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</div>
@@ -218,8 +218,8 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
                     <GraduationCap className="size-4" aria-hidden />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{c.levelName} {c.section}</div>
-                    <div className="truncate text-xs text-muted-foreground">
+                    <div className="break-words text-sm font-medium">{c.levelName} {c.section}</div>
+                    <div className="break-words text-xs text-muted-foreground">
                       {c.studentCount} {c.studentCount === 1 ? "student" : "students"}
                       {c.classTeacherName ? ` · ${c.classTeacherName}` : ""}
                     </div>
@@ -253,11 +253,11 @@ export default function Dashboard() {
   const date = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-4 sm:space-y-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">{date}</p>
-        <h1 className="mt-1 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">Hi, {firstName}!</h1>
-        <p className="mt-1 text-lg text-muted-foreground">Here is what is happening at {profile?.schoolName}.</p>
+        <h1 className="mt-1 text-3xl font-bold leading-tight tracking-tight sm:text-5xl">Hi, {firstName}!</h1>
+        <p className="mt-1 text-base text-muted-foreground sm:text-lg">Here is what is happening at {profile?.schoolName}.</p>
       </div>
 
       {isError ? (
@@ -269,10 +269,10 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat
           icon={Users} label="Active students" accent="var(--primary)" hero value={data ? data.activeStudents : null}
-          hint={data ? (data.admittedThisMonth > 0 ? `+${data.admittedThisMonth} this month` : "No new admissions this month") : undefined}
+          hint={data ? (data.admittedThisMonth > 0 ? `+${data.admittedThisMonth} this month` : "None this month") : undefined}
           hintTone={data && data.admittedThisMonth > 0 ? "up" : "muted"}
         />
         <Stat
@@ -281,12 +281,12 @@ export default function Dashboard() {
         />
         <Stat
           icon={GraduationCap} label="Classes" accent="var(--chart-2)" value={data ? data.classes : null}
-          hint={data ? (data.yearName ? `Academic year ${data.yearName}` : "No current academic year") : undefined}
+          hint={data ? (data.yearName ? `Year ${data.yearName}` : "No current year") : undefined}
         />
         <Stat
           icon={CalendarCheck} label="Present today" accent="var(--chart-3)"
           value={data ? (marked === 0 ? "—" : `${present}/${marked}`) : null}
-          hint={data ? (marked === 0 ? "Attendance not yet marked" : `${Math.round((present / marked) * 100)}% present`) : undefined}
+          hint={data ? (marked === 0 ? "Not marked yet" : `${Math.round((present / marked) * 100)}% present`) : undefined}
           hintTone={data && marked > 0 ? "up" : "muted"}
         />
       </div>

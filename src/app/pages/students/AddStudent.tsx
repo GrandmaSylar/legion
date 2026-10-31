@@ -197,7 +197,14 @@ export default function AddStudent() {
         </p>
       </div>
 
-      <ol className="flex gap-1 overflow-x-auto" aria-label="Admission steps">
+      {/* Phones: one line and a progress bar. Larger screens: the five steps. */}
+      <div className="md:hidden" role="status">
+        <p className="text-sm font-medium">Step {step + 1} of {STEPS.length}: {STEPS[step]}</p>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-foreground/10" aria-hidden>
+          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
+        </div>
+      </div>
+      <ol className="hidden gap-1 md:flex" aria-label="Admission steps">
         {STEPS.map((name, i) => (
           <li key={name} aria-current={i === step ? "step" : undefined} className="flex-1">
             <button

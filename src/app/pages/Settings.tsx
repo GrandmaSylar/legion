@@ -12,8 +12,8 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="calendar" className="space-y-4">
-        <div className="overflow-x-auto">
-          <TabsList>
+        <div>
+          <TabsList className="h-auto w-full flex-wrap justify-start">
             <TabsTrigger value="calendar">Academic year</TabsTrigger>
             <TabsTrigger value="classes">Classes</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>

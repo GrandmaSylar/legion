@@ -147,8 +147,8 @@ export default function StudentsList() {
               >
                 <StudentAvatar name={s.fullName} url={s.photoPath ? urls[s.id] : null} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{s.fullName}</div>
-                  <div className="truncate text-xs tabular-nums text-muted-foreground">{s.admissionNo}</div>
+                  <div className="break-words text-sm font-medium">{s.fullName}</div>
+                  <div className="break-all text-xs tabular-nums text-muted-foreground">{s.admissionNo}</div>
                 </div>
                 <div className="hidden text-sm text-muted-foreground sm:block">{s.className ?? "No class"}</div>
                 <StatusPill status={s.status} />
