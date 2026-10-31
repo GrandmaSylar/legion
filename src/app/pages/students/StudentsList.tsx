@@ -11,6 +11,7 @@ import { Button } from "../../components/ui/button";
 import { Skeleton } from "../../components/ui/skeleton";
 import { NativeSelect, controlClass } from "../../components/fields";
 import { cn } from "../../components/ui/utils";
+import { StudentAvatar, usePhotoUrls } from "../../components/StudentAvatar";
 
 const STATUS_LABEL: Record<StudentStatus, string> = { active: "Active", completed: "Completed", left: "Left" };
 
@@ -55,6 +56,7 @@ export default function StudentsList() {
     enabled: years.isSuccess,
   });
 
+  const urls = usePhotoUrls(list.data?.rows.map((r) => r.photoPath) ?? []);
   const total = list.data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered = !!(q || classId || status !== "active");
@@ -139,6 +141,7 @@ export default function StudentsList() {
                 to={`/students/${s.id}`}
                 className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-foreground/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring)]"
               >
+                <StudentAvatar name={s.fullName} url={s.photoPath ? urls[s.photoPath] : null} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{s.fullName}</div>
                   <div className="truncate text-xs tabular-nums text-muted-foreground">{s.admissionNo}</div>

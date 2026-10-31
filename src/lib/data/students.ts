@@ -10,12 +10,105 @@ function check<T>(res: { data: T; error: unknown }): NonNullable<T> {
 export type StudentStatus = "active" | "completed" | "left";
 export type Gender = "female" | "male";
 
+// ─── Choices used by the admission form ──────────────────────────────────────
+
+export const RELIGIONS = ["Christian", "Muslim", "Traditional", "Other", "None"];
+export const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+export const RELATIONSHIPS = ["Mother", "Father", "Guardian", "Grandparent", "Uncle or aunt", "Sibling", "Other"];
+export const TRANSPORT_MODES: { value: string; label: string }[] = [
+  { value: "walk", label: "Walks to school" },
+  { value: "school_bus", label: "School bus" },
+  { value: "private_car", label: "Private car" },
+  { value: "public_transport", label: "Public transport" },
+  { value: "other", label: "Other" },
+];
+export const DOCUMENTS: { value: string; label: string }[] = [
+  { value: "birth_certificate", label: "Birth certificate" },
+  { value: "passport_photo", label: "Passport photo" },
+  { value: "previous_report", label: "Previous school report" },
+  { value: "immunisation_card", label: "Immunisation card" },
+  { value: "nhis_card", label: "NHIS card" },
+];
+
+// ─── The student's own fields (shared by admission and editing) ──────────────
+
+export interface StudentFields {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: Gender | "";
+  placeOfBirth: string;
+  nationality: string;
+  religion: string;
+  homeLanguage: string;
+  residenceAddress: string;
+  birthCertNo: string;
+  nhisNo: string;
+  bloodGroup: string;
+  allergies: string;
+  medicalNotes: string;
+  specialNeeds: string;
+  previousSchool: string;
+  previousClass: string;
+  previousSchoolReason: string;
+  transportMode: string;
+  consentMedical: boolean;
+  consentPhoto: boolean;
+  documentsReceived: string[];
+  admittedOn: string;
+}
+
+export function emptyStudentFields(): StudentFields {
+  return {
+    firstName: "", middleName: "", lastName: "", dateOfBirth: "", gender: "",
+    placeOfBirth: "", nationality: "Ghanaian", religion: "", homeLanguage: "", residenceAddress: "",
+    birthCertNo: "", nhisNo: "", bloodGroup: "", allergies: "", medicalNotes: "", specialNeeds: "",
+    previousSchool: "", previousClass: "", previousSchoolReason: "", transportMode: "",
+    consentMedical: false, consentPhoto: false, documentsReceived: [], admittedOn: "",
+  };
+}
+
+const t = (v: string) => v.trim();
+
+function toColumns(f: StudentFields) {
+  return {
+    first_name: t(f.firstName),
+    middle_name: t(f.middleName),
+    last_name: t(f.lastName),
+    date_of_birth: f.dateOfBirth,
+    gender: f.gender,
+    admitted_on: f.admittedOn,
+    place_of_birth: t(f.placeOfBirth),
+    nationality: t(f.nationality),
+    religion: f.religion,
+    home_language: t(f.homeLanguage),
+    residence_address: t(f.residenceAddress),
+    birth_cert_no: t(f.birthCertNo),
+    nhis_no: t(f.nhisNo),
+    blood_group: f.bloodGroup,
+    allergies: t(f.allergies),
+    medical_notes: t(f.medicalNotes),
+    special_needs: t(f.specialNeeds),
+    previous_school: t(f.previousSchool),
+    previous_class: t(f.previousClass),
+    previous_school_reason: t(f.previousSchoolReason),
+    transport_mode: f.transportMode,
+    consent_medical: f.consentMedical,
+    consent_photo: f.consentPhoto,
+    documents_received: f.documentsReceived,
+  };
+}
+
+// ─── The list ────────────────────────────────────────────────────────────────
+
 export interface StudentRow {
   id: string;
   admissionNo: string;
   fullName: string;
   gender: Gender | null;
   status: StudentStatus;
+  photoPath: string | null;
   /** Class in the current academic year, e.g. "Basic 4 A". */
   className: string | null;
 }
@@ -54,7 +147,7 @@ export async function listStudents(f: StudentFilters): Promise<{ rows: StudentRo
   let q = supabase
     .from("students")
     .select(
-      `id, admission_no, first_name, middle_name, last_name, gender, status,
+      `id, admission_no, first_name, middle_name, last_name, gender, status, photo_url,
        ${join}(class_id, academic_year_id, classes(section, levels(name)))`,
       { count: "exact" },
     );
@@ -77,10 +170,49 @@ export async function listStudents(f: StudentFilters): Promise<{ rows: StudentRo
       fullName: fullName(r),
       gender: r.gender as Gender | null,
       status: r.status as StudentStatus,
+      photoPath: r.photo_url as string | null,
       className: current ? classLabel(current.classes) : null,
     };
   });
   return { rows, total: res.count ?? rows.length };
+}
+
+// ─── Photos ──────────────────────────────────────────────────────────────────
+// Private bucket; the browser only ever holds short-lived signed links.
+
+const PHOTO_BUCKET = "student-photos";
+const PHOTO_TTL_SECONDS = 3600;
+
+/** Signed links for several photos at once, keyed by storage path. */
+export async function signedPhotoUrls(paths: string[]): Promise<Record<string, string>> {
+  if (paths.length === 0) return {};
+  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(paths, PHOTO_TTL_SECONDS);
+  if (error) throw error;
+  const out: Record<string, string> = {};
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl) out[item.path] = item.signedUrl;
+  }
+  return out;
+}
+
+/** Store a (already resized) photo and record its path on the student. */
+export async function uploadStudentPhoto(studentId: string, photo: Blob): Promise<string> {
+  const path = `${studentId}/photo.jpg`;
+  const up = await supabase.storage.from(PHOTO_BUCKET).upload(path, photo, {
+    upsert: true,
+    contentType: "image/jpeg",
+    cacheControl: "3600",
+  });
+  if (up.error) throw up.error;
+  check(await supabase.from("students").update({ photo_url: path }).eq("id", studentId));
+  return path;
+}
+
+export async function removeStudentPhoto(studentId: string) {
+  const path = `${studentId}/photo.jpg`;
+  const rm = await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+  if (rm.error) throw rm.error;
+  check(await supabase.from("students").update({ photo_url: null }).eq("id", studentId));
 }
 
 // ─── Admitting a student ─────────────────────────────────────────────────────
@@ -110,36 +242,55 @@ export async function findGuardiansByPhone(phone: string): Promise<GuardianMatch
   return rows.map((r) => ({ id: r.id, fullName: r.full_name, phone: r.phone, relationship: r.relationship }));
 }
 
-export interface AdmitInput {
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: Gender;
-  classId: string;
-  medicalNotes: string;
-  existingGuardianId: string | null;
-  guardianName: string;
-  guardianPhone: string;
-  guardianRelationship: string;
-  guardianEmail: string;
+export interface GuardianEntry {
+  /** Set when an existing guardian is reused (a sibling's parent). */
+  existingId: string | null;
+  fullName: string;
+  relationship: string;
+  phone: string;
+  email: string;
+  occupation: string;
+  employer: string;
+  address: string;
+  isPrimary: boolean;
+  isFeePayer: boolean;
+  isEmergencyContact: boolean;
+  canPickup: boolean;
 }
 
-export async function admitStudent(i: AdmitInput): Promise<{ studentId: string; admissionNo: string }> {
+export function emptyGuardian(relationship = "Mother", primary = false): GuardianEntry {
+  return {
+    existingId: null, fullName: "", relationship, phone: "", email: "", occupation: "", employer: "",
+    address: "", isPrimary: primary, isFeePayer: primary, isEmergencyContact: primary, canPickup: true,
+  };
+}
+
+export async function admitStudent(
+  fields: StudentFields,
+  classId: string,
+  guardians: GuardianEntry[],
+): Promise<{ studentId: string; admissionNo: string }> {
+  const people = guardians
+    .filter((g) => g.existingId || g.fullName.trim())
+    .map((g) => ({
+      id: g.existingId,
+      full_name: t(g.fullName),
+      relationship: g.relationship,
+      phone: normalizePhone(g.phone),
+      email: t(g.email),
+      occupation: t(g.occupation),
+      employer: t(g.employer),
+      address: t(g.address),
+      is_primary: g.isPrimary,
+      is_fee_payer: g.isFeePayer,
+      is_emergency_contact: g.isEmergencyContact,
+      can_pickup: g.canPickup,
+    }));
   const rows = check(
     await supabase.rpc("admit_student", {
-      p_first: i.firstName,
-      p_middle: i.middleName,
-      p_last: i.lastName,
-      p_dob: i.dateOfBirth || null,
-      p_gender: i.gender,
-      p_class: i.classId || null,
-      p_medical: i.medicalNotes,
-      p_guardian_id: i.existingGuardianId,
-      p_guardian_name: i.guardianName,
-      p_guardian_phone: normalizePhone(i.guardianPhone),
-      p_guardian_relationship: i.guardianRelationship,
-      p_guardian_email: i.guardianEmail,
+      p_student: toColumns(fields),
+      p_class: classId || null,
+      p_guardians: people,
     }),
   );
   const row = rows[0];
@@ -151,18 +302,16 @@ export async function admitStudent(i: AdmitInput): Promise<{ studentId: string; 
 export interface StudentDetail {
   id: string;
   admissionNo: string;
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  dateOfBirth: string | null;
-  gender: Gender | null;
   status: StudentStatus;
-  admittedOn: string;
   leftOn: string | null;
   leftReason: string | null;
-  medicalNotes: string;
+  photoPath: string | null;
+  fields: StudentFields;
   enrollments: { id: string; className: string; yearName: string; yearId: string; sitsBece: boolean }[];
-  guardians: { id: string; fullName: string; phone: string | null; relationship: string | null; isPrimary: boolean }[];
+  guardians: {
+    id: string; fullName: string; phone: string | null; relationship: string | null; occupation: string | null;
+    isPrimary: boolean; isFeePayer: boolean; isEmergencyContact: boolean;
+  }[];
   bece: { examYear: number; indexNumber: string | null }[];
 }
 
@@ -170,10 +319,10 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
   const res = await supabase
     .from("students")
     .select(
-      `id, admission_no, first_name, middle_name, last_name, date_of_birth, gender, status, admitted_on,
-       left_on, left_reason, medical_notes,
+      `*,
        enrollments(id, academic_year_id, academic_years(name, start_date), classes(section, levels(name, sits_bece))),
-       student_guardians(is_primary, guardians(id, full_name, phone, relationship)),
+       student_guardians(is_primary, is_fee_payer, is_emergency_contact,
+         guardians(id, full_name, phone, relationship, occupation)),
        bece_registrations(exam_year, index_number)`,
     )
     .eq("id", id)
@@ -205,7 +354,10 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
     .sort((a, b) => b.start.localeCompare(a.start))
     .map(({ start: _start, ...rest }) => rest);
 
-  type SG = { is_primary: boolean; guardians: { id: string; full_name: string; phone: string | null; relationship: string | null } | null };
+  type SG = {
+    is_primary: boolean; is_fee_payer: boolean; is_emergency_contact: boolean;
+    guardians: { id: string; full_name: string; phone: string | null; relationship: string | null; occupation: string | null } | null;
+  };
   const guardians = ((r.student_guardians ?? []) as unknown as SG[])
     .filter((x) => x.guardians)
     .map((x) => ({
@@ -213,22 +365,32 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
       fullName: x.guardians!.full_name,
       phone: x.guardians!.phone,
       relationship: x.guardians!.relationship,
+      occupation: x.guardians!.occupation,
       isPrimary: x.is_primary,
+      isFeePayer: x.is_fee_payer,
+      isEmergencyContact: x.is_emergency_contact,
     }));
 
+  const s = (v: string | null | undefined) => v ?? "";
   return {
     id: r.id,
     admissionNo: r.admission_no,
-    firstName: r.first_name,
-    middleName: r.middle_name ?? "",
-    lastName: r.last_name,
-    dateOfBirth: r.date_of_birth,
-    gender: r.gender as Gender | null,
     status: r.status as StudentStatus,
-    admittedOn: r.admitted_on,
     leftOn: r.left_on,
     leftReason: r.left_reason,
-    medicalNotes: r.medical_notes ?? "",
+    photoPath: r.photo_url,
+    fields: {
+      firstName: r.first_name, middleName: s(r.middle_name), lastName: r.last_name,
+      dateOfBirth: s(r.date_of_birth), gender: (r.gender ?? "") as Gender | "",
+      placeOfBirth: s(r.place_of_birth), nationality: s(r.nationality), religion: s(r.religion),
+      homeLanguage: s(r.home_language), residenceAddress: s(r.residence_address),
+      birthCertNo: s(r.birth_cert_no), nhisNo: s(r.nhis_no), bloodGroup: s(r.blood_group),
+      allergies: s(r.allergies), medicalNotes: s(r.medical_notes), specialNeeds: s(r.special_needs),
+      previousSchool: s(r.previous_school), previousClass: s(r.previous_class),
+      previousSchoolReason: s(r.previous_school_reason), transportMode: s(r.transport_mode),
+      consentMedical: r.consent_medical ?? false, consentPhoto: r.consent_photo ?? false,
+      documentsReceived: (r.documents_received ?? []) as string[], admittedOn: s(r.admitted_on),
+    },
     enrollments,
     guardians,
     bece: ((r.bece_registrations ?? []) as { exam_year: number; index_number: string | null }[]).map((b) => ({
@@ -238,20 +400,38 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
   };
 }
 
-export async function updateStudent(
-  id: string,
-  p: { firstName: string; middleName: string; lastName: string; dateOfBirth: string; gender: Gender; medicalNotes: string },
-) {
+export async function updateStudent(id: string, f: StudentFields) {
+  const c = toColumns(f);
+  // Empty text becomes null so cleared fields do not store blanks.
+  const blank = (v: string) => (v === "" ? null : v);
   check(
     await supabase
       .from("students")
       .update({
-        first_name: p.firstName,
-        middle_name: p.middleName || null,
-        last_name: p.lastName,
-        date_of_birth: p.dateOfBirth || null,
-        gender: p.gender,
-        medical_notes: p.medicalNotes || null,
+        first_name: c.first_name,
+        middle_name: blank(c.middle_name),
+        last_name: c.last_name,
+        date_of_birth: blank(c.date_of_birth),
+        gender: f.gender || null,
+        admitted_on: c.admitted_on || undefined,
+        place_of_birth: blank(c.place_of_birth),
+        nationality: blank(c.nationality),
+        religion: blank(c.religion),
+        home_language: blank(c.home_language),
+        residence_address: blank(c.residence_address),
+        birth_cert_no: blank(c.birth_cert_no),
+        nhis_no: blank(c.nhis_no),
+        blood_group: blank(c.blood_group),
+        allergies: blank(c.allergies),
+        medical_notes: blank(c.medical_notes),
+        special_needs: blank(c.special_needs),
+        previous_school: blank(c.previous_school),
+        previous_class: blank(c.previous_class),
+        previous_school_reason: blank(c.previous_school_reason),
+        transport_mode: blank(c.transport_mode),
+        consent_medical: c.consent_medical,
+        consent_photo: c.consent_photo,
+        documents_received: c.documents_received,
       })
       .eq("id", id),
   );
