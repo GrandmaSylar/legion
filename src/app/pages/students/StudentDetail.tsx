@@ -190,7 +190,7 @@ export default function StudentDetailPage() {
   const name = s ? [s.fields.firstName, s.fields.middleName, s.fields.lastName].filter(Boolean).join(" ") : "";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="max-w-3xl space-y-4">
       <Link to="/students" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Students
       </Link>

@@ -30,7 +30,7 @@ export default function Users() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Users</h1>
@@ -38,7 +38,7 @@ export default function Users() {
             {users.data ? `${rows.length} of ${users.data.length}` : "Loading"}
           </p>
         </div>
-        <Button asChild>
+        <Button asChild className="sm:hidden">
           <Link to="/users/new"><Plus className="size-4" aria-hidden /> Add user</Link>
         </Button>
       </div>

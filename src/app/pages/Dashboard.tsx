@@ -9,8 +9,10 @@ function Stat({
 }: { icon: typeof Users; label: string; value: string | number | null; hint?: string }) {
   return (
     <section className="surface p-4">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Icon className="size-4" aria-hidden />
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
+          <Icon className="size-4" aria-hidden />
+        </span>
         {label}
       </div>
       <div className="mt-2 text-3xl font-semibold tabular-nums">
@@ -34,10 +36,9 @@ export default function Dashboard() {
   const present = data?.attendanceToday.present ?? 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div className="w-full space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold">Welcome back, {firstName}</h1>
-        <p className="text-sm text-muted-foreground">Here is where {profile?.schoolName} stands today.</p>
+        <h1 className="text-3xl font-semibold leading-tight">Hi, {firstName}!<br className="sm:hidden" /> <span className="text-muted-foreground">Here is today at {profile?.schoolName}.</span></h1>
       </div>
 
       {isError ? (

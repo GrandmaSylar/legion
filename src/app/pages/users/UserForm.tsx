@@ -325,7 +325,7 @@ function EditUser({ user }: { user: UserRow }) {
 
 export function NewUserPage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="max-w-2xl space-y-4">
       <Link to="/users" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Users
       </Link>
@@ -339,7 +339,7 @@ export default function UserPage() {
   const { id = "" } = useParams();
   const q = useQuery({ queryKey: ["users", id], queryFn: () => getUser(id), enabled: !!id });
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="max-w-2xl space-y-4">
       <Link to="/users" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Users
       </Link>

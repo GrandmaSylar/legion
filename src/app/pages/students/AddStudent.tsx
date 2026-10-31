@@ -186,7 +186,7 @@ export default function AddStudent() {
   const fullName = [fields.firstName, fields.middleName, fields.lastName].filter(Boolean).join(" ");
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="max-w-2xl space-y-4">
       <Link to="/students" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Students
       </Link>
