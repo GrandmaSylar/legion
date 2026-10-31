@@ -56,9 +56,13 @@ declare
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
   u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
+  rs int; rg int; rst int;
   r record;
 begin
   select id into a from public.schools where name = 'Pinks Academy';
+  select count(*) into rs from public.students where school_id = a and deleted_at is null;
+  select count(*) into rg from public.guardians where school_id = a and deleted_at is null;
+  select count(*) into rst from public.staff where school_id = a and deleted_at is null;
   insert into public.schools (name) values ('Other School') returning id into b;
 
   -- auth users + profiles + roles
@@ -99,6 +103,9 @@ begin
   insert into public.enrollments (school_id,student_id,class_id,academic_year_id) values (a,s2,c2,yr) returning id into e2;
   insert into public.attendance (school_id,enrollment_id,date,status) values (a,e1,current_date,'present'),(a,e2,current_date,'absent');
   insert into public.bece_registrations (school_id,student_id,exam_year) values (a,s1,2027);
+  insert into storage.objects (bucket_id, name) values
+    ('student-photos', s1::text || '/photo.jpg'),
+    ('student-photos', s2::text || '/photo.jpg');
 
   insert into public.invoices (school_id,student_id,term_id) values (a,s1,term) returning id into i1;
   insert into public.invoices (school_id,student_id,term_id) values (a,s2,term) returning id into i2;
@@ -108,10 +115,10 @@ begin
   -- expectation helper: (label, actual, expected)
   for r in select * from (values
     -- students
-    ('students admin',      pg_temp.t_count(u_admin,'students')::text,'2'),
-    ('students principal',  pg_temp.t_count(u_prin,'students')::text,'2'),
-    ('students reception',  pg_temp.t_count(u_rec,'students')::text,'2'),
-    ('students accountant', pg_temp.t_count(u_acc,'students')::text,'2'),
+    ('students admin',      pg_temp.t_count(u_admin,'students')::text,(rs + 2)::text),
+    ('students principal',  pg_temp.t_count(u_prin,'students')::text,(rs + 2)::text),
+    ('students reception',  pg_temp.t_count(u_rec,'students')::text,(rs + 2)::text),
+    ('students accountant', pg_temp.t_count(u_acc,'students')::text,(rs + 2)::text),
     ('students teacher1',   pg_temp.t_count(u_t1,'students')::text,'1'),
     ('students teacher2',   pg_temp.t_count(u_t2,'students')::text,'1'),
     ('students hr',         pg_temp.t_count(u_hr,'students')::text,'0'),
@@ -139,10 +146,10 @@ begin
     ('payments parent1',    pg_temp.t_count(u_p1,'payments')::text,'1'),
     ('payments other school admin', pg_temp.t_count(u_adminb,'payments')::text,'0'),
     -- staff, guardians, people
-    ('staff admin',         pg_temp.t_count(u_admin,'staff')::text,'2'),
-    ('staff hr',            pg_temp.t_count(u_hr,'staff')::text,'2'),
+    ('staff admin',         pg_temp.t_count(u_admin,'staff')::text,(rst + 2)::text),
+    ('staff hr',            pg_temp.t_count(u_hr,'staff')::text,(rst + 2)::text),
     ('staff parent1',       pg_temp.t_count(u_p1,'staff')::text,'0'),
-    ('guardians admin',     pg_temp.t_count(u_admin,'guardians')::text,'2'),
+    ('guardians admin',     pg_temp.t_count(u_admin,'guardians')::text,(rg + 2)::text),
     ('guardians teacher1',  pg_temp.t_count(u_t1,'guardians')::text,'0'),
     ('guardians parent1',   pg_temp.t_count(u_p1,'guardians')::text,'1'),
     ('profiles admin',      pg_temp.t_count(u_admin,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
@@ -161,7 +168,7 @@ begin
     ('bece admin',          pg_temp.t_count(u_admin,'bece_registrations')::text,'1'),
     ('bece teacher1',       pg_temp.t_count(u_t1,'bece_registrations')::text,'0'),
     -- developer sees at least everything an admin sees
-    ('students developer',  pg_temp.t_count(u_dev,'students')::text,'2'),
+    ('students developer',  pg_temp.t_count(u_dev,'students')::text,(rs + 2)::text),
     ('attendance developer',pg_temp.t_count(u_dev,'attendance')::text,'2'),
     ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,'2'),
     ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,'2'),
@@ -236,13 +243,34 @@ begin
     ('teacher1 assigns a subject to a class',
        pg_temp.t_try(u_t1, format('insert into public.class_subjects (class_id,subject_id) select %L, id from public.subjects where name = ''Computing''', c1)), 'denied'),
     ('reception admits a student',
-       pg_temp.t_try(u_rec, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,''Mrs Boateng'',''0244000000'',''Mother'',null)', c1)), 'ok:1'),
+       pg_temp.t_try(u_rec, format('select * from public.admit_student(''{"first_name":"Esi","last_name":"Boateng","gender":"female"}''::jsonb, %L, ''[{"full_name":"Mrs Boateng","phone":"0244000000","relationship":"Mother"}]''::jsonb)', c1)), 'ok:1'),
     ('teacher1 admits a student',
-       pg_temp.t_try(u_t1, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,null,null,null,null)', c1)), 'denied'),
+       pg_temp.t_try(u_t1, format('select * from public.admit_student(''{"first_name":"Esi","last_name":"Boateng","gender":"female"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'denied'),
     ('parent1 admits a student',
-       pg_temp.t_try(u_p1, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,null,null,null,null)', c1)), 'denied'),
+       pg_temp.t_try(u_p1, format('select * from public.admit_student(''{"first_name":"Esi","last_name":"Boateng","gender":"female"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'denied'),
     ('admit into a class of another school',
-       pg_temp.t_try(u_adminb, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,null,null,null,null)', c1)), 'denied'),
+       pg_temp.t_try(u_adminb, format('select * from public.admit_student(''{"first_name":"Esi","last_name":"Boateng","gender":"female"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'denied'),
+    -- photos follow the same visibility as the student
+    ('photos: admin sees both',
+       pg_temp.t_try(u_admin, 'select 1 from storage.objects where bucket_id = ''student-photos'' and name like ''%/photo.jpg'' and owner is null and ' || format('(name like %L or name like %L)', s1::text || '/%', s2::text || '/%')), 'ok:2'),
+    ('photos: parent1 sees only own child',
+       pg_temp.t_try(u_p1, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:1'),
+    ('photos: student1 sees only own',
+       pg_temp.t_try(u_s1, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:1'),
+    ('photos: teacher1 sees only own class',
+       pg_temp.t_try(u_t1, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:1'),
+    ('photos: hr sees none',
+       pg_temp.t_try(u_hr, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:0'),
+    ('photos: other school admin sees none',
+       pg_temp.t_try(u_adminb, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:0'),
+    ('photos: reception uploads',
+       pg_temp.t_try(u_rec, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/new.jpg')), 'ok:1'),
+    ('photos: teacher1 uploads',
+       pg_temp.t_try(u_t1, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/t.jpg')), 'denied'),
+    ('photos: parent1 uploads',
+       pg_temp.t_try(u_p1, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/p.jpg')), 'denied'),
+    ('photos: other school admin uploads for school A student',
+       pg_temp.t_try(u_adminb, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/x.jpg')), 'denied'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied')
   ) as x(label, got, want)
