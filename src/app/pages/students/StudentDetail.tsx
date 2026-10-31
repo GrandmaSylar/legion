@@ -5,13 +5,17 @@ import { ArrowLeft, Check } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { hasAnyRole } from "../../../lib/permissions";
 import {
-  closeStudent, getStudent, reopenStudent, saveBeceIndex, updateStudent, type Gender, type StudentDetail,
+  closeStudent, getStudent, removeStudentPhoto, reopenStudent, saveBeceIndex, updateStudent, uploadStudentPhoto,
+  type StudentDetail, type StudentFields,
 } from "../../../lib/data/students";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
+import { PhotoPicker } from "../../components/PhotoPicker";
+import { StudentAvatar, usePhotoUrls } from "../../components/StudentAvatar";
+import { DocumentFields, HealthFields, HistoryFields, PersonalFields } from "./fieldsets";
 import { StatusPill } from "./StudentsList";
 
 function today(): string {
@@ -19,7 +23,7 @@ function today(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function age(dob: string | null): string | null {
+function age(dob: string): string | null {
   if (!dob) return null;
   const b = new Date(dob + "T00:00:00");
   const n = new Date();
@@ -28,20 +32,41 @@ function age(dob: string | null): string | null {
   return `${a} years`;
 }
 
+function PhotoCard({ s, url, canEdit }: { s: StudentDetail; url: string | undefined; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const name = [s.fields.firstName, s.fields.lastName].join(" ");
+  const refresh = () => {
+    setPhoto(null);
+    void qc.invalidateQueries({ queryKey: ["student", s.id] });
+    void qc.invalidateQueries({ queryKey: ["students"] });
+    void qc.invalidateQueries({ queryKey: ["photo-urls"] });
+  };
+  const save = useMutation({ mutationFn: () => uploadStudentPhoto(s.id, photo!), onSuccess: refresh });
+  const remove = useMutation({ mutationFn: () => removeStudentPhoto(s.id), onSuccess: refresh });
+
+  if (!canEdit) return null;
+  return (
+    <section className="surface space-y-3 p-4">
+      <h2 className="text-base font-medium">Photo</h2>
+      <PhotoPicker name={name} existingUrl={url} value={photo} onChange={setPhoto} disabled={save.isPending || remove.isPending} />
+      <FormMessage error={save.isError || remove.isError ? friendlyError(save.error ?? remove.error) : null} />
+      <div className="flex gap-2">
+        {photo ? <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Saving" : "Save photo"}</Button> : null}
+        {!photo && s.photoPath ? (
+          <Button size="sm" variant="outline" disabled={remove.isPending} onClick={() => remove.mutate()}>Remove photo</Button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function DetailsForm({ s, canEdit }: { s: StudentDetail; canEdit: boolean }) {
   const qc = useQueryClient();
-  const [first, setFirst] = useState(s.firstName);
-  const [middle, setMiddle] = useState(s.middleName);
-  const [last, setLast] = useState(s.lastName);
-  const [dob, setDob] = useState(s.dateOfBirth ?? "");
-  const [gender, setGender] = useState<Gender>(s.gender ?? "female");
-  const [medical, setMedical] = useState(s.medicalNotes);
+  const [f, setF] = useState<StudentFields>(s.fields);
+  const patch = (p: Partial<StudentFields>) => setF((cur) => ({ ...cur, ...p }));
   const save = useMutation({
-    mutationFn: () =>
-      updateStudent(s.id, {
-        firstName: first.trim(), middleName: middle.trim(), lastName: last.trim(),
-        dateOfBirth: dob, gender, medicalNotes: medical.trim(),
-      }),
+    mutationFn: () => updateStudent(s.id, f),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["student", s.id] });
       void qc.invalidateQueries({ queryKey: ["students"] });
@@ -50,28 +75,35 @@ function DetailsForm({ s, canEdit }: { s: StudentDetail; canEdit: boolean }) {
   const submit = (e: FormEvent) => { e.preventDefault(); save.mutate(); };
 
   return (
-    <form onSubmit={submit} className="surface space-y-4 p-4">
-      <h2 className="text-base font-medium">Details</h2>
+    <form onSubmit={submit} className="space-y-4">
       <fieldset disabled={!canEdit || save.isPending} className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="First name" htmlFor="first"><Input id="first" value={first} onChange={(e) => setFirst(e.target.value)} required /></Field>
-          <Field label="Middle name" htmlFor="middle"><Input id="middle" value={middle} onChange={(e) => setMiddle(e.target.value)} /></Field>
-          <Field label="Last name" htmlFor="last"><Input id="last" value={last} onChange={(e) => setLast(e.target.value)} required /></Field>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Date of birth" htmlFor="dob"><Input id="dob" type="date" max={today()} value={dob} onChange={(e) => setDob(e.target.value)} /></Field>
-          <Field label="Gender" htmlFor="gender">
-            <NativeSelect id="gender" value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-            </NativeSelect>
-          </Field>
-          <Field label="Age" htmlFor="age"><Input id="age" value={age(dob) ?? "Not recorded"} readOnly tabIndex={-1} /></Field>
-        </div>
-        <Field label="Medical notes" htmlFor="medical"><Input id="medical" value={medical} onChange={(e) => setMedical(e.target.value)} /></Field>
+        <section className="surface space-y-4 p-4">
+          <h2 className="text-base font-medium">Personal details</h2>
+          <PersonalFields value={f} onChange={patch} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Date of admission" htmlFor="admitted"><Input id="admitted" type="date" max={today()} value={f.admittedOn} onChange={(e) => patch({ admittedOn: e.target.value })} /></Field>
+            <Field label="Age" htmlFor="age"><Input id="age" value={age(f.dateOfBirth) ?? "Not recorded"} readOnly tabIndex={-1} /></Field>
+          </div>
+        </section>
+        <section className="surface space-y-4 p-4">
+          <h2 className="text-base font-medium">Health</h2>
+          <HealthFields value={f} onChange={patch} />
+        </section>
+        <section className="surface space-y-4 p-4">
+          <h2 className="text-base font-medium">School history</h2>
+          <HistoryFields value={f} onChange={patch} />
+        </section>
+        <section className="surface space-y-4 p-4">
+          <h2 className="text-base font-medium">Documents and consent</h2>
+          <DocumentFields value={f} onChange={patch} />
+        </section>
       </fieldset>
       <FormMessage error={save.isError ? friendlyError(save.error) : null} ok={save.isSuccess ? "Saved" : null} />
-      {canEdit ? <Button type="submit" disabled={save.isPending || !first.trim() || !last.trim()}>{save.isPending ? "Saving" : "Save changes"}</Button> : null}
+      {canEdit ? (
+        <Button type="submit" disabled={save.isPending || !f.firstName.trim() || !f.lastName.trim() || !f.gender}>
+          {save.isPending ? "Saving" : "Save changes"}
+        </Button>
+      ) : null}
     </form>
   );
 }
@@ -87,10 +119,7 @@ function BeceCard({ s, canEdit }: { s: StudentDetail; canEdit: boolean }) {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["student", s.id] }),
   });
   return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); save.mutate(); }}
-      className="surface space-y-3 p-4"
-    >
+    <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="surface space-y-3 p-4">
       <h2 className="text-base font-medium">BECE {examYear}</h2>
       <p className="text-sm text-muted-foreground">The school enters the index number once it has been issued.</p>
       <Field label="Index number" htmlFor="bece">
@@ -151,10 +180,12 @@ export default function StudentDetailPage() {
   const location = useLocation();
   const { roles } = useAuth();
   const canEdit = hasAnyRole(roles, ["school_admin", "receptionist"]);
-  const admitted = (location.state as { admitted?: string } | null)?.admitted;
+  const flash = location.state as { admitted?: string; photoFailed?: boolean } | null;
 
   const q = useQuery({ queryKey: ["student", id], queryFn: () => getStudent(id), enabled: !!id });
   const s = q.data;
+  const urls = usePhotoUrls([s?.photoPath]);
+  const name = s ? [s.fields.firstName, s.fields.middleName, s.fields.lastName].filter(Boolean).join(" ") : "";
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -162,10 +193,13 @@ export default function StudentDetailPage() {
         <ArrowLeft className="size-4" aria-hidden /> Students
       </Link>
 
-      {admitted ? (
+      {flash?.admitted ? (
         <div role="status" className="surface flex items-center gap-2 p-3 text-sm">
-          <Check className="size-4 text-primary" aria-hidden />
-          Admitted. Admission number <strong className="tabular-nums">{admitted}</strong>.
+          <Check className="size-4 shrink-0 text-primary" aria-hidden />
+          <span>
+            Admitted. Admission number <strong className="tabular-nums">{flash.admitted}</strong>.
+            {flash.photoFailed ? " The photo could not be uploaded; add it below." : ""}
+          </span>
         </div>
       ) : null}
 
@@ -175,13 +209,37 @@ export default function StudentDetailPage() {
 
       {s ? (
         <>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-4">
+            <StudentAvatar name={name} url={s.photoPath ? urls[s.photoPath] : null} className="size-16 text-lg" />
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-2xl font-semibold">{[s.firstName, s.middleName, s.lastName].filter(Boolean).join(" ")}</h1>
-              <p className="text-sm tabular-nums text-muted-foreground">{s.admissionNo}</p>
+              <h1 className="truncate text-2xl font-semibold">{name}</h1>
+              <p className="text-sm tabular-nums text-muted-foreground">{s.admissionNo}{s.enrollments[0] ? ` · ${s.enrollments[0].className}` : ""}</p>
             </div>
             <StatusPill status={s.status} />
           </div>
+
+          <PhotoCard s={s} url={s.photoPath ? urls[s.photoPath] : undefined} canEdit={canEdit} />
+
+          <section className="surface space-y-2 p-4">
+            <h2 className="text-base font-medium">Parents and guardians</h2>
+            {s.guardians.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No guardian recorded.</p>
+            ) : (
+              <ul className="divide-y divide-border text-sm">
+                {s.guardians.map((g) => (
+                  <li key={g.id} className="space-y-0.5 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{g.fullName}{g.relationship ? ` (${g.relationship})` : ""}</span>
+                      {g.phone ? <a href={`tel:${g.phone}`} className="tabular-nums text-primary underline-offset-4 hover:underline">{g.phone}</a> : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {[g.isPrimary && "Main contact", g.isFeePayer && "Pays fees", g.isEmergencyContact && "Emergency contact", g.occupation].filter(Boolean).join(" · ")}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <DetailsForm key={s.id} s={s} canEdit={canEdit} />
 
@@ -193,22 +251,6 @@ export default function StudentDetailPage() {
               <ul className="divide-y divide-border text-sm">
                 {s.enrollments.map((e) => (
                   <li key={e.id} className="flex justify-between py-2"><span>{e.className}</span><span className="text-muted-foreground">{e.yearName}</span></li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="surface space-y-2 p-4">
-            <h2 className="text-base font-medium">Parents and guardians</h2>
-            {s.guardians.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No guardian recorded.</p>
-            ) : (
-              <ul className="divide-y divide-border text-sm">
-                {s.guardians.map((g) => (
-                  <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                    <span>{g.fullName}{g.relationship ? ` (${g.relationship})` : ""}{g.isPrimary ? " · primary" : ""}</span>
-                    {g.phone ? <a href={`tel:${g.phone}`} className="tabular-nums text-primary underline-offset-4 hover:underline">{g.phone}</a> : null}
-                  </li>
                 ))}
               </ul>
             )}
