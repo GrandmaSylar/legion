@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from "react-router";
 import {
   Bell, CalendarCheck, GraduationCap, LayoutDashboard, LogOut, Moon, Settings, Sparkles, Square, Sun,
-  UserCog, Users, Wallet, type LucideIcon,
+  UserCog, UserRoundCog, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, navFor, type AppRole } from "../../lib/permissions";
@@ -17,6 +17,7 @@ const ICONS: Record<string, LucideIcon> = {
   staff: UserCog,
   notices: Bell,
   settings: Settings,
+  users: UserRoundCog,
 };
 
 // Shown in the header: the most senior role the person holds.
@@ -47,7 +48,7 @@ function ToolButton({ label, onClick, children }: { label: string; onClick: () =
 export function Shell() {
   const { profile, roles, signOut } = useAuth();
   const { mode, surface, setMode, setSurface } = useTheme();
-  const items = navFor(roles);
+  const items = navFor(roles, profile?.modules ?? null);
 
   return (
     <div className="flex min-h-dvh">

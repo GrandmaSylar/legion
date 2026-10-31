@@ -54,7 +54,7 @@ declare
   u_acc uuid := gen_random_uuid();    u_hr uuid := gen_random_uuid();
   u_rec uuid := gen_random_uuid();    u_p1 uuid := gen_random_uuid();
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
-  u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();
+  u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();  u_off uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
   rs int; rg int; rst int;
   r record;
@@ -72,7 +72,7 @@ begin
     (u_acc,'accountant',a,'accountant'),(u_hr,'hr',a,'hr_officer'),
     (u_rec,'reception',a,'receptionist'),(u_p1,'parent1',a,'parent'),
     (u_p2,'parent2',a,'parent'),(u_s1,'student1',a,'student'),
-    (u_adminb,'adminb',b,'school_admin'),(u_dev,'developer',a,'developer')
+    (u_adminb,'adminb',b,'school_admin'),(u_dev,'developer',a,'developer'),(u_off,'deactivated',a,'school_admin')
   ) as x(id, nm, sch, rl)
   loop
     insert into auth.users (id, email, aud, role) values (r.id, r.nm || '@test.local', 'authenticated', 'authenticated');
@@ -81,6 +81,7 @@ begin
   end loop;
 
   -- structure and people (school A)
+  update public.profiles set is_active = false where id = u_off;
   insert into public.academic_years (school_id,name,start_date,end_date,is_current) values (a,'T','2026-09-01','2027-07-31',false) returning id into yr;
   insert into public.terms (school_id,academic_year_id,name,start_date,end_date) values (a,yr,'Term 1','2026-09-01','2026-12-15') returning id into term;
   select id into lvl from public.levels where school_id = a and name = 'Basic 4';
@@ -162,8 +163,8 @@ begin
     -- audit log
     ('audit admin sees rows', (pg_temp.t_count(u_admin,'audit_log') > 0)::text,'true'),
     ('audit teacher1',      pg_temp.t_count(u_t1,'audit_log')::text,'0'),
-    -- school B's admin sees only school B's own audit rows (its role grant + one student)
-    ('audit other school admin sees only own school', pg_temp.t_count(u_adminb,'audit_log')::text,'2'),
+    -- school B's admin sees only school B's own audit rows (its profile, its role grant and one student)
+    ('audit other school admin sees only own school', pg_temp.t_count(u_adminb,'audit_log')::text,'3'),
     -- BECE index numbers
     ('bece admin',          pg_temp.t_count(u_admin,'bece_registrations')::text,'1'),
     ('bece teacher1',       pg_temp.t_count(u_t1,'bece_registrations')::text,'0'),
@@ -175,6 +176,13 @@ begin
     ('profiles developer',  pg_temp.t_count(u_dev,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
     ('developer is scoped to own school', pg_temp.t_count(u_dev,'classes')::text,(select count(*) from public.classes where school_id = a)::text),
     ('students other school admin sees not developer school', pg_temp.t_count(u_adminb,'profiles')::text,'1'),
+    -- a deactivated admin keeps their own login row but reaches no school data
+    ('deactivated admin sees no students', pg_temp.t_count(u_off,'students')::text,'0'),
+    ('deactivated admin sees no classes', pg_temp.t_count(u_off,'classes')::text,'0'),
+    ('deactivated admin sees no invoices', pg_temp.t_count(u_off,'invoices')::text,'0'),
+    ('deactivated admin sees only own profile', pg_temp.t_count(u_off,'profiles')::text,'1'),
+    ('deactivated admin writes a student',
+       pg_temp.t_try(u_off, format('insert into public.students (school_id,first_name,last_name) values (%L,''X'',''Y'')', a)), 'denied'),
     -- writes
     ('teacher1 marks own class attendance',
        pg_temp.t_try(u_t1, format('insert into public.attendance (school_id,enrollment_id,date,status) values (%L,%L,current_date + 1,''present'')', a, e1)), 'ok:1'),
