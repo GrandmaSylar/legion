@@ -39,7 +39,25 @@ html.dark {
   background: var(--card);
   color: var(--card-foreground);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 1.25rem;
+}
+
+/*
+ * The big floating card that holds the whole app. In glass mode it is only
+ * tinted, with no blur of its own: the panels inside already blur, and stacking
+ * blurs is the expensive part on weaker phones.
+ */
+.shell-card {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: 2rem;
+  box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.35);
+}
+
+html[data-surface="glass"] .shell-card {
+  background: color-mix(in srgb, var(--card) 40%, transparent);
+  border-color: var(--glass-border);
 }
 
 html[data-surface="glass"] body {

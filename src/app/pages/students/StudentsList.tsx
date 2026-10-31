@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
@@ -40,7 +40,11 @@ export default function StudentsList() {
     enabled: !!currentYear,
   });
 
-  const [search, setSearch] = useState("");
+  // The top bar search sends people here as /students?q=...
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(params.get("q") ?? "");
+  const urlQuery = params.get("q") ?? "";
+  useEffect(() => setSearch(urlQuery), [urlQuery]);
   const [classId, setClassId] = useState("");
   const [status, setStatus] = useState<StudentStatus | "">("active");
   const [page, setPage] = useState(0);
@@ -62,7 +66,7 @@ export default function StudentsList() {
   const filtered = !!(q || classId || status !== "active");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Students</h1>
@@ -71,7 +75,7 @@ export default function StudentsList() {
           </p>
         </div>
         {canAdd ? (
-          <Button asChild>
+          <Button asChild className="sm:hidden">
             <Link to="/students/new">
               <Plus className="size-4" aria-hidden /> Add student
             </Link>
