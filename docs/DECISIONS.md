@@ -10,6 +10,7 @@ Locked in Phase 0. Each entry records what was chosen and what would make us rev
 | 4 | Auth | Supabase Auth behind an interface, so it can be swapped for custom JWT later. | Leaving Supabase managed hosting. |
 | 5 | Repo layout | Single app. Turborepo only when an API or mobile app appears. | A second deployable is added. |
 | 6 | Visual direction | Glass is a theme option; flat is the default on mobile and in attendance and grading flows. | Pilot users report performance or readability problems. |
+| 7 | Photos | Student photos live in Cloudinary as private (authenticated) assets. The browser never holds the API secret: the `student-photo` Edge Function signs each upload and hands out expiring links, only for students the caller can see. Supabase Storage is not used. | Cloudinary cost or limits become a problem, or signed-link latency on long lists. |
 
 ## Implications
 

@@ -112,9 +112,6 @@ begin
   insert into public.enrollments (school_id,student_id,class_id,academic_year_id) values (a,su,c1,yr) returning id into eu;
   insert into public.guardians (school_id,full_name) values (a,'Only Parent') returning id into gu;
   insert into public.student_guardians (school_id,student_id,guardian_id) values (a,su,gu);
-  insert into storage.objects (bucket_id, name) values
-    ('student-photos', s1::text || '/photo.jpg'),
-    ('student-photos', s2::text || '/photo.jpg');
 
   insert into public.invoices (school_id,student_id,term_id) values (a,s1,term) returning id into i1;
   insert into public.invoices (school_id,student_id,term_id) values (a,s2,term) returning id into i2;
@@ -266,27 +263,15 @@ begin
        pg_temp.t_try(u_p1, format('select * from public.admit_student(''{"first_name":"Esi","last_name":"Boateng","gender":"female"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'denied'),
     ('admit into a class of another school',
        pg_temp.t_try(u_adminb, format('select * from public.admit_student(''{"first_name":"Esi","last_name":"Boateng","gender":"female"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'denied'),
-    -- photos follow the same visibility as the student
-    ('photos: admin sees both',
-       pg_temp.t_try(u_admin, 'select 1 from storage.objects where bucket_id = ''student-photos'' and name like ''%/photo.jpg'' and owner is null and ' || format('(name like %L or name like %L)', s1::text || '/%', s2::text || '/%')), 'ok:2'),
-    ('photos: parent1 sees only own child',
-       pg_temp.t_try(u_p1, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:1'),
-    ('photos: student1 sees only own',
-       pg_temp.t_try(u_s1, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:1'),
-    ('photos: teacher1 sees only own class',
-       pg_temp.t_try(u_t1, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:1'),
-    ('photos: hr sees none',
-       pg_temp.t_try(u_hr, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:0'),
-    ('photos: other school admin sees none',
-       pg_temp.t_try(u_adminb, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:0'),
-    ('photos: reception uploads',
-       pg_temp.t_try(u_rec, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/new.jpg')), 'ok:1'),
-    ('photos: teacher1 uploads',
-       pg_temp.t_try(u_t1, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/t.jpg')), 'denied'),
-    ('photos: parent1 uploads',
-       pg_temp.t_try(u_p1, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/p.jpg')), 'denied'),
-    ('photos: other school admin uploads for school A student',
-       pg_temp.t_try(u_adminb, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/x.jpg')), 'denied'),
+    -- the old Supabase photo bucket is closed to every client (photos live in Cloudinary)
+    ('photo bucket: admin reads nothing',
+       pg_temp.t_try(u_admin, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:0'),
+    ('photo bucket: parent1 reads nothing',
+       pg_temp.t_try(u_p1, 'select 1 from storage.objects where bucket_id = ''student-photos'''), 'ok:0'),
+    ('photo bucket: reception cannot upload',
+       pg_temp.t_try(u_rec, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/new.jpg')), 'denied'),
+    ('photo bucket: developer cannot upload',
+       pg_temp.t_try(u_dev, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/dev.jpg')), 'denied'),
     -- editing is for admins; hard deletion of reference data is for developers
     ('admin edits a subject name',
        pg_temp.t_try(u_admin, 'update public.subjects set name = ''DelMe2'' where name = ''DelMe'''), 'ok:1'),
