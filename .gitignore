@@ -31,3 +31,4 @@ coverage/
 
 # supabase CLI
 supabase/.temp/
+.playwright-mcp/
