@@ -28,3 +28,6 @@ Thumbs.db
 .vercel/
 *.tsbuildinfo
 coverage/
+
+# supabase CLI
+supabase/.temp/
