@@ -54,7 +54,7 @@ declare
   u_acc uuid := gen_random_uuid();    u_hr uuid := gen_random_uuid();
   u_rec uuid := gen_random_uuid();    u_p1 uuid := gen_random_uuid();
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
-  u_adminb uuid := gen_random_uuid();
+  u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
   r record;
 begin
@@ -68,7 +68,7 @@ begin
     (u_acc,'accountant',a,'accountant'),(u_hr,'hr',a,'hr_officer'),
     (u_rec,'reception',a,'receptionist'),(u_p1,'parent1',a,'parent'),
     (u_p2,'parent2',a,'parent'),(u_s1,'student1',a,'student'),
-    (u_adminb,'adminb',b,'school_admin')
+    (u_adminb,'adminb',b,'school_admin'),(u_dev,'developer',a,'developer')
   ) as x(id, nm, sch, rl)
   loop
     insert into auth.users (id, email, aud, role) values (r.id, r.nm || '@test.local', 'authenticated', 'authenticated');
@@ -145,7 +145,7 @@ begin
     ('guardians admin',     pg_temp.t_count(u_admin,'guardians')::text,'2'),
     ('guardians teacher1',  pg_temp.t_count(u_t1,'guardians')::text,'0'),
     ('guardians parent1',   pg_temp.t_count(u_p1,'guardians')::text,'1'),
-    ('profiles admin',      pg_temp.t_count(u_admin,'profiles')::text,'10'),
+    ('profiles admin',      pg_temp.t_count(u_admin,'profiles')::text,'11'),
     ('profiles teacher1',   pg_temp.t_count(u_t1,'profiles')::text,'1'),
     ('user_roles teacher1', pg_temp.t_count(u_t1,'user_roles')::text,'1'),
     -- structure is school-scoped
@@ -160,6 +160,14 @@ begin
     -- BECE index numbers
     ('bece admin',          pg_temp.t_count(u_admin,'bece_registrations')::text,'1'),
     ('bece teacher1',       pg_temp.t_count(u_t1,'bece_registrations')::text,'0'),
+    -- developer sees at least everything an admin sees
+    ('students developer',  pg_temp.t_count(u_dev,'students')::text,'2'),
+    ('attendance developer',pg_temp.t_count(u_dev,'attendance')::text,'2'),
+    ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,'2'),
+    ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,'2'),
+    ('profiles developer',  pg_temp.t_count(u_dev,'profiles')::text,'11'),
+    ('developer is scoped to own school', pg_temp.t_count(u_dev,'classes')::text,'2'),
+    ('students other school admin sees not developer school', pg_temp.t_count(u_adminb,'profiles')::text,'1'),
     -- writes
     ('teacher1 marks own class attendance',
        pg_temp.t_try(u_t1, format('insert into public.attendance (school_id,enrollment_id,date,status) values (%L,%L,current_date + 1,''present'')', a, e1)), 'ok:1'),
@@ -197,6 +205,20 @@ begin
        pg_temp.t_try(u_admin, 'update public.audit_log set action = ''x'''), 'denied'),
     ('teacher1 calls issue_number',
        pg_temp.t_try(u_t1, format('select public.issue_number(%L, ''admission_no'')', a)), 'denied'),
+    ('developer records payment',
+       pg_temp.t_try(u_dev, format('insert into public.payments (school_id,invoice_id,amount,method) values (%L,%L,10,''cash'')', a, i1)), 'ok:1'),
+    ('developer grants admin role',
+       pg_temp.t_try(u_dev, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t2, a)), 'ok:1'),
+    ('developer grants developer role',
+       pg_temp.t_try(u_dev, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''developer'')', u_t2, a)), 'ok:1'),
+    ('admin grants developer role',
+       pg_temp.t_try(u_admin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''developer'')', u_admin, a)), 'denied'),
+    ('admin grants super_admin role',
+       pg_temp.t_try(u_admin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''super_admin'')', u_admin, a)), 'denied'),
+    ('admin removes developer role',
+       pg_temp.t_try(u_admin, format('delete from public.user_roles where profile_id = %L and role = ''developer''', u_dev)), 'ok:0'),
+    ('admin grants teacher role',
+       pg_temp.t_try(u_admin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''teacher'')', u_hr, a)), 'ok:1'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied')
   ) as x(label, got, want)
