@@ -235,6 +235,14 @@ begin
        pg_temp.t_try(u_admin, format('insert into public.class_subjects (class_id,subject_id) select %L, id from public.subjects where name = ''French''', c2)), 'ok:1'),
     ('teacher1 assigns a subject to a class',
        pg_temp.t_try(u_t1, format('insert into public.class_subjects (class_id,subject_id) select %L, id from public.subjects where name = ''Computing''', c1)), 'denied'),
+    ('reception admits a student',
+       pg_temp.t_try(u_rec, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,''Mrs Boateng'',''0244000000'',''Mother'',null)', c1)), 'ok:1'),
+    ('teacher1 admits a student',
+       pg_temp.t_try(u_t1, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,null,null,null,null)', c1)), 'denied'),
+    ('parent1 admits a student',
+       pg_temp.t_try(u_p1, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,null,null,null,null)', c1)), 'denied'),
+    ('admit into a class of another school',
+       pg_temp.t_try(u_adminb, format('select * from public.admit_student(''Esi'',null,''Boateng'',''2018-05-01'',''female'',%L,null,null,null,null,null,null)', c1)), 'denied'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied')
   ) as x(label, got, want)
