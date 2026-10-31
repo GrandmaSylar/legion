@@ -5,6 +5,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
 import ClassSubjects from "./ClassSubjects";
+import { ClassActions } from "./rowActions";
 import {
   createClass, listAcademicYears, listClasses, listLevels, listTeachers, setClassTeacher,
 } from "../../../lib/data/setup";
@@ -106,6 +107,7 @@ export default function ClassesTab() {
                     {c.studentCount} {c.studentCount === 1 ? "student" : "students"}
                   </span>
                 </div>
+                <ClassActions cls={c} />
                 <Field label="Class teacher" htmlFor={`teacher-${c.id}`}>
                   <NativeSelect
                     id={`teacher-${c.id}`}

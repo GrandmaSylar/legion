@@ -8,6 +8,7 @@ import {
   type AcademicYear,
 } from "../../../lib/data/setup";
 import { friendlyError } from "../../../lib/data/errors";
+import { TermActions, YearActions } from "./rowActions";
 
 function fmt(date: string): string {
   return new Date(date + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -128,9 +129,10 @@ export default function CalendarTab() {
                 <span className="text-sm text-muted-foreground">
                   {fmt(year.startDate)} to {fmt(year.endDate)}
                 </span>
+                <YearActions year={year} lead="ml-auto" />
                 {!year.isCurrent ? (
                   <Button
-                    size="sm" variant="outline" className="ml-auto"
+                    size="sm" variant="outline"
                     disabled={makeYearCurrent.isPending}
                     onClick={() => makeYearCurrent.mutate(year.id)}
                   >
@@ -148,9 +150,10 @@ export default function CalendarTab() {
                       <span className="font-medium">{t.name}</span>
                       {t.isCurrent ? <CurrentBadge /> : null}
                       <span className="text-muted-foreground">{fmt(t.startDate)} to {fmt(t.endDate)}</span>
+                      <TermActions term={t} year={year} lead="ml-auto" />
                       {!t.isCurrent ? (
                         <Button
-                          size="sm" variant="ghost" className="ml-auto"
+                          size="sm" variant="ghost"
                           disabled={makeTermCurrent.isPending}
                           onClick={() => makeTermCurrent.mutate(t.id)}
                         >

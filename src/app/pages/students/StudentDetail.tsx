@@ -17,6 +17,7 @@ import { PhotoPicker } from "../../components/PhotoPicker";
 import { StudentAvatar, usePhotoUrls } from "../../components/StudentAvatar";
 import { DocumentFields, HealthFields, HistoryFields, PersonalFields } from "./fieldsets";
 import { StatusPill } from "./StudentsList";
+import { ChangeClassCard, DeleteStudentCard, GuardiansCard } from "./StudentManage";
 
 function today(): string {
   const d = new Date();
@@ -180,6 +181,7 @@ export default function StudentDetailPage() {
   const location = useLocation();
   const { roles } = useAuth();
   const canEdit = hasAnyRole(roles, ["school_admin", "receptionist"]);
+  const isDev = roles.includes("developer");
   const flash = location.state as { admitted?: string; photoFailed?: boolean } | null;
 
   const q = useQuery({ queryKey: ["student", id], queryFn: () => getStudent(id), enabled: !!id });
@@ -220,26 +222,7 @@ export default function StudentDetailPage() {
 
           <PhotoCard s={s} url={s.photoPath ? urls[s.photoPath] : undefined} canEdit={canEdit} />
 
-          <section className="surface space-y-2 p-4">
-            <h2 className="text-base font-medium">Parents and guardians</h2>
-            {s.guardians.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No guardian recorded.</p>
-            ) : (
-              <ul className="divide-y divide-border text-sm">
-                {s.guardians.map((g) => (
-                  <li key={g.id} className="space-y-0.5 py-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium">{g.fullName}{g.relationship ? ` (${g.relationship})` : ""}</span>
-                      {g.phone ? <a href={`tel:${g.phone}`} className="tabular-nums text-primary underline-offset-4 hover:underline">{g.phone}</a> : null}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {[g.isPrimary && "Main contact", g.isFeePayer && "Pays fees", g.isEmergencyContact && "Emergency contact", g.occupation].filter(Boolean).join(" · ")}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <GuardiansCard s={s} canEdit={canEdit} />
 
           <DetailsForm key={s.id} s={s} canEdit={canEdit} />
 
@@ -256,8 +239,10 @@ export default function StudentDetailPage() {
             )}
           </section>
 
+          {canEdit && s.status === "active" ? <ChangeClassCard s={s} /> : null}
           {s.enrollments[0]?.sitsBece ? <BeceCard s={s} canEdit={canEdit} /> : null}
           {canEdit ? <StatusCard s={s} /> : null}
+          {isDev ? <DeleteStudentCard s={s} /> : null}
         </>
       ) : null}
     </div>

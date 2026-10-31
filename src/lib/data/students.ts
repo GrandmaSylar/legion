@@ -310,7 +310,8 @@ export interface StudentDetail {
   enrollments: { id: string; className: string; yearName: string; yearId: string; sitsBece: boolean }[];
   guardians: {
     id: string; fullName: string; phone: string | null; relationship: string | null; occupation: string | null;
-    isPrimary: boolean; isFeePayer: boolean; isEmergencyContact: boolean;
+    email: string | null; employer: string | null; address: string | null;
+    isPrimary: boolean; isFeePayer: boolean; isEmergencyContact: boolean; canPickup: boolean;
   }[];
   bece: { examYear: number; indexNumber: string | null }[];
 }
@@ -321,8 +322,8 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
     .select(
       `*,
        enrollments(id, academic_year_id, academic_years(name, start_date), classes(section, levels(name, sits_bece))),
-       student_guardians(is_primary, is_fee_payer, is_emergency_contact,
-         guardians(id, full_name, phone, relationship, occupation)),
+       student_guardians(is_primary, is_fee_payer, is_emergency_contact, can_pickup,
+         guardians(id, full_name, phone, relationship, occupation, email, employer, address)),
        bece_registrations(exam_year, index_number)`,
     )
     .eq("id", id)
@@ -355,8 +356,11 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
     .map(({ start: _start, ...rest }) => rest);
 
   type SG = {
-    is_primary: boolean; is_fee_payer: boolean; is_emergency_contact: boolean;
-    guardians: { id: string; full_name: string; phone: string | null; relationship: string | null; occupation: string | null } | null;
+    is_primary: boolean; is_fee_payer: boolean; is_emergency_contact: boolean; can_pickup: boolean;
+    guardians: {
+      id: string; full_name: string; phone: string | null; relationship: string | null; occupation: string | null;
+      email: string | null; employer: string | null; address: string | null;
+    } | null;
   };
   const guardians = ((r.student_guardians ?? []) as unknown as SG[])
     .filter((x) => x.guardians)
@@ -366,9 +370,13 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
       phone: x.guardians!.phone,
       relationship: x.guardians!.relationship,
       occupation: x.guardians!.occupation,
+      email: x.guardians!.email,
+      employer: x.guardians!.employer,
+      address: x.guardians!.address,
       isPrimary: x.is_primary,
       isFeePayer: x.is_fee_payer,
       isEmergencyContact: x.is_emergency_contact,
+      canPickup: x.can_pickup,
     }));
 
   const s = (v: string | null | undefined) => v ?? "";
@@ -457,4 +465,77 @@ export async function saveBeceIndex(studentId: string, examYear: number, indexNu
         { onConflict: "student_id,exam_year" },
       ),
   );
+}
+
+// ─── Managing an existing student ────────────────────────────────────────────
+
+/** Move a student to another class in that class's year (or place them if they have none). */
+export async function changeStudentClass(studentId: string, classId: string) {
+  check(await supabase.rpc("change_student_class", { p_student: studentId, p_class: classId }));
+}
+
+function guardianJson(g: GuardianEntry) {
+  return {
+    id: g.existingId,
+    full_name: t(g.fullName),
+    relationship: g.relationship,
+    phone: normalizePhone(g.phone),
+    email: t(g.email),
+    occupation: t(g.occupation),
+    employer: t(g.employer),
+    address: t(g.address),
+    is_primary: g.isPrimary,
+    is_fee_payer: g.isFeePayer,
+    is_emergency_contact: g.isEmergencyContact,
+    can_pickup: g.canPickup,
+  };
+}
+
+export async function addStudentGuardian(studentId: string, g: GuardianEntry) {
+  check(await supabase.rpc("add_student_guardian", { p_student: studentId, p_guardian: guardianJson(g) }));
+}
+
+/** Edit a guardian's details and what they are for this student. */
+export async function updateStudentGuardian(studentId: string, guardianId: string, g: GuardianEntry) {
+  const blank = (v: string) => (t(v) === "" ? null : t(v));
+  check(
+    await supabase
+      .from("guardians")
+      .update({
+        full_name: t(g.fullName),
+        phone: blank(normalizePhone(g.phone)),
+        relationship: blank(g.relationship),
+        email: blank(g.email),
+        occupation: blank(g.occupation),
+        employer: blank(g.employer),
+        address: blank(g.address),
+      })
+      .eq("id", guardianId),
+  );
+  check(
+    await supabase
+      .from("student_guardians")
+      .update({
+        is_primary: g.isPrimary,
+        is_fee_payer: g.isFeePayer,
+        is_emergency_contact: g.isEmergencyContact,
+        can_pickup: g.canPickup,
+      })
+      .eq("student_id", studentId)
+      .eq("guardian_id", guardianId),
+  );
+}
+
+export async function removeStudentGuardian(studentId: string, guardianId: string) {
+  check(await supabase.rpc("remove_student_guardian", { p_student: studentId, p_guardian: guardianId }));
+}
+
+/**
+ * Developer only, and only for a student with no history (a test or duplicate
+ * admission). Anyone with attendance, grades or billing is archived instead.
+ */
+export async function deleteStudent(studentId: string, photoPath: string | null) {
+  check(await supabase.rpc("delete_student_if_unused", { p_student: studentId }));
+  // The record is gone; tidy the photo too. A leftover file is harmless, so ignore failure.
+  if (photoPath) await supabase.storage.from(PHOTO_BUCKET).remove([photoPath]).catch(() => undefined);
 }
