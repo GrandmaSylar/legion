@@ -51,10 +51,10 @@ function RailLink({ to, end, label, Icon }: { to: string; end: boolean; label: s
       aria-label={label}
       className={({ isActive }) =>
         cn(
-          "group relative grid size-11 place-items-center rounded-2xl outline-offset-2 transition-all focus-visible:outline-2 focus-visible:outline-white",
+          "group relative grid size-11 place-items-center rounded-2xl outline-offset-2 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white",
           isActive
-            ? "bg-white text-primary shadow-lg shadow-black/20"
-            : "text-primary-foreground/80 hover:bg-white/15 hover:text-primary-foreground",
+            ? "bg-white text-primary shadow-lg shadow-black/20 before:absolute before:-left-[1.1rem] before:h-5 before:w-1 before:rounded-r-full before:bg-white"
+            : "text-primary-foreground/80 hover:scale-105 hover:bg-white/15 hover:text-primary-foreground hover:shadow-[0_0_22px_rgba(255,255,255,0.40)]",
         )
       }
     >
@@ -169,10 +169,10 @@ export function Shell() {
         <aside className="hidden p-3 lg:block">
           <nav
             aria-label="Main"
-            className="sticky top-5 flex h-[calc(100dvh-2.5rem-1.5rem)] w-[4.5rem] flex-col items-center gap-2 rounded-[2rem] bg-primary py-5 shadow-xl shadow-primary/25"
+            className="sticky top-5 flex h-[calc(100dvh-2.5rem-1.5rem)] w-[4.5rem] flex-col items-center gap-3.5 rounded-[2rem] bg-primary py-6 shadow-xl shadow-primary/25"
             style={{ backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(0,0,0,0.12))" }}
           >
-            <div className="mb-3 grid size-11 place-items-center rounded-2xl bg-white/20 text-sm font-bold text-primary-foreground" aria-hidden>
+            <div className="mb-4 grid size-11 place-items-center rounded-2xl bg-white/20 text-sm font-bold text-primary-foreground" aria-hidden>
               {(profile?.schoolName ?? "S").slice(0, 1)}
             </div>
             {items.map((item) => (
