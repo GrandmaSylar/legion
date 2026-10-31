@@ -50,6 +50,15 @@ begin
     (v_school, 'Physical Development', 5),
     (v_school, 'Social and Emotional Development', 6);
 
+  -- Default subjects (GES basic curriculum); the school can edit these.
+  insert into public.subjects (school_id, name) values
+    (v_school, 'English Language'), (v_school, 'Mathematics'),
+    (v_school, 'Integrated Science'), (v_school, 'Social Studies'),
+    (v_school, 'Religious and Moral Education'), (v_school, 'Computing'),
+    (v_school, 'Creative Arts and Design'), (v_school, 'Physical Education'),
+    (v_school, 'Ghanaian Language'), (v_school, 'French'),
+    (v_school, 'Our World Our People'), (v_school, 'Career Technology');
+
   -- Fee categories
   insert into public.fee_categories (school_id, name, is_one_off) values
     (v_school, 'Admission', true),

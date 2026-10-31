@@ -145,7 +145,7 @@ begin
     ('guardians admin',     pg_temp.t_count(u_admin,'guardians')::text,'2'),
     ('guardians teacher1',  pg_temp.t_count(u_t1,'guardians')::text,'0'),
     ('guardians parent1',   pg_temp.t_count(u_p1,'guardians')::text,'1'),
-    ('profiles admin',      pg_temp.t_count(u_admin,'profiles')::text,'11'),
+    ('profiles admin',      pg_temp.t_count(u_admin,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
     ('profiles teacher1',   pg_temp.t_count(u_t1,'profiles')::text,'1'),
     ('user_roles teacher1', pg_temp.t_count(u_t1,'user_roles')::text,'1'),
     -- structure is school-scoped
@@ -165,7 +165,7 @@ begin
     ('attendance developer',pg_temp.t_count(u_dev,'attendance')::text,'2'),
     ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,'2'),
     ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,'2'),
-    ('profiles developer',  pg_temp.t_count(u_dev,'profiles')::text,'11'),
+    ('profiles developer',  pg_temp.t_count(u_dev,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
     ('developer is scoped to own school', pg_temp.t_count(u_dev,'classes')::text,'2'),
     ('students other school admin sees not developer school', pg_temp.t_count(u_adminb,'profiles')::text,'1'),
     -- writes
@@ -219,6 +219,16 @@ begin
        pg_temp.t_try(u_admin, format('delete from public.user_roles where profile_id = %L and role = ''developer''', u_dev)), 'ok:0'),
     ('admin grants teacher role',
        pg_temp.t_try(u_admin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''teacher'')', u_hr, a)), 'ok:1'),
+    ('admin sets current year',
+       pg_temp.t_try(u_admin, format('select public.set_current_academic_year(%L)', yr)), 'ok:1'),
+    ('teacher1 sets current year',
+       pg_temp.t_try(u_t1, format('select public.set_current_academic_year(%L)', yr)), 'denied'),
+    ('admin sets current term',
+       pg_temp.t_try(u_admin, format('select public.set_current_term(%L)', term)), 'ok:1'),
+    ('other school admin sets current term in school A',
+       pg_temp.t_try(u_adminb, format('select public.set_current_term(%L)', term)), 'denied'),
+    ('admin creates year without sending school_id',
+       pg_temp.t_try(u_admin, 'insert into public.academic_years (name,start_date,end_date) values (''Next'',''2027-09-01'',''2028-07-31'')'), 'ok:1'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied')
   ) as x(label, got, want)
