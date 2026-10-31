@@ -4,11 +4,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
-  Bell, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, Moon, Plus, Search, Settings,
+  Bell, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Plus, Search, Settings,
   Sparkles, Square, Sun, UserCog, UserRoundCog, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
-import { ROLE_LABELS, hasAnyRole, navFor, type AppRole } from "../../lib/permissions";
+import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
 import { useTheme } from "../../theme/ThemeProvider";
 import { StudentAvatar } from "../components/StudentAvatar";
 import { Button } from "../components/ui/button";
@@ -147,14 +147,14 @@ function UserMenu() {
         className="flex items-center gap-2 rounded-full border border-border bg-foreground/5 py-1 pl-1 pr-2.5 transition-colors hover:bg-foreground/10 focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
       >
         <StudentAvatar name={name} className="size-8 text-xs" />
-        <span className="hidden max-w-32 truncate text-sm font-medium md:block">{name.split(" ")[0]}</span>
+        <span className="hidden break-words text-sm font-medium md:block">{name.split(" ")[0]}</span>
         <ChevronDown className="size-4 text-muted-foreground" aria-hidden />
       </button>
       {open ? (
         <div role="menu" className="surface absolute right-0 z-40 mt-2 w-60 space-y-1 p-2 shadow-xl">
           <div className="px-3 py-2">
-            <div className="truncate text-sm font-medium">{name}</div>
-            <div className="truncate text-xs text-muted-foreground">{profile?.email}</div>
+            <div className="break-words text-sm font-medium">{name}</div>
+            <div className="break-all text-xs text-muted-foreground">{profile?.email}</div>
             <div className="mt-1 text-xs text-primary">{topRole(roles)}</div>
           </div>
           <button
@@ -167,6 +167,106 @@ function UserMenu() {
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Bottom navigation for phones and tablets. Phones show the first four sections
+ * and a "More" button that opens the rest as a grid, so nothing is cut off or
+ * needs swiping. Tablets have room for every section.
+ */
+const PHONE_SLOTS = 4;
+
+function BottomNav({ items }: { items: NavItem[] }) {
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const rest = items.slice(PHONE_SLOTS);
+  const isCurrent = (i: NavItem) => (i.path === "/" ? location.pathname === "/" : location.pathname.startsWith(i.path));
+  const moreActive = rest.some(isCurrent);
+
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent | TouchEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const slot =
+    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl px-0.5 py-1.5 text-[10px] font-medium leading-tight transition-colors sm:text-[11px]";
+
+  return (
+    <div ref={ref} className="lg:hidden">
+      {open && rest.length > 0 ? (
+        <div
+          role="menu"
+          aria-label="More sections"
+          className="fixed inset-x-3 bottom-[5.5rem] z-30 grid grid-cols-3 gap-2 rounded-[1.75rem] bg-primary p-3 shadow-xl shadow-black/30 md:hidden"
+        >
+          {rest.map((item) => {
+            const Icon = ICONS[item.id] ?? LayoutDashboard;
+            return (
+              <NavLink
+                key={item.id}
+                to={item.path}
+                role="menuitem"
+                className={({ isActive }) =>
+                  cn(
+                    "flex flex-col items-center gap-1 rounded-2xl px-2 py-3 text-xs font-medium transition-colors active:scale-95",
+                    isActive ? "bg-white text-primary" : "text-white/90 hover:bg-white/15",
+                  )
+                }
+              >
+                <Icon className="size-5" strokeWidth={1.75} aria-hidden />
+                {item.label}
+              </NavLink>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-3 bottom-3 z-20 flex gap-0.5 rounded-[1.75rem] bg-primary p-1.5 shadow-xl shadow-black/30"
+      >
+        {items.map((item, index) => {
+          const Icon = ICONS[item.id] ?? LayoutDashboard;
+          return (
+            <NavLink
+              key={item.id}
+              to={item.path}
+              end={item.path === "/"}
+              className={({ isActive }) =>
+                cn(slot, index >= PHONE_SLOTS && "hidden md:flex", isActive ? "bg-white text-primary" : "text-white/90 active:bg-white/15")
+              }
+            >
+              <Icon className="size-5" strokeWidth={1.75} aria-hidden />
+              <span className="whitespace-nowrap max-[309px]:sr-only">{item.label}</span>
+            </NavLink>
+          );
+        })}
+        {rest.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-haspopup="menu"
+            className={cn(slot, "md:hidden", moreActive || open ? "bg-white text-primary" : "text-white/90 active:bg-white/15")}
+          >
+            <MoreHorizontal className="size-5" strokeWidth={1.75} aria-hidden />
+            <span className="whitespace-nowrap max-[309px]:sr-only">More</span>
+          </button>
+        ) : null}
+      </nav>
     </div>
   );
 }
@@ -213,7 +313,7 @@ export function Shell() {
           {/* Top bar */}
           <header className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-2 pt-4 lg:px-6 lg:pt-5">
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs text-muted-foreground">{profile?.schoolName}</div>
+              <div className="break-words text-xs text-muted-foreground">{profile?.schoolName}</div>
               <div className="inline-flex items-center gap-2 border-b-2 border-primary pb-0.5 text-sm font-semibold">
                 <CurrentIcon className="size-4" aria-hidden />
                 {current?.label ?? "Overview"}
@@ -234,7 +334,7 @@ export function Shell() {
               </form>
             ) : null}
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setSurface(surface === "glass" ? "flat" : "glass")}
@@ -260,31 +360,7 @@ export function Shell() {
         </div>
       </div>
 
-      {/* Phones: the rail becomes a floating bar */}
-      <nav
-        aria-label="Main"
-        className="fixed inset-x-3 bottom-3 z-20 flex gap-1 overflow-x-auto rounded-[1.75rem] bg-primary p-1.5 shadow-xl shadow-black/30 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden"
-      >
-        {items.map((item) => {
-          const Icon = ICONS[item.id] ?? LayoutDashboard;
-          return (
-            <NavLink
-              key={item.id}
-              to={item.path}
-              end={item.path === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "flex min-w-16 flex-1 flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[11px] transition-colors",
-                  isActive ? "bg-white text-primary" : "text-primary-foreground/85",
-                )
-              }
-            >
-              <Icon className="size-5" aria-hidden />
-              {item.label}
-            </NavLink>
-          );
-        })}
-      </nav>
+      <BottomNav items={items} />
     </div>
   );
 }

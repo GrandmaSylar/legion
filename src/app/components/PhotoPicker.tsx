@@ -44,9 +44,9 @@ export function PhotoPicker({
   }
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-4">
       <StudentAvatar name={name || "Student"} url={preview ?? existingUrl} className="size-20 text-xl" />
-      <div className="space-y-2">
+      <div className="min-w-[9rem] flex-1 space-y-2">
         <div className="flex flex-wrap gap-2">
           <Button type="button" size="sm" variant="outline" disabled={disabled || busy} onClick={() => snap.current?.click()}>
             <Camera className="size-4" aria-hidden /> Take photo

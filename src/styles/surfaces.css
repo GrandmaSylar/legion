@@ -135,3 +135,18 @@ html[data-surface="glass"] .surface {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * Responsive safety rules.
+ * - Grids default to one column that can shrink below its content's width.
+ * - Nothing may widen the page sideways; real overflow is fixed where it happens,
+ *   this only stops a stray element from creating a horizontal scrollbar.
+ */
+@layer base {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  body {
+    overflow-x: clip;
+  }
+}

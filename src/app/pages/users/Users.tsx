@@ -78,8 +78,8 @@ export default function Users() {
               >
                 <StudentAvatar name={u.fullName} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{u.fullName}</div>
-                  <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+                  <div className="break-words text-sm font-medium">{u.fullName}</div>
+                  <div className="break-all text-xs text-muted-foreground">{u.email}</div>
                 </div>
                 <div className="hidden flex-wrap justify-end gap-1 sm:flex">
                   {u.roles.map((r) => (

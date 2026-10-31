@@ -214,7 +214,7 @@ export default function StudentDetailPage() {
           <div className="flex flex-wrap items-center gap-4">
             <StudentAvatar name={name} url={s.photoPath ? urls[s.id] : null} className="size-16 text-lg" />
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-2xl font-semibold">{name}</h1>
+              <h1 className="break-words text-2xl font-semibold">{name}</h1>
               <p className="text-sm tabular-nums text-muted-foreground">{s.admissionNo}{s.enrollments[0] ? ` · ${s.enrollments[0].className}` : ""}</p>
             </div>
             <StatusPill status={s.status} />
