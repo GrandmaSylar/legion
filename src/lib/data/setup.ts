@@ -97,6 +97,7 @@ export interface SchoolClass {
   classTeacherId: string | null;
   classTeacherName: string | null;
   studentCount: number;
+  subjectCount: number;
 }
 
 export interface StaffOption {
@@ -126,7 +127,7 @@ export async function listClasses(academicYearId: string): Promise<SchoolClass[]
     await supabase
       .from("classes")
       .select(
-        "id, level_id, academic_year_id, section, class_teacher_id, levels(name, sort_order), staff(full_name), enrollments(count)",
+        "id, level_id, academic_year_id, section, class_teacher_id, levels(name, sort_order), staff(full_name), enrollments(count), class_subjects(count)",
       )
       .eq("academic_year_id", academicYearId),
   );
@@ -135,6 +136,7 @@ export async function listClasses(academicYearId: string): Promise<SchoolClass[]
       const level = Array.isArray(r.levels) ? r.levels[0] : r.levels;
       const teacher = Array.isArray(r.staff) ? r.staff[0] : r.staff;
       const enrol = Array.isArray(r.enrollments) ? r.enrollments[0] : r.enrollments;
+      const subj = Array.isArray(r.class_subjects) ? r.class_subjects[0] : r.class_subjects;
       return {
         id: r.id,
         levelId: r.level_id,
@@ -145,6 +147,7 @@ export async function listClasses(academicYearId: string): Promise<SchoolClass[]
         classTeacherId: r.class_teacher_id,
         classTeacherName: teacher?.full_name ?? null,
         studentCount: enrol?.count ?? 0,
+        subjectCount: subj?.count ?? 0,
       };
     })
     .sort((a, b) => a.levelOrder - b.levelOrder || a.section.localeCompare(b.section));
@@ -206,4 +209,82 @@ export async function updateItem(kind: ListKind, id: string, patch: { name?: str
   if (patch.name !== undefined) body.name = patch.name;
   if (patch.isActive !== undefined) body.is_active = patch.isActive;
   check(await supabase.from(kind).update(body).eq("id", id));
+}
+
+// ─── Subjects per class ──────────────────────────────────────────────────────
+// Each class has its own subject list (a subject may start at a later level),
+// and each subject in a class has its own teacher.
+
+export interface ClassSubject {
+  id: string;
+  subjectId: string;
+  teacherId: string | null;
+}
+
+export interface ClassOption {
+  id: string;
+  label: string;
+  subjectCount: number;
+}
+
+export async function listClassSubjects(classId: string): Promise<ClassSubject[]> {
+  const rows = check(
+    await supabase.from("class_subjects").select("id, subject_id, teacher_id").eq("class_id", classId),
+  );
+  return rows.map((r) => ({ id: r.id, subjectId: r.subject_id, teacherId: r.teacher_id }));
+}
+
+export async function addClassSubjects(classId: string, subjectIds: string[], teacherId: string | null = null) {
+  if (subjectIds.length === 0) return;
+  check(
+    await supabase.from("class_subjects").upsert(
+      subjectIds.map((subject_id) => ({ class_id: classId, subject_id, teacher_id: teacherId })),
+      { onConflict: "class_id,subject_id", ignoreDuplicates: true },
+    ),
+  );
+}
+
+export async function removeClassSubject(id: string) {
+  check(await supabase.from("class_subjects").delete().eq("id", id));
+}
+
+export async function setSubjectTeacher(id: string, staffId: string | null) {
+  check(await supabase.from("class_subjects").update({ teacher_id: staffId }).eq("id", id));
+}
+
+/** Give every subject in a class the same teacher (a class teacher in the lower levels). */
+export async function setAllSubjectTeachers(classId: string, staffId: string | null) {
+  check(await supabase.from("class_subjects").update({ teacher_id: staffId }).eq("class_id", classId));
+}
+
+/** Other classes of the same level, in any year, to copy a subject list from. */
+export async function listCopySources(levelId: string, excludeClassId: string): Promise<ClassOption[]> {
+  const rows = check(
+    await supabase
+      .from("classes")
+      .select("id, section, academic_years(name, start_date), levels(name), class_subjects(count)")
+      .eq("level_id", levelId)
+      .neq("id", excludeClassId),
+  );
+  return rows
+    .map((r) => {
+      const year = Array.isArray(r.academic_years) ? r.academic_years[0] : r.academic_years;
+      const level = Array.isArray(r.levels) ? r.levels[0] : r.levels;
+      const subj = Array.isArray(r.class_subjects) ? r.class_subjects[0] : r.class_subjects;
+      return {
+        id: r.id,
+        label: `${level?.name ?? ""} ${r.section} (${year?.name ?? ""})`,
+        subjectCount: subj?.count ?? 0,
+        start: year?.start_date ?? "",
+      };
+    })
+    .filter((o) => o.subjectCount > 0)
+    .sort((a, b) => b.start.localeCompare(a.start))
+    .map(({ id, label, subjectCount }) => ({ id, label, subjectCount }));
+}
+
+/** Copy the subjects (not the teachers) from one class to another, skipping any already there. */
+export async function copyClassSubjects(fromClassId: string, toClassId: string) {
+  const source = await listClassSubjects(fromClassId);
+  await addClassSubjects(toClassId, source.map((s) => s.subjectId));
 }

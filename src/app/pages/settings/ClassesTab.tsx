@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { ChevronDown } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
+import ClassSubjects from "./ClassSubjects";
 import {
   createClass, listAcademicYears, listClasses, listLevels, listTeachers, setClassTeacher,
 } from "../../../lib/data/setup";
@@ -29,6 +31,7 @@ export default function ClassesTab() {
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ["classes"] });
 
+  const [openId, setOpenId] = useState<string | null>(null);
   const [levelId, setLevelId] = useState("");
   const [section, setSection] = useState("A");
   const [teacherId, setTeacherId] = useState("");
@@ -96,7 +99,7 @@ export default function ClassesTab() {
         {classes.data && classes.data.length > 0 ? (
           <ul className="grid gap-3 sm:grid-cols-2">
             {classes.data.map((c) => (
-              <li key={c.id} className="surface space-y-2 p-4">
+              <li key={c.id} className={`surface space-y-2 p-4 ${openId === c.id ? "sm:col-span-full" : ""}`}>
                 <div className="flex items-baseline justify-between gap-2">
                   <h3 className="text-base font-medium">{c.levelName} {c.section}</h3>
                   <span className="text-sm tabular-nums text-muted-foreground">
@@ -116,6 +119,21 @@ export default function ClassesTab() {
                     ))}
                   </NativeSelect>
                 </Field>
+                <button
+                  type="button"
+                  aria-expanded={openId === c.id}
+                  onClick={() => setOpenId(openId === c.id ? null : c.id)}
+                  className="flex w-full items-center justify-between rounded-md px-1 py-1 text-sm font-medium focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+                >
+                  <span>
+                    Subjects{" "}
+                    <span className="font-normal text-muted-foreground">
+                      {c.subjectCount === 0 ? "none yet" : c.subjectCount}
+                    </span>
+                  </span>
+                  <ChevronDown className={`size-4 transition-transform ${openId === c.id ? "rotate-180" : ""}`} aria-hidden />
+                </button>
+                {openId === c.id ? <ClassSubjects cls={c} teachers={teachers.data ?? []} /> : null}
               </li>
             ))}
           </ul>

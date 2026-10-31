@@ -5,7 +5,7 @@ export function friendlyError(e: unknown): string {
     case "23505":
       return "That already exists. Choose a different name.";
     case "23503":
-      return "This is still in use, so it cannot be removed.";
+      return "This still has records attached to it (such as grades), so it cannot be removed.";
     case "23514":
       return "Some of the values are not valid. Check the dates and try again.";
     case "42501":
