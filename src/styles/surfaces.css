@@ -27,21 +27,24 @@ html.light {
 
 :root,
 html.dark {
-  --background: #151520;
-  --card: #1e1e2e;
-  --card-foreground: #ececf6;
-  --popover: #1e1e2e;
-  --secondary: #2a2a3e;
-  --muted: #262638;
-  --muted-foreground: #a3a3c2;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: #262638;
-  --input-background: #262638;
-  --sidebar: #1e1e2e;
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.30), 0 10px 28px -12px rgba(0, 0, 0, 0.55);
-  --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.35), 0 18px 36px -14px rgba(0, 0, 0, 0.65);
-  --glass-bg: rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.12);
+  /* AMOLED: true black, so unlit pixels stay off. Depth comes from hairline
+     borders and a faint accent glow instead of grey fills. */
+  --background: #000000;
+  --card: #000000;
+  --card-foreground: #f2f2f2;
+  --popover: #0b0b0b;
+  --popover-foreground: #f2f2f2;
+  --secondary: #141414;
+  --muted: #101010;
+  --muted-foreground: #9b9b9b;
+  --border: rgba(255, 255, 255, 0.14);
+  --input: #161616;
+  --input-background: #0b0b0b;
+  --sidebar: #000000;
+  --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --card-shadow-hover: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 14px 34px -14px color-mix(in srgb, var(--primary) 45%, transparent);
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.14);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
@@ -84,6 +87,11 @@ html[data-surface="glass"] .lift:hover {
   border: 1px solid var(--border);
   border-radius: 2rem;
   box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.35);
+}
+
+html.dark[data-surface="glass"] body,
+html.dark body {
+  background: #000000;
 }
 
 html[data-surface="glass"] .shell-card {

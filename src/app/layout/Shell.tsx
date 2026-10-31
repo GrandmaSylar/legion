@@ -51,14 +51,14 @@ function RailLink({ to, end, label, Icon }: { to: string; end: boolean; label: s
       aria-label={label}
       className={({ isActive }) =>
         cn(
-          "group relative grid size-11 place-items-center rounded-2xl outline-offset-2 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white",
+          "group relative grid size-12 place-items-center rounded-2xl outline-offset-2 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white [@media(max-height:780px)]:size-10",
           isActive
-            ? "bg-white text-primary shadow-lg shadow-black/20 before:absolute before:-left-[1.1rem] before:h-5 before:w-1 before:rounded-r-full before:bg-white"
-            : "text-primary-foreground/80 hover:scale-105 hover:bg-white/15 hover:text-primary-foreground hover:shadow-[0_0_22px_rgba(255,255,255,0.40)]",
+            ? "bg-white text-primary shadow-lg shadow-black/25"
+            : "text-white/90 hover:scale-105 hover:bg-white/15 hover:text-white hover:shadow-[0_0_22px_rgba(255,255,255,0.40)]",
         )
       }
     >
-      <Icon className="size-5" aria-hidden />
+      <Icon className="size-5" strokeWidth={1.75} aria-hidden />
       <span
         role="tooltip"
         className="pointer-events-none absolute left-full z-30 ml-3 whitespace-nowrap rounded-lg bg-foreground px-2.5 py-1 text-xs font-medium text-background opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
@@ -66,6 +66,34 @@ function RailLink({ to, end, label, Icon }: { to: string; end: boolean; label: s
         {label}
       </span>
     </NavLink>
+  );
+}
+
+/**
+ * The rail's shape: a blob attached to the card's left edge, rounded at the top
+ * and sweeping back to the edge in an S-curve at the bottom. Drawn as an SVG so
+ * the curves stay smooth at any height (it stretches vertically only).
+ */
+const RAIL_PATH = "M0 0 C70 0 100 36 100 110 L100 450 C100 530 0 520 0 600 Z";
+
+function RailShape() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 100 600"
+      preserveAspectRatio="none"
+      className="absolute inset-0 size-full"
+      style={{ filter: "drop-shadow(0 18px 26px color-mix(in srgb, var(--primary) 45%, transparent))" }}
+    >
+      <defs>
+        <linearGradient id="rail-shade" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.18" />
+          <stop offset="1" stopColor="#000" stopOpacity="0.16" />
+        </linearGradient>
+      </defs>
+      <path d={RAIL_PATH} style={{ fill: "var(--primary)" }} />
+      <path d={RAIL_PATH} fill="url(#rail-shade)" />
+    </svg>
   );
 }
 
@@ -165,20 +193,20 @@ export function Shell() {
   return (
     <div className="min-h-dvh p-2 pb-24 sm:p-3 lg:p-5 lg:pb-5">
       <div className="shell-card mx-auto flex min-h-[calc(100dvh-1rem)] max-w-[110rem] lg:min-h-[calc(100dvh-2.5rem)]">
-        {/* Icon rail */}
-        <aside className="hidden p-3 lg:block">
-          <nav
-            aria-label="Main"
-            className="sticky top-5 flex h-[calc(100dvh-2.5rem-1.5rem)] w-[4.5rem] flex-col items-center gap-3.5 rounded-[2rem] bg-primary py-6 shadow-xl shadow-primary/25"
-            style={{ backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(0,0,0,0.12))" }}
-          >
-            <div className="mb-4 grid size-11 place-items-center rounded-2xl bg-white/20 text-sm font-bold text-primary-foreground" aria-hidden>
-              {(profile?.schoolName ?? "S").slice(0, 1)}
-            </div>
-            {items.map((item) => (
-              <RailLink key={item.id} to={item.path} end={item.path === "/"} label={item.label} Icon={ICONS[item.id] ?? LayoutDashboard} />
-            ))}
-          </nav>
+        {/* Icon rail: a blob attached to the card's left edge */}
+        <aside className="hidden w-[7.5rem] shrink-0 lg:block">
+          <div className="sticky top-5 flex h-[calc(100dvh-2.5rem-2px)] items-center">
+            <nav aria-label="Main" className="relative h-[min(100%,54rem)] w-[7rem]">
+              <RailShape />
+              <ul className="absolute inset-x-0 bottom-[22%] top-[13%] flex flex-col items-center justify-center gap-1.5">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <RailLink to={item.path} end={item.path === "/"} label={item.label} Icon={ICONS[item.id] ?? LayoutDashboard} />
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
