@@ -10,11 +10,12 @@ import { NAV, canSee, hasAnyRole, type AppRole } from "../../lib/permissions";
 import { getDashboardStats, getRecentActivity } from "../../lib/data/dashboard";
 import { listAcademicYears, listClasses } from "../../lib/data/setup";
 import { Skeleton } from "../components/ui/skeleton";
+import { cn } from "../components/ui/utils";
 
 // ─── Stat cards ──────────────────────────────────────────────────────────────
 
 function Stat({
-  icon: Icon, label, value, hint, hintTone = "muted", accent,
+  icon: Icon, label, value, hint, hintTone = "muted", accent, hero = false,
 }: {
   icon: LucideIcon;
   label: string;
@@ -22,30 +23,42 @@ function Stat({
   hint?: string;
   hintTone?: "up" | "muted";
   accent: string;
+  /** One solid brand-coloured card leads the row. */
+  hero?: boolean;
 }) {
+  const pill = hero
+    ? "bg-white/20 text-white"
+    : hintTone === "up"
+      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+      : "bg-foreground/5 text-muted-foreground";
   return (
-    <section className="surface lift relative overflow-hidden p-5">
-      <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent }} />
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-sm font-medium text-muted-foreground">{label}</div>
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
-          <Icon className="size-5" aria-hidden />
-        </span>
+    <section
+      className={cn(
+        "lift relative isolate flex min-h-44 flex-col overflow-hidden rounded-[1.75rem] p-6",
+        hero ? "text-white shadow-lg shadow-primary/30" : "surface",
+      )}
+      style={{
+        backgroundImage: hero
+          ? "linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 68%, #6b1a00))"
+          : `linear-gradient(135deg, color-mix(in srgb, ${accent} 18%, transparent), transparent 72%)`,
+      }}
+    >
+      {/* Oversized, faded icon: decoration, tucked into the corner */}
+      <Icon
+        aria-hidden
+        strokeWidth={1.4}
+        className="pointer-events-none absolute -bottom-6 -right-5 -z-10 size-36 -rotate-12 opacity-[0.16]"
+        style={{ color: hero ? "#fff" : accent }}
+      />
+      <div className={cn("text-sm font-medium", hero ? "text-white/85" : "text-muted-foreground")}>{label}</div>
+      <div className="mt-auto pt-6 text-5xl font-extrabold leading-none tracking-tight tabular-nums">
+        {value === null ? <Skeleton className="h-11 w-24" /> : value}
       </div>
-      <div className="mt-3 text-4xl font-bold tabular-nums leading-none tracking-tight">
-        {value === null ? <Skeleton className="h-9 w-20" /> : value}
-      </div>
-      <div className="mt-3 min-h-5 text-xs">
+      <div className="mt-4 min-h-6">
         {value === null ? (
-          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-5 w-32" />
         ) : hint ? (
-          <span
-            className={
-              hintTone === "up"
-                ? "inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-400"
-                : "text-muted-foreground"
-            }
-          >
+          <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", pill)}>
             {hintTone === "up" ? <ArrowUpRight className="size-3" aria-hidden /> : null}
             {hint}
           </span>
@@ -258,7 +271,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat
-          icon={Users} label="Active students" accent="var(--primary)" value={data ? data.activeStudents : null}
+          icon={Users} label="Active students" accent="var(--primary)" hero value={data ? data.activeStudents : null}
           hint={data ? (data.admittedThisMonth > 0 ? `+${data.admittedThisMonth} this month` : "No new admissions this month") : undefined}
           hintTone={data && data.admittedThisMonth > 0 ? "up" : "muted"}
         />
