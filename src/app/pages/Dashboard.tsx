@@ -1,30 +1,233 @@
+import type { ReactNode } from "react";
+import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarCheck, GraduationCap, UserCog, Users } from "lucide-react";
+import {
+  Activity, ArrowUpRight, CalendarCheck, ChevronRight, ClipboardCheck, GraduationCap, Settings, UserCog,
+  UserPlus, UserRoundCog, Users, type LucideIcon,
+} from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
-import { getDashboardStats } from "../../lib/data/dashboard";
+import { NAV, canSee, hasAnyRole, type AppRole } from "../../lib/permissions";
+import { getDashboardStats, getRecentActivity } from "../../lib/data/dashboard";
+import { listAcademicYears, listClasses } from "../../lib/data/setup";
 import { Skeleton } from "../components/ui/skeleton";
 
+// ─── Stat cards ──────────────────────────────────────────────────────────────
+
 function Stat({
-  icon: Icon, label, value, hint,
-}: { icon: typeof Users; label: string; value: string | number | null; hint?: string }) {
+  icon: Icon, label, value, hint, hintTone = "muted", accent,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | number | null;
+  hint?: string;
+  hintTone?: "up" | "muted";
+  accent: string;
+}) {
   return (
-    <section className="surface p-4">
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        <span className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary">
-          <Icon className="size-4" aria-hidden />
+    <section className="surface lift relative overflow-hidden p-5">
+      <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent }} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-sm font-medium text-muted-foreground">{label}</div>
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary">
+          <Icon className="size-5" aria-hidden />
         </span>
-        {label}
       </div>
-      <div className="mt-2 text-3xl font-semibold tabular-nums">
+      <div className="mt-3 text-4xl font-bold tabular-nums leading-none tracking-tight">
         {value === null ? <Skeleton className="h-9 w-20" /> : value}
       </div>
-      {hint ? <div className="mt-1 text-xs text-muted-foreground">{hint}</div> : null}
+      <div className="mt-3 min-h-5 text-xs">
+        {value === null ? (
+          <Skeleton className="h-4 w-28" />
+        ) : hint ? (
+          <span
+            className={
+              hintTone === "up"
+                ? "inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-400"
+                : "text-muted-foreground"
+            }
+          >
+            {hintTone === "up" ? <ArrowUpRight className="size-3" aria-hidden /> : null}
+            {hint}
+          </span>
+        ) : null}
+      </div>
     </section>
   );
 }
 
+// ─── Panels ──────────────────────────────────────────────────────────────────
+
+function Panel({
+  title, icon: Icon, action, className = "", children,
+}: { title: string; icon: LucideIcon; action?: ReactNode; className?: string; children: ReactNode }) {
+  return (
+    <section className={`surface lift p-5 ${className}`}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          <Icon className="size-4 text-primary" aria-hidden /> {title}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+function timeAgo(iso: string): string {
+  const seconds = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+  const steps: [Intl.RelativeTimeFormatUnit, number][] = [["day", 86400], ["hour", 3600], ["minute", 60]];
+  for (const [unit, size] of steps) {
+    if (Math.abs(seconds) >= size) return rtf.format(Math.round(seconds / size), unit);
+  }
+  return "just now";
+}
+
+function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
+  const q = useQuery({ queryKey: ["activity"], queryFn: () => getRecentActivity(8), staleTime: 30_000, retry: false });
+  return (
+    <Panel title="Recent activity" icon={Activity} className="lg:col-span-2">
+      {q.isLoading ? (
+        <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+      ) : q.isError ? (
+        <p role="alert" className="text-sm text-muted-foreground">Recent activity could not be loaded.</p>
+      ) : q.data && q.data.length > 0 ? (
+        <ul className="divide-y divide-border">
+          {q.data.map((a) => (
+            <li key={a.id} className="flex items-start gap-3 py-2.5">
+              <span aria-hidden className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm">{a.text}</p>
+                <p className="text-xs text-muted-foreground">{a.actor ? `${a.actor} · ` : ""}{timeAgo(a.at)}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="py-6 text-sm text-muted-foreground">
+          {isAdmin
+            ? "Nothing has happened yet. Admissions, new users and payments will appear here."
+            : "Recent activity is shown to administrators."}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+interface QuickAction { label: string; hint: string; to: string; icon: LucideIcon; roles: AppRole[]; module: string; soon?: boolean }
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, roles: ["school_admin", "principal", "teacher"], module: "attendance", soon: true },
+  { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, roles: ["school_admin", "receptionist"], module: "students" },
+  { label: "View students", hint: "Search the register", to: "/students", icon: Users, roles: ["principal", "teacher", "accountant"], module: "students" },
+  { label: "Add user", hint: "Create a staff or parent login", to: "/users/new", icon: UserRoundCog, roles: ["school_admin"], module: "users" },
+  { label: "School setup", hint: "Years, classes and subjects", to: "/settings", icon: Settings, roles: ["school_admin"], module: "settings" },
+];
+
+function QuickActionsPanel() {
+  const { roles, profile } = useAuth();
+  const modules = profile?.modules ?? null;
+  const actions = QUICK_ACTIONS.filter((a) => {
+    const item = NAV.find((n) => n.id === a.module);
+    return hasAnyRole(roles, a.roles) && (!item || canSee(item, roles, modules));
+  });
+  return (
+    <Panel title="Quick actions" icon={ClipboardCheck}>
+      {actions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nothing to do right now.</p>
+      ) : (
+        <ul className="space-y-2">
+          {actions.map((a) => (
+            <li key={a.label}>
+              <Link
+                to={a.to}
+                className="group flex items-center gap-3 rounded-2xl border border-border p-3 transition-all duration-200 hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+              >
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <a.icon className="size-5" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    {a.label}
+                    {a.soon ? <span className="rounded-full bg-foreground/10 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Soon</span> : null}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">{a.hint}</span>
+                </span>
+                <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
+  const years = useQuery({ queryKey: ["academic-years"], queryFn: listAcademicYears });
+  const year = years.data?.find((y) => y.isCurrent) ?? null;
+  const classes = useQuery({
+    queryKey: ["classes", year?.id],
+    queryFn: () => listClasses(year!.id),
+    enabled: !!year,
+  });
+  const now = new Date();
+
+  return (
+    <Panel title="Today" icon={CalendarCheck} className="lg:col-span-3">
+      <div className="grid gap-5 lg:grid-cols-[14rem_1fr]">
+        <div className="flex items-center gap-4 rounded-2xl bg-primary/10 p-4 lg:flex-col lg:items-start">
+          <div className="text-5xl font-bold leading-none tabular-nums text-primary">{now.getDate()}</div>
+          <div>
+            <div className="text-sm font-semibold">{now.toLocaleDateString(undefined, { weekday: "long" })}</div>
+            <div className="text-xs text-muted-foreground">{now.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</div>
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">Classes{year ? ` · ${year.name}` : ""}</h3>
+            <span className="text-xs text-muted-foreground">A daily timetable will appear here once scheduling is built.</span>
+          </div>
+          {classes.isLoading || years.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : !year ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              No current academic year.{" "}
+              {isAdmin ? <Link to="/settings" className="font-medium text-primary underline underline-offset-4">Set one up</Link> : null}
+            </p>
+          ) : classes.data && classes.data.length > 0 ? (
+            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {classes.data.slice(0, 6).map((c) => (
+                <li key={c.id} className="flex items-center gap-3 rounded-2xl border border-border p-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+                    <GraduationCap className="size-4" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{c.levelName} {c.section}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {c.studentCount} {c.studentCount === 1 ? "student" : "students"}
+                      {c.classTeacherName ? ` · ${c.classTeacherName}` : ""}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-4 text-sm text-muted-foreground">No classes have been set up for this year yet.</p>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { profile, roles } = useAuth();
+  const isAdmin = hasAnyRole(roles, ["school_admin"]);
   const { data, isError, refetch } = useQuery({
     queryKey: ["dashboard"],
     queryFn: getDashboardStats,
@@ -34,11 +237,14 @@ export default function Dashboard() {
   const firstName = profile?.fullName.split(" ")[0];
   const marked = data?.attendanceToday.marked ?? 0;
   const present = data?.attendanceToday.present ?? 0;
+  const date = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div className="w-full space-y-5">
+    <div className="w-full space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold leading-tight">Hi, {firstName}!<br className="sm:hidden" /> <span className="text-muted-foreground">Here is today at {profile?.schoolName}.</span></h1>
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">{date}</p>
+        <h1 className="mt-1 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">Hi, {firstName}!</h1>
+        <p className="mt-1 text-lg text-muted-foreground">Here is what is happening at {profile?.schoolName}.</p>
       </div>
 
       {isError ? (
@@ -50,26 +256,33 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={Users} label="Active students" value={data ? data.activeStudents : null} />
-        <Stat icon={UserCog} label="Staff" value={data ? data.staff : null} />
-        <Stat icon={GraduationCap} label="Classes" value={data ? data.classes : null} />
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Stat
-          icon={CalendarCheck}
-          label="Present today"
-          value={data ? (marked === 0 ? "No register" : `${present}/${marked}`) : null}
-          hint={data && marked === 0 ? "Attendance not yet marked" : undefined}
+          icon={Users} label="Active students" accent="var(--primary)" value={data ? data.activeStudents : null}
+          hint={data ? (data.admittedThisMonth > 0 ? `+${data.admittedThisMonth} this month` : "No new admissions this month") : undefined}
+          hintTone={data && data.admittedThisMonth > 0 ? "up" : "muted"}
+        />
+        <Stat
+          icon={UserCog} label="Staff" accent="var(--chart-4)" value={data ? data.staff : null}
+          hint={data ? `${data.teachingStaff} teaching` : undefined}
+        />
+        <Stat
+          icon={GraduationCap} label="Classes" accent="var(--chart-2)" value={data ? data.classes : null}
+          hint={data ? (data.yearName ? `Academic year ${data.yearName}` : "No current academic year") : undefined}
+        />
+        <Stat
+          icon={CalendarCheck} label="Present today" accent="var(--chart-3)"
+          value={data ? (marked === 0 ? "—" : `${present}/${marked}`) : null}
+          hint={data ? (marked === 0 ? "Attendance not yet marked" : `${Math.round((present / marked) * 100)}% present`) : undefined}
+          hintTone={data && marked > 0 ? "up" : "muted"}
         />
       </div>
 
-      {data && data.activeStudents === 0 ? (
-        <section className="surface p-6">
-          <h2 className="text-base font-medium">Nothing here yet</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Add the academic year, classes and students first. Numbers on this screen fill in as records are added.
-          </p>
-        </section>
-      ) : null}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ActivityPanel isAdmin={isAdmin} />
+        <QuickActionsPanel />
+        <TodayPanel isAdmin={isAdmin} />
+      </div>
     </div>
   );
 }
