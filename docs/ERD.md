@@ -42,7 +42,7 @@ erDiagram
     levels }o--|| grading_scales : uses
     enrollments ||--o{ term_results : summarised_in
     enrollments ||--o{ term_remarks : "described by"
-    learning_areas ||--o{ term_remarks : about
+    subjects ||--o{ term_remarks : about
     students ||--o{ bece_registrations : "sits"
     terms ||--o{ term_remarks : in
     terms ||--o{ term_results : in
@@ -80,8 +80,7 @@ erDiagram
 | `terms` | academic_year_id, name, start, end, is_current | |
 | `levels` | name, order, grading_scale_id, sits_bece (bool) | Creche, Nursery 1-2, KG 1-2, Basic 1-9 (16 rows). `order` drives promotion. |
 | `classes` | level_id, academic_year_id, section (free text), class_teacher_id | A class is a level + section for one year. Sections are created by the admin per level and year (one, A/B/C, or any names), so nothing is fixed in code. |
-| `subjects` | name, code, is_active | Fully customisable by the admin (add, rename, retire). Used by Basic levels. |
-| `learning_areas` | name, order, is_active | Fully customisable by the admin. Used for descriptive remarks in creche to KG 2. Default seed (editable): Language and Literacy, Numeracy, Our World Our People, Creative Arts, Physical Development, Social and Emotional Development. |
+| `subjects` | name, code, is_active | Fully customisable by the admin (add, rename, retire). One list for subjects and creche to KG 2 learning areas: the level's grading scale decides whether a subject is scored or gets a written remark. |
 | `class_subjects` | class_id, subject_id, teacher_id | Who teaches what; also the basis for teacher-scoped permissions. Handles the mixed model: in lower levels the class teacher is assigned every subject, in upper levels each subject has its own teacher. |
 | `number_sequences` | school_id, kind (`admission_no`, `staff_no`, `receipt_no`, `invoice_no`), format, year (nullable), next_value | Own numbering scheme, configurable per school. Numbers are issued atomically to avoid duplicates and are never reissued. Default for `admission_no`: format `V/{YYYY}/{NNNN}`, for example `V/2026/0001`. The year is the admission year, and the counter restarts at 1 each year (one row per kind and year). |
 
@@ -104,7 +103,7 @@ erDiagram
 | `assessments` | class_subject_id, term_id, type (`class_exercise`/`homework`/`project`/`ca_test`/`exam`), max_score, weight | CA components feed the 30% CA; the exam is 70%. |
 | `scores` | assessment_id, enrollment_id, score | |
 | `term_results` | enrollment_id, term_id, subject_id, ca_total, exam_score, total, grade, remark | Numeric levels only. Computed from `scores` by a trigger when `grading_type = ges_numeric`. Source for report cards and analytics. |
-| `term_remarks` | enrollment_id, term_id, learning_area_id (nullable), remark, written_by | Descriptive levels (creche to KG 2): a written remark per learning area, plus an overall teacher remark when `learning_area_id` is null. Basic levels also use it for the class teacher and head teacher comments on report cards. |
+| `term_remarks` | enrollment_id, term_id, subject_id (nullable), remark, written_by | Descriptive levels (creche to KG 2): a written remark per subject (learning area), plus an overall teacher remark when `subject_id` is null. Basic levels also use it for the class teacher and head teacher comments on report cards. |
 
 Grading by level: creche, nursery 1-2 and KG 1-2 use a `descriptive` scale (written remarks, no numbers). Basic 1-9 use `ges_numeric`. `levels.grading_scale_id` makes this configuration, not code.
 
@@ -141,11 +140,11 @@ Grading by level: creche, nursery 1-2 and KG 1-2 use a `descriptive` scale (writ
 5. Fee discounts are supported but optional.
 6. Fees can be paid in instalments, and unpaid balances carry across terms as arrears.
 7. Class teachers cover all subjects in lower levels; upper levels have subject teachers (both modelled by `class_subjects`).
-8. Subjects and learning areas are customisable lists, with sensible default learning areas seeded.
+8. Subjects and learning areas are one customisable list, with the default KG learning areas seeded as subjects. Each class has its own subject list (a subject may start at a later level).
 9. Final-year students (Basic 9 only) get a BECE index number field, blank until the school enters it.
 
 ## Still open
-- The real learning areas on the Pinks Academy report card, if they differ from the default seed. This does not block the first migration.
+- The real subject and learning-area names on the Pinks Academy report card, if they differ from the defaults. Editable in Settings.
 
 ## Not in this draft (deferred)
 Timetable, staff attendance, leave, payroll, recruitment, e-admission, library, assets, behaviour and discipline, internal messaging. Each adds tables later without changing the ones above.
