@@ -56,7 +56,7 @@ declare
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
   u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();  u_off uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
-  rs int; rg int; rst int;
+  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid;
   r record;
 begin
   select id into a from public.schools where name = 'Pinks Academy';
@@ -104,6 +104,14 @@ begin
   insert into public.enrollments (school_id,student_id,class_id,academic_year_id) values (a,s2,c2,yr) returning id into e2;
   insert into public.attendance (school_id,enrollment_id,date,status) values (a,e1,current_date,'present'),(a,e2,current_date,'absent');
   insert into public.bece_registrations (school_id,student_id,exam_year) values (a,s1,2027);
+  insert into public.academic_years (school_id,name,start_date,end_date) values (a,'DEL','2040-09-01','2041-07-31') returning id into yr_del;
+  insert into public.terms (school_id,academic_year_id,name,start_date,end_date) values (a,yr_del,'DelTerm','2040-09-01','2040-12-15');
+  insert into public.classes (school_id,level_id,academic_year_id,section) values (a,lvl,yr_del,'DEL') returning id into cls_del;
+  insert into public.subjects (school_id,name) values (a,'DelMe');
+  insert into public.students (school_id,first_name,last_name) values (a,'Unused','Pupil') returning id into su;
+  insert into public.enrollments (school_id,student_id,class_id,academic_year_id) values (a,su,c1,yr) returning id into eu;
+  insert into public.guardians (school_id,full_name) values (a,'Only Parent') returning id into gu;
+  insert into public.student_guardians (school_id,student_id,guardian_id) values (a,su,gu);
   insert into storage.objects (bucket_id, name) values
     ('student-photos', s1::text || '/photo.jpg'),
     ('student-photos', s2::text || '/photo.jpg');
@@ -116,11 +124,11 @@ begin
   -- expectation helper: (label, actual, expected)
   for r in select * from (values
     -- students
-    ('students admin',      pg_temp.t_count(u_admin,'students')::text,(rs + 2)::text),
-    ('students principal',  pg_temp.t_count(u_prin,'students')::text,(rs + 2)::text),
-    ('students reception',  pg_temp.t_count(u_rec,'students')::text,(rs + 2)::text),
-    ('students accountant', pg_temp.t_count(u_acc,'students')::text,(rs + 2)::text),
-    ('students teacher1',   pg_temp.t_count(u_t1,'students')::text,'1'),
+    ('students admin',      pg_temp.t_count(u_admin,'students')::text,(rs + 3)::text),
+    ('students principal',  pg_temp.t_count(u_prin,'students')::text,(rs + 3)::text),
+    ('students reception',  pg_temp.t_count(u_rec,'students')::text,(rs + 3)::text),
+    ('students accountant', pg_temp.t_count(u_acc,'students')::text,(rs + 3)::text),
+    ('students teacher1',   pg_temp.t_count(u_t1,'students')::text,'2'),
     ('students teacher2',   pg_temp.t_count(u_t2,'students')::text,'1'),
     ('students hr',         pg_temp.t_count(u_hr,'students')::text,'0'),
     ('students parent1',    pg_temp.t_count(u_p1,'students')::text,'1'),
@@ -150,7 +158,7 @@ begin
     ('staff admin',         pg_temp.t_count(u_admin,'staff')::text,(rst + 2)::text),
     ('staff hr',            pg_temp.t_count(u_hr,'staff')::text,(rst + 2)::text),
     ('staff parent1',       pg_temp.t_count(u_p1,'staff')::text,'0'),
-    ('guardians admin',     pg_temp.t_count(u_admin,'guardians')::text,(rg + 2)::text),
+    ('guardians admin',     pg_temp.t_count(u_admin,'guardians')::text,(rg + 3)::text),
     ('guardians teacher1',  pg_temp.t_count(u_t1,'guardians')::text,'0'),
     ('guardians parent1',   pg_temp.t_count(u_p1,'guardians')::text,'1'),
     ('profiles admin',      pg_temp.t_count(u_admin,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
@@ -169,7 +177,7 @@ begin
     ('bece admin',          pg_temp.t_count(u_admin,'bece_registrations')::text,'1'),
     ('bece teacher1',       pg_temp.t_count(u_t1,'bece_registrations')::text,'0'),
     -- developer sees at least everything an admin sees
-    ('students developer',  pg_temp.t_count(u_dev,'students')::text,(rs + 2)::text),
+    ('students developer',  pg_temp.t_count(u_dev,'students')::text,(rs + 3)::text),
     ('attendance developer',pg_temp.t_count(u_dev,'attendance')::text,'2'),
     ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,'2'),
     ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,'2'),
@@ -279,8 +287,48 @@ begin
        pg_temp.t_try(u_p1, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/p.jpg')), 'denied'),
     ('photos: other school admin uploads for school A student',
        pg_temp.t_try(u_adminb, format('insert into storage.objects (bucket_id, name) values (''student-photos'', %L)', s1::text || '/x.jpg')), 'denied'),
+    -- editing is for admins; hard deletion of reference data is for developers
+    ('admin edits a subject name',
+       pg_temp.t_try(u_admin, 'update public.subjects set name = ''DelMe2'' where name = ''DelMe'''), 'ok:1'),
+    ('admin deletes a subject',
+       pg_temp.t_try(u_admin, 'delete from public.subjects where name = ''DelMe2'''), 'ok:0'),
+    ('developer deletes an unused subject',
+       pg_temp.t_try(u_dev, 'delete from public.subjects where name = ''DelMe2'''), 'ok:1'),
+    ('admin deletes a class',
+       pg_temp.t_try(u_admin, format('delete from public.classes where id = %L', cls_del)), 'ok:0'),
+    ('developer deletes an unused class',
+       pg_temp.t_try(u_dev, format('delete from public.classes where id = %L', cls_del)), 'ok:1'),
+    ('developer cannot delete a class that has students',
+       pg_temp.t_try(u_dev, format('delete from public.classes where id = %L', c1)), 'denied'),
+    ('admin deletes a term',
+       pg_temp.t_try(u_admin, 'delete from public.terms where name = ''DelTerm'''), 'ok:0'),
+    ('admin deletes an academic year',
+       pg_temp.t_try(u_admin, format('delete from public.academic_years where id = %L', yr_del)), 'ok:0'),
+    ('developer deletes an unused academic year',
+       pg_temp.t_try(u_dev, format('delete from public.academic_years where id = %L', yr_del)), 'ok:1'),
+    ('teacher1 edits a subject',
+       pg_temp.t_try(u_t1, 'update public.subjects set name = name where name = ''Maths'''), 'ok:0'),
+    -- deleting a student: developer only, and only with no history
+    ('admin deletes a student',
+       pg_temp.t_try(u_admin, format('select public.delete_student_if_unused(%L)', su)), 'denied'),
+    ('reception deletes a student',
+       pg_temp.t_try(u_rec, format('select public.delete_student_if_unused(%L)', su)), 'denied'),
+    ('developer deletes a student with attendance',
+       pg_temp.t_try(u_dev, format('select public.delete_student_if_unused(%L)', s2)), 'denied'),
+    ('developer deletes an unused student',
+       pg_temp.t_try(u_dev, format('select public.delete_student_if_unused(%L)', su)), 'ok:1'),
     ('teacher1 grants themself admin',
-       pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied')
+       pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied'),
+    ('reception changes a student''s class',
+       pg_temp.t_try(u_rec, format('select public.change_student_class(%L, %L)', s2, c1)), 'ok:1'),
+    ('teacher1 changes a student''s class',
+       pg_temp.t_try(u_t1, format('select public.change_student_class(%L, %L)', s2, c2)), 'denied'),
+    ('reception adds a guardian to a student',
+       pg_temp.t_try(u_rec, format('select public.add_student_guardian(%L, ''{"full_name":"New Guardian","phone":"0200000000"}''::jsonb)', s1)), 'ok:1'),
+    ('teacher1 adds a guardian to a student',
+       pg_temp.t_try(u_t1, format('select public.add_student_guardian(%L, ''{"full_name":"X"}''::jsonb)', s1)), 'denied'),
+    ('reception removes a guardian from a student',
+       pg_temp.t_try(u_rec, format('select public.remove_student_guardian(%L, %L)', s1, g1)), 'ok:1')
   ) as x(label, got, want)
   loop
     if r.got = r.want then passes := passes + 1;

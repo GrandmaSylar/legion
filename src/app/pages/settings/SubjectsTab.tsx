@@ -8,11 +8,18 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Switch } from "../../components/ui/switch";
 import { FormMessage } from "../../components/fields";
-import { createSubject, listSubjects, updateSubject, type ListItem } from "../../../lib/data/setup";
+import { useAuth } from "../../../lib/auth/AuthProvider";
+import { createSubject, deleteSubject, listSubjects, updateSubject, type ListItem } from "../../../lib/data/setup";
+import { DeleteButton } from "../../components/DeleteButton";
 import { friendlyError } from "../../../lib/data/errors";
 
 function Row({ item }: { item: ListItem }) {
   const qc = useQueryClient();
+  const isDev = useAuth().roles.includes("developer");
+  const del = useMutation({
+    mutationFn: () => deleteSubject(item.id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["subjects"] }),
+  });
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
   const save = useMutation({
@@ -43,6 +50,12 @@ function Row({ item }: { item: ListItem }) {
           <Button size="icon" variant="ghost" aria-label={`Rename ${item.name}`} onClick={() => setEditing(true)}>
             <Pencil className="size-4" />
           </Button>
+          {isDev ? (
+            <DeleteButton
+              what={item.name} pending={del.isPending} onConfirm={() => del.mutate()}
+              error={del.isError ? `${friendlyError(del.error)} Turn it off instead.` : null}
+            />
+          ) : null}
           <Switch
             checked={item.isActive}
             aria-label={`${item.name} in use`}

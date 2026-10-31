@@ -276,3 +276,42 @@ export async function copyClassSubjects(fromClassId: string, toClassId: string) 
   const source = await listClassSubjects(fromClassId);
   await addClassSubjects(toClassId, source.map((s) => s.subjectId));
 }
+
+// ─── Editing and deleting ────────────────────────────────────────────────────
+
+/** A delete that removed nothing was refused by the access rules (no error is raised for that). */
+function deleted(res: { data: unknown[] | null; error: unknown }) {
+  if (res.error) throw res.error;
+  if (!res.data || res.data.length === 0) throw { code: "42501" };
+}
+
+// Editing is for admins. Deleting is for developers, and the database refuses it
+// while anything depends on the record.
+
+export async function updateAcademicYear(id: string, p: { name: string; startDate: string; endDate: string }) {
+  check(await supabase.from("academic_years").update({ name: p.name, start_date: p.startDate, end_date: p.endDate }).eq("id", id));
+}
+
+export async function deleteAcademicYear(id: string) {
+  deleted(await supabase.from("academic_years").delete().eq("id", id).select("id"));
+}
+
+export async function updateTerm(id: string, p: { name: string; startDate: string; endDate: string }) {
+  check(await supabase.from("terms").update({ name: p.name, start_date: p.startDate, end_date: p.endDate }).eq("id", id));
+}
+
+export async function deleteTerm(id: string) {
+  deleted(await supabase.from("terms").delete().eq("id", id).select("id"));
+}
+
+export async function updateClassSection(id: string, section: string) {
+  check(await supabase.from("classes").update({ section }).eq("id", id));
+}
+
+export async function deleteClass(id: string) {
+  deleted(await supabase.from("classes").delete().eq("id", id).select("id"));
+}
+
+export async function deleteSubject(id: string) {
+  deleted(await supabase.from("subjects").delete().eq("id", id).select("id"));
+}
