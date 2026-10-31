@@ -13,8 +13,8 @@ Source: `SMS_Master_Blueprint.docx` (pre-school to Basic 9, Ghana-first, pilot s
 
 | Decision | Recommendation |
 |---|---|
-| Frontend framework | Next.js (blueprint says 14, App Router) for SSR on e-admission pages and `next-pwa`. Tailwind v4 and the shadcn kit carry over from this repo. Currently Vite. |
-| Backend, solo | Next.js server code plus Supabase (Postgres, Auth, RLS) behind a thin data-access layer. Extract NestJS only if background jobs or multi-tenancy force it. **Departs from the blueprint (NestJS); needs approval.** |
+| Frontend framework | Vite SPA (React, Tailwind v4, shadcn kit), building on this repo. Chosen over the blueprint's Next.js for instant navigation and a simpler offline PWA (`vite-plugin-pwa`). |
+| Backend, solo | Supabase (Postgres, Auth, RLS) plus Edge Functions for server-side work, behind a thin data-access layer. PDF report cards will likely need a small separate Node service. Extract NestJS only if jobs or multi-tenancy force it. Departs from the blueprint (NestJS). |
 | Auth | Supabase Auth behind an interface so it can be swapped later. |
 | Tenancy | `school_id` + RLS for the pilot. Decide on schema-per-tenant once several schools exist. |
 | Repo layout | Single app now. Turborepo only when an API or mobile app appears. |
@@ -27,7 +27,7 @@ Estimates are rough and assume roughly full-time work.
 ### Phase 0: Foundation (1-2 weeks)
 - Confirm the decisions above; write a short SRS covering only the pilot-school scope.
 - ERD for core entities: school, user, role, student, guardian, class, section, term, subject, enrollment, attendance, assessment, grade. Review it with the pilot-school contact.
-- Move the repo to Next.js; add `.gitignore`; fix `pnpm-workspace.yaml` (Linux-only `supportedArchitectures`); set up lint, typecheck, CI.
+- Restructure the Vite repo (routing, folders); add `.gitignore`; fix `pnpm-workspace.yaml` (Linux-only `supportedArchitectures`); set up lint, typecheck, CI.
 - Supabase project, migrations folder, seed data.
 - Identify the pilot school and collect their current forms, report card format and spreadsheets.
 
@@ -74,7 +74,7 @@ Timetable generation and substitutions, HR, recruitment, payroll (SSNIT/PAYE), l
 - Retrofitting schema-per-tenant onto a working app is risky; decide the tenancy approach before data piles up.
 
 ## Immediate next actions
-1. Decide Next.js vs. Vite and Supabase vs. NestJS.
+1. Frontend and backend decisions are made: Vite + Supabase (see `DECISIONS.md`).
 2. Identify the pilot school and gather their current forms and report card format.
 3. Draft the ERD.
 4. Restructure the repo, add `.gitignore`, and commit on a feature branch (never `main`).

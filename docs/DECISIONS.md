@@ -4,8 +4,8 @@ Locked in Phase 0. Each entry records what was chosen and what would make us rev
 
 | # | Area | Decision | Revisit when |
 |---|---|---|---|
-| 1 | Frontend | Next.js (App Router), migrated from the current Vite prototype. Tailwind v4 and the shadcn kit carry over. | Never expected; PWA or SSR needs would only strengthen it. |
-| 2 | Backend | Next.js server code plus Supabase (Postgres, Auth, RLS) behind a thin data-access layer. No separate API yet. Departs from the blueprint's NestJS. | Background jobs (report cards, SMS, at-risk cron), webhooks, or multi-tenancy outgrow Next.js server code. Then extract NestJS. |
+| 1 | Frontend | Vite single-page app (React, Tailwind v4, shadcn kit), built on the existing prototype. Chosen over Next.js because the dashboard must feel fast and fluid (instant client-side navigation) and the offline PWA is simpler on a static app. | Public pages (e-admission) need server rendering or SEO. Then build that part separately. |
+| 2 | Backend | Supabase (Postgres, Auth, RLS) with Edge Functions for server-side work (webhooks, SMS, creating users), behind a thin data-access layer. No separate API yet. Departs from the blueprint's NestJS. | PDF report cards need a real Node environment (headless browser), so expect a small separate service. Extract NestJS if jobs or multi-tenancy outgrow Edge Functions. |
 | 3 | Tenancy | `school_id` on every table, enforced by RLS. | Several real schools are live, or a customer requires physical isolation. Then evaluate schema-per-tenant. |
 | 4 | Auth | Supabase Auth behind an interface, so it can be swapped for custom JWT later. | Leaving Supabase managed hosting. |
 | 5 | Repo layout | Single app. Turborepo only when an API or mobile app appears. | A second deployable is added. |
