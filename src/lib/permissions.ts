@@ -62,7 +62,7 @@ export const NAV: NavItem[] = [
   { id: "fees", label: "Fees", path: "/fees", roles: ["school_admin", "accountant", "parent"], built: false },
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: false },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: false },
-  { id: "settings", label: "Settings", path: "/settings", roles: ["school_admin"], built: false },
+  { id: "settings", label: "Settings", path: "/settings", roles: ["school_admin"], built: true },
 ];
 
 export function navFor(roles: AppRole[]): NavItem[] {

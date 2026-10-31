@@ -9,6 +9,7 @@ import ComingSoon from "./pages/ComingSoon";
 
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Settings = lazy(() => import("./pages/Settings"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -59,7 +60,13 @@ export default function App() {
                       path={item.path}
                       element={
                         <RequireRole allowed={item.roles}>
-                          {item.id === "dashboard" ? <Dashboard /> : <ComingSoon title={item.label} />}
+                          {item.id === "dashboard" ? (
+                            <Dashboard />
+                          ) : item.id === "settings" ? (
+                            <Settings />
+                          ) : (
+                            <ComingSoon title={item.label} />
+                          )}
                         </RequireRole>
                       }
                     />
