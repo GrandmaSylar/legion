@@ -229,7 +229,7 @@ export function DeleteStudentCard({ s }: { s: StudentDetail }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const del = useMutation({
-    mutationFn: () => deleteStudent(s.id, s.photoPath),
+    mutationFn: () => deleteStudent(s.id, !!s.photoPath),
     onSuccess: () => {
       for (const key of ["students", "classes", "dashboard"]) void qc.invalidateQueries({ queryKey: [key] });
       navigate("/students", { replace: true });

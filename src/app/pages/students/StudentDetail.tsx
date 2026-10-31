@@ -186,7 +186,7 @@ export default function StudentDetailPage() {
 
   const q = useQuery({ queryKey: ["student", id], queryFn: () => getStudent(id), enabled: !!id });
   const s = q.data;
-  const urls = usePhotoUrls([s?.photoPath]);
+  const urls = usePhotoUrls([s?.photoPath ? s.id : null]);
   const name = s ? [s.fields.firstName, s.fields.middleName, s.fields.lastName].filter(Boolean).join(" ") : "";
 
   return (
@@ -212,7 +212,7 @@ export default function StudentDetailPage() {
       {s ? (
         <>
           <div className="flex flex-wrap items-center gap-4">
-            <StudentAvatar name={name} url={s.photoPath ? urls[s.photoPath] : null} className="size-16 text-lg" />
+            <StudentAvatar name={name} url={s.photoPath ? urls[s.id] : null} className="size-16 text-lg" />
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-2xl font-semibold">{name}</h1>
               <p className="text-sm tabular-nums text-muted-foreground">{s.admissionNo}{s.enrollments[0] ? ` · ${s.enrollments[0].className}` : ""}</p>
@@ -220,7 +220,7 @@ export default function StudentDetailPage() {
             <StatusPill status={s.status} />
           </div>
 
-          <PhotoCard s={s} url={s.photoPath ? urls[s.photoPath] : undefined} canEdit={canEdit} />
+          <PhotoCard s={s} url={s.photoPath ? urls[s.id] : undefined} canEdit={canEdit} />
 
           <GuardiansCard s={s} canEdit={canEdit} />
 
