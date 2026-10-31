@@ -6,14 +6,14 @@ import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { FormMessage, NativeSelect } from "../../components/fields";
 import {
-  addClassSubjects, copyClassSubjects, listClassSubjects, listCopySources, listItems, removeClassSubject,
+  addClassSubjects, copyClassSubjects, listClassSubjects, listCopySources, listSubjects, removeClassSubject,
   setAllSubjectTeachers, setSubjectTeacher, type SchoolClass, type StaffOption,
 } from "../../../lib/data/setup";
 import { friendlyError } from "../../../lib/data/errors";
 
 export default function ClassSubjects({ cls, teachers }: { cls: SchoolClass; teachers: StaffOption[] }) {
   const qc = useQueryClient();
-  const subjects = useQuery({ queryKey: ["subjects"], queryFn: () => listItems("subjects") });
+  const subjects = useQuery({ queryKey: ["subjects"], queryFn: listSubjects });
   const assigned = useQuery({ queryKey: ["class-subjects", cls.id], queryFn: () => listClassSubjects(cls.id) });
   const sources = useQuery({
     queryKey: ["copy-sources", cls.levelId, cls.id],

@@ -1,7 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import CalendarTab from "./settings/CalendarTab";
 import ClassesTab from "./settings/ClassesTab";
-import ListTab from "./settings/ListTab";
+import SubjectsTab from "./settings/SubjectsTab";
 
 export default function Settings() {
   return (
@@ -17,25 +17,11 @@ export default function Settings() {
             <TabsTrigger value="calendar">Academic year</TabsTrigger>
             <TabsTrigger value="classes">Classes</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
-            <TabsTrigger value="areas">Learning areas</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="calendar"><CalendarTab /></TabsContent>
         <TabsContent value="classes"><ClassesTab /></TabsContent>
-        <TabsContent value="subjects">
-          <ListTab
-            kind="subjects"
-            singular="subject"
-            help="Subjects taught in Basic 1 to 9. Turn one off to stop using it without losing past grades."
-          />
-        </TabsContent>
-        <TabsContent value="areas">
-          <ListTab
-            kind="learning_areas"
-            singular="learning area"
-            help="Areas used for written remarks from creche to KG 2. Edit these to match your report card."
-          />
-        </TabsContent>
+        <TabsContent value="subjects"><SubjectsTab /></TabsContent>
       </Tabs>
     </div>
   );

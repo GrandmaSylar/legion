@@ -1,4 +1,4 @@
-// One screen for any customisable name list (subjects, learning areas): add,
+// The subject list (which also holds creche to KG 2 learning areas): add,
 // rename, and retire. Retired items stay in old records but disappear from new
 // choices, so history is never broken.
 import { useState, type FormEvent } from "react";
@@ -8,16 +8,16 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Switch } from "../../components/ui/switch";
 import { FormMessage } from "../../components/fields";
-import { createItem, listItems, updateItem, type ListItem, type ListKind } from "../../../lib/data/setup";
+import { createSubject, listSubjects, updateSubject, type ListItem } from "../../../lib/data/setup";
 import { friendlyError } from "../../../lib/data/errors";
 
-function Row({ kind, item }: { kind: ListKind; item: ListItem }) {
+function Row({ item }: { item: ListItem }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
   const save = useMutation({
-    mutationFn: (patch: { name?: string; isActive?: boolean }) => updateItem(kind, item.id, patch),
-    onSuccess: () => { setEditing(false); void qc.invalidateQueries({ queryKey: [kind] }); },
+    mutationFn: (patch: { name?: string; isActive?: boolean }) => updateSubject(item.id, patch),
+    onSuccess: () => { setEditing(false); void qc.invalidateQueries({ queryKey: ["subjects"] }); },
   });
 
   return (
@@ -56,25 +56,26 @@ function Row({ kind, item }: { kind: ListKind; item: ListItem }) {
   );
 }
 
-export default function ListTab({
-  kind, singular, help,
-}: { kind: ListKind; singular: string; help: string }) {
+export default function SubjectsTab() {
   const qc = useQueryClient();
-  const items = useQuery({ queryKey: [kind], queryFn: () => listItems(kind) });
+  const items = useQuery({ queryKey: ["subjects"], queryFn: listSubjects });
   const [name, setName] = useState("");
   const add = useMutation({
-    mutationFn: (n: string) => createItem(kind, n),
-    onSuccess: () => { setName(""); void qc.invalidateQueries({ queryKey: [kind] }); },
+    mutationFn: createSubject,
+    onSuccess: () => { setName(""); void qc.invalidateQueries({ queryKey: ["subjects"] }); },
   });
   const submit = (e: FormEvent) => { e.preventDefault(); add.mutate(name.trim()); };
 
   return (
     <div className="max-w-xl space-y-4">
-      <p className="text-sm text-muted-foreground">{help}</p>
+      <p className="text-sm text-muted-foreground">
+        Subjects and learning areas share one list. Basic levels score them; creche to KG 2 write a remark for each.
+        Turn one off to stop using it without losing past records.
+      </p>
 
       <form onSubmit={submit} className="flex items-start gap-2">
         <div className="flex-1 space-y-1">
-          <Input aria-label={`New ${singular}`} value={name} onChange={(e) => setName(e.target.value)} placeholder={`New ${singular}`} />
+          <Input aria-label="New subject" value={name} onChange={(e) => setName(e.target.value)} placeholder="New subject" />
           <FormMessage error={add.isError ? friendlyError(add.error) : null} />
         </div>
         <Button type="submit" disabled={add.isPending || !name.trim()}>Add</Button>
@@ -84,7 +85,7 @@ export default function ListTab({
       {items.data?.length === 0 ? <p className="text-sm text-muted-foreground">Nothing here yet.</p> : null}
       {items.data && items.data.length > 0 ? (
         <ul className="surface divide-y divide-border">
-          {items.data.map((item) => <Row key={item.id} kind={kind} item={item} />)}
+          {items.data.map((item) => <Row key={item.id} item={item} />)}
         </ul>
       ) : null}
     </div>

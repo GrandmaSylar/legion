@@ -1,5 +1,5 @@
-// Data layer for school setup: academic years, terms, classes, subjects and
-// learning areas. school_id is never sent; the database fills it in from the
+// Data layer for school setup: academic years, terms, classes and
+// and subjects. school_id is never sent; the database fills it in from the
 // signed-in user and RLS rejects anything else.
 import { supabase } from "../supabase";
 
@@ -173,7 +173,9 @@ export async function setClassTeacher(classId: string, staffId: string | null) {
   check(await supabase.from("classes").update({ class_teacher_id: staffId }).eq("id", classId));
 }
 
-// ─── Subjects and learning areas (customisable lists) ────────────────────────
+// ─── Subjects (customisable list) ────────────────────────────────────────────
+// One list for subjects and learning areas: a creche to KG 2 learning area is a
+// subject graded with written remarks. The level's grading scale decides how.
 
 export interface ListItem {
   id: string;
@@ -181,34 +183,20 @@ export interface ListItem {
   isActive: boolean;
 }
 
-export type ListKind = "subjects" | "learning_areas";
-
-export async function listItems(kind: ListKind): Promise<ListItem[]> {
-  const order = kind === "subjects" ? "name" : "sort_order";
-  const rows = check(await supabase.from(kind).select("id, name, is_active").order(order));
+export async function listSubjects(): Promise<ListItem[]> {
+  const rows = check(await supabase.from("subjects").select("id, name, is_active").order("name"));
   return rows.map((r) => ({ id: r.id, name: r.name, isActive: r.is_active }));
 }
 
-export async function createItem(kind: ListKind, name: string) {
-  if (kind === "learning_areas") {
-    // Append after the current last one.
-    const { data } = await supabase
-      .from("learning_areas")
-      .select("sort_order")
-      .order("sort_order", { ascending: false })
-      .limit(1);
-    const next = (data?.[0]?.sort_order ?? 0) + 1;
-    check(await supabase.from("learning_areas").insert({ name, sort_order: next }));
-  } else {
-    check(await supabase.from("subjects").insert({ name }));
-  }
+export async function createSubject(name: string) {
+  check(await supabase.from("subjects").insert({ name }));
 }
 
-export async function updateItem(kind: ListKind, id: string, patch: { name?: string; isActive?: boolean }) {
+export async function updateSubject(id: string, patch: { name?: string; isActive?: boolean }) {
   const body: { name?: string; is_active?: boolean } = {};
   if (patch.name !== undefined) body.name = patch.name;
   if (patch.isActive !== undefined) body.is_active = patch.isActive;
-  check(await supabase.from(kind).update(body).eq("id", id));
+  check(await supabase.from("subjects").update(body).eq("id", id));
 }
 
 // ─── Subjects per class ──────────────────────────────────────────────────────

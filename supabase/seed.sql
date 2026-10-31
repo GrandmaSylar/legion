@@ -41,15 +41,6 @@ begin
             v_lvl = 'Basic 9');
   end loop;
 
-  -- Default learning areas (descriptive levels); the school can edit these.
-  insert into public.learning_areas (school_id, name, sort_order) values
-    (v_school, 'Language and Literacy', 1),
-    (v_school, 'Numeracy', 2),
-    (v_school, 'Our World Our People', 3),
-    (v_school, 'Creative Arts', 4),
-    (v_school, 'Physical Development', 5),
-    (v_school, 'Social and Emotional Development', 6);
-
   -- Default subjects (GES basic curriculum); the school can edit these.
   insert into public.subjects (school_id, name) values
     (v_school, 'English Language'), (v_school, 'Mathematics'),
@@ -57,7 +48,10 @@ begin
     (v_school, 'Religious and Moral Education'), (v_school, 'Computing'),
     (v_school, 'Creative Arts and Design'), (v_school, 'Physical Education'),
     (v_school, 'Ghanaian Language'), (v_school, 'French'),
-    (v_school, 'Our World Our People'), (v_school, 'Career Technology');
+    (v_school, 'Our World Our People'), (v_school, 'Career Technology'),
+    -- creche to KG 2 learning areas are subjects graded with written remarks
+    (v_school, 'Language and Literacy'), (v_school, 'Numeracy'), (v_school, 'Creative Arts'),
+    (v_school, 'Physical Development'), (v_school, 'Social and Emotional Development');
 
   -- Fee categories
   insert into public.fee_categories (school_id, name, is_one_off) values
