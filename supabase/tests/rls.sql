@@ -77,7 +77,7 @@ begin
   end loop;
 
   -- structure and people (school A)
-  insert into public.academic_years (school_id,name,start_date,end_date,is_current) values (a,'T','2026-09-01','2027-07-31',true) returning id into yr;
+  insert into public.academic_years (school_id,name,start_date,end_date,is_current) values (a,'T','2026-09-01','2027-07-31',false) returning id into yr;
   insert into public.terms (school_id,academic_year_id,name,start_date,end_date) values (a,yr,'Term 1','2026-09-01','2026-12-15') returning id into term;
   select id into lvl from public.levels where school_id = a and name = 'Basic 4';
   insert into public.staff (school_id,profile_id,full_name,type) values (a,u_t1,'teacher1','teaching') returning id into t1;
@@ -149,7 +149,7 @@ begin
     ('profiles teacher1',   pg_temp.t_count(u_t1,'profiles')::text,'1'),
     ('user_roles teacher1', pg_temp.t_count(u_t1,'user_roles')::text,'1'),
     -- structure is school-scoped
-    ('classes teacher1',    pg_temp.t_count(u_t1,'classes')::text,'2'),
+    ('classes teacher1',    pg_temp.t_count(u_t1,'classes')::text,(select count(*) from public.classes where school_id = a)::text),
     ('classes other school admin', pg_temp.t_count(u_adminb,'classes')::text,'0'),
     ('levels parent1',      pg_temp.t_count(u_p1,'levels')::text,'14'),
     -- audit log
@@ -166,7 +166,7 @@ begin
     ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,'2'),
     ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,'2'),
     ('profiles developer',  pg_temp.t_count(u_dev,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
-    ('developer is scoped to own school', pg_temp.t_count(u_dev,'classes')::text,'2'),
+    ('developer is scoped to own school', pg_temp.t_count(u_dev,'classes')::text,(select count(*) from public.classes where school_id = a)::text),
     ('students other school admin sees not developer school', pg_temp.t_count(u_adminb,'profiles')::text,'1'),
     -- writes
     ('teacher1 marks own class attendance',
@@ -229,6 +229,12 @@ begin
        pg_temp.t_try(u_adminb, format('select public.set_current_term(%L)', term)), 'denied'),
     ('admin creates year without sending school_id',
        pg_temp.t_try(u_admin, 'insert into public.academic_years (name,start_date,end_date) values (''Next'',''2027-09-01'',''2028-07-31'')'), 'ok:1'),
+    ('admin removes a graded subject from a class',
+       pg_temp.t_try(u_admin, format('delete from public.class_subjects where id = %L', cs1)), 'denied'),
+    ('admin assigns a subject to a class',
+       pg_temp.t_try(u_admin, format('insert into public.class_subjects (class_id,subject_id) select %L, id from public.subjects where name = ''French''', c2)), 'ok:1'),
+    ('teacher1 assigns a subject to a class',
+       pg_temp.t_try(u_t1, format('insert into public.class_subjects (class_id,subject_id) select %L, id from public.subjects where name = ''Computing''', c1)), 'denied'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied')
   ) as x(label, got, want)
