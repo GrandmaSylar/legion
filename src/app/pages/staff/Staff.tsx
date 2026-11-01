@@ -1,27 +1,39 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase,
+  Check,
+  Download,
   Edit3,
+  FileSpreadsheet,
   Mail,
   Phone,
   Plus,
   Search,
+  Trash2,
+  Upload,
   UserCog,
   UserRoundCog,
+  X,
 } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { hasAnyRole } from "../../../lib/permissions";
 import {
+  bulkCreateStaff,
   createStaffMember,
   listStaff,
   updateStaffMember,
+  type BulkStaffRowInput,
   type StaffMember,
   type StaffStatus,
   type StaffType,
 } from "../../../lib/data/staff";
 import { friendlyError } from "../../../lib/data/errors";
+import {
+  downloadStaffImportTemplate,
+  parseStaffSpreadsheet,
+} from "../../../lib/export/bulkSpreadsheet";
 import { StudentAvatar } from "../../components/StudentAvatar";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -49,6 +61,7 @@ type StaffFilter = "all" | "teaching" | "non_teaching" | "on_leave" | "left";
 export default function StaffPage() {
   const { roles } = useAuth();
   const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const canEdit = hasAnyRole(roles, ["school_admin", "hr_officer"]);
   const isAdmin = hasAnyRole(roles, ["school_admin"]);
@@ -56,6 +69,10 @@ export default function StaffPage() {
   const [filter, setFilter] = useState<StaffFilter>("all");
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkRows, setBulkRows] = useState<BulkStaffRowInput[]>([]);
+  const [bulkFileError, setBulkFileError] = useState<string | null>(null);
+  const [bulkSuccessCount, setBulkSuccessCount] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState("");
@@ -75,6 +92,7 @@ export default function StaffPage() {
     void qc.invalidateQueries({ queryKey: ["staff-directory"] });
     void qc.invalidateQueries({ queryKey: ["teachers"] });
     void qc.invalidateQueries({ queryKey: ["dashboard"] });
+    void qc.invalidateQueries({ queryKey: ["school-analytics"] });
   };
 
   const resetForm = () => {
@@ -98,6 +116,7 @@ export default function StaffPage() {
     setEmail(m.email ?? "");
     setHiredOn(m.hiredOn ?? "");
     setStatus(m.status);
+    setBulkOpen(false);
     setFormOpen(true);
   };
 
@@ -127,6 +146,38 @@ export default function StaffPage() {
     },
     onSuccess: () => {
       resetForm();
+      invalidate();
+    },
+  });
+
+  const handleBulkFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBulkFileError(null);
+    setBulkSuccessCount(null);
+    try {
+      const parsed = await parseStaffSpreadsheet(file);
+      if (parsed.length === 0) {
+        setBulkFileError(
+          "No valid staff rows found. Ensure your sheet has a 'Full Name' (or 'First Name' & 'Last Name') column.",
+        );
+      }
+      setBulkRows(parsed);
+    } catch (err) {
+      setBulkFileError(
+        err instanceof Error
+          ? err.message
+          : "Could not read that spreadsheet file.",
+      );
+    }
+  };
+
+  const bulkImportMutation = useMutation({
+    mutationFn: () => bulkCreateStaff(bulkRows),
+    onSuccess: (count) => {
+      setBulkSuccessCount(count);
+      setBulkRows([]);
       invalidate();
     },
   });
@@ -191,6 +242,20 @@ export default function StaffPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canEdit ? (
+            <Button
+              type="button"
+              variant={bulkOpen ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setFormOpen(false);
+                setBulkOpen((o) => !o);
+              }}
+            >
+              <FileSpreadsheet className="size-4" aria-hidden />
+              Bulk CSV / Excel Import
+            </Button>
+          ) : null}
           {isAdmin ? (
             <Button asChild variant="outline" size="sm">
               <Link to="/users/new">
@@ -205,6 +270,7 @@ export default function StaffPage() {
               size="sm"
               onClick={() => {
                 resetForm();
+                setBulkOpen(false);
                 setFormOpen(true);
               }}
             >
@@ -242,6 +308,160 @@ export default function StaffPage() {
           </div>
         </div>
       </div>
+
+      {/* Bulk CSV / Excel Import Panel */}
+      {bulkOpen && canEdit ? (
+        <section className="surface space-y-4 p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <FileSpreadsheet className="size-4 text-primary" aria-hidden />
+                Bulk CSV / Excel Staff Import
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Upload a `.csv` or `.xlsx` sheet to add multiple teachers and
+                support staff at once with automatic `STF-NNNN` staff numbers.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBulkOpen(false)}
+              aria-label="Close bulk staff import"
+              className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-foreground/[0.02] p-3.5">
+            <span className="text-xs text-muted-foreground">
+              Download a template or upload your existing staff spreadsheet:
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadStaffImportTemplate("xlsx")}
+              >
+                <Download className="size-3.5" aria-hidden />
+                Excel Template (.xlsx)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadStaffImportTemplate("csv")}
+              >
+                <Download className="size-3.5" aria-hidden />
+                CSV Template (.csv)
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={(e) => void handleBulkFile(e)}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="size-3.5" aria-hidden />
+                Choose CSV / Excel file
+              </Button>
+            </div>
+          </div>
+
+          {bulkFileError ? (
+            <p role="alert" className="text-xs font-medium text-destructive">
+              {bulkFileError}
+            </p>
+          ) : null}
+
+          {bulkSuccessCount !== null ? (
+            <p
+              role="status"
+              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+            >
+              Successfully imported {bulkSuccessCount} staff{" "}
+              {bulkSuccessCount === 1 ? "member" : "members"}.
+            </p>
+          ) : null}
+
+          {bulkRows.length > 0 ? (
+            <div className="space-y-3">
+              <div className="max-h-56 overflow-auto rounded-2xl border border-border">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-foreground/[0.03] uppercase tracking-wider text-muted-foreground">
+                      <th className="py-2 pl-3 pr-2">Full Name</th>
+                      <th className="py-2 px-2">Category</th>
+                      <th className="py-2 px-2">Role Title</th>
+                      <th className="py-2 px-2">Phone</th>
+                      <th className="py-2 px-2">Email</th>
+                      <th className="py-2 pl-2 pr-3 text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {bulkRows.map((r, idx) => (
+                      <tr key={idx}>
+                        <td className="py-2 pl-3 pr-2 font-medium">
+                          {r.fullName}
+                        </td>
+                        <td className="py-2 px-2">
+                          {r.type === "teaching" ? "Teaching" : "Non-teaching"}
+                        </td>
+                        <td className="py-2 px-2">{r.roleTitle || "—"}</td>
+                        <td className="py-2 px-2 tabular-nums">
+                          {r.phone || "—"}
+                        </td>
+                        <td className="py-2 px-2">{r.email || "—"}</td>
+                        <td className="py-2 pl-2 pr-3 text-right">
+                          <button
+                            type="button"
+                            aria-label="Remove row"
+                            onClick={() =>
+                              setBulkRows((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <FormMessage
+                error={
+                  bulkImportMutation.isError
+                    ? friendlyError(bulkImportMutation.error)
+                    : null
+                }
+              />
+
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  disabled={bulkImportMutation.isPending}
+                  onClick={() => bulkImportMutation.mutate()}
+                >
+                  <Check className="size-4" aria-hidden />
+                  {bulkImportMutation.isPending
+                    ? "Importing staff..."
+                    : `Import ${bulkRows.length} staff ${bulkRows.length === 1 ? "member" : "members"}`}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Add / Edit Form */}
       {formOpen && canEdit ? (
