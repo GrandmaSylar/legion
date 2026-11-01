@@ -132,6 +132,7 @@ interface QuickAction { label: string; hint: string; to: string; icon: LucideIco
 
 const QUICK_ACTIONS: QuickAction[] = [
   { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, roles: ["school_admin", "principal", "teacher"], module: "attendance" },
+  { label: "Gradebook & reports", hint: "Enter marks and print report cards", to: "/grades", icon: GraduationCap, roles: ["school_admin", "principal", "teacher", "parent", "student"], module: "grades" },
   { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, roles: ["school_admin", "receptionist"], module: "students" },
   { label: "View students", hint: "Search the register", to: "/students", icon: Users, roles: ["principal", "teacher", "accountant"], module: "students" },
   { label: "Add user", hint: "Create a staff or parent login", to: "/users/new", icon: UserRoundCog, roles: ["school_admin"], module: "users" },
