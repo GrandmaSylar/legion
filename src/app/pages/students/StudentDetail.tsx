@@ -8,6 +8,7 @@ import {
   closeStudent, getStudent, removeStudentPhoto, reopenStudent, saveBeceIndex, updateStudent, uploadStudentPhoto,
   type StudentDetail, type StudentFields,
 } from "../../../lib/data/students";
+import { getStudentAttendance, type AttendanceStatus } from "../../../lib/data/attendance";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -58,6 +59,109 @@ function PhotoCard({ s, url, canEdit }: { s: StudentDetail; url: string | undefi
           <Button size="sm" variant="outline" disabled={remove.isPending} onClick={() => remove.mutate()}>Remove photo</Button>
         ) : null}
       </div>
+    </section>
+  );
+}
+
+const ATTENDANCE_BADGE: Record<AttendanceStatus, { label: string; className: string }> = {
+  present: {
+    label: "Present",
+    className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  },
+  late: {
+    label: "Late",
+    className: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  },
+  excused: {
+    label: "Excused",
+    className: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  },
+  absent: {
+    label: "Absent",
+    className: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+  },
+};
+
+function AttendanceCard({ studentId }: { studentId: string }) {
+  const q = useQuery({
+    queryKey: ["student-attendance", studentId],
+    queryFn: () => getStudentAttendance(studentId),
+  });
+
+  if (q.isLoading) return <Skeleton className="h-28 w-full" />;
+  if (q.isError || !q.data) return null;
+
+  const { present, late, excused, absent, total, recent } = q.data;
+  const attended = present + late;
+  const rate = total > 0 ? Math.round((attended / total) * 100) : null;
+
+  return (
+    <section className="surface space-y-3 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-base font-medium">Attendance</h2>
+        {rate !== null ? (
+          <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-primary">
+            {rate}% attendance ({attended}/{total} days)
+          </span>
+        ) : null}
+      </div>
+
+      {total === 0 ? (
+        <p className="text-sm text-muted-foreground">No attendance recorded yet.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-4 gap-2 text-center text-xs">
+            <div className="rounded-xl border border-border p-2">
+              <div className="text-muted-foreground">Present</div>
+              <div className="mt-0.5 text-base font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                {present}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border p-2">
+              <div className="text-muted-foreground">Late</div>
+              <div className="mt-0.5 text-base font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                {late}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border p-2">
+              <div className="text-muted-foreground">Excused</div>
+              <div className="mt-0.5 text-base font-semibold tabular-nums text-sky-600 dark:text-sky-400">
+                {excused}
+              </div>
+            </div>
+            <div className="rounded-xl border border-border p-2">
+              <div className="text-muted-foreground">Absent</div>
+              <div className="mt-0.5 text-base font-semibold tabular-nums text-rose-600 dark:text-rose-400">
+                {absent}
+              </div>
+            </div>
+          </div>
+
+          {recent.length > 0 ? (
+            <ul className="divide-y divide-border text-sm">
+              {recent.slice(0, 5).map((r) => {
+                const badge = ATTENDANCE_BADGE[r.status];
+                return (
+                  <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <div className="min-w-0">
+                      <span className="tabular-nums font-medium">{r.date}</span>
+                      {r.className ? (
+                        <span className="text-xs text-muted-foreground"> · {r.className}</span>
+                      ) : null}
+                      {r.note ? (
+                        <p className="text-xs text-muted-foreground">{r.note}</p>
+                      ) : null}
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                      {badge.label}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }
@@ -221,6 +325,8 @@ export default function StudentDetailPage() {
           </div>
 
           <PhotoCard s={s} url={s.photoPath ? urls[s.id] : undefined} canEdit={canEdit} />
+
+          <AttendanceCard studentId={s.id} />
 
           <GuardiansCard s={s} canEdit={canEdit} />
 

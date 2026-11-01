@@ -131,7 +131,7 @@ function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
 interface QuickAction { label: string; hint: string; to: string; icon: LucideIcon; roles: AppRole[]; module: string; soon?: boolean }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, roles: ["school_admin", "principal", "teacher"], module: "attendance", soon: true },
+  { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, roles: ["school_admin", "principal", "teacher"], module: "attendance" },
   { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, roles: ["school_admin", "receptionist"], module: "students" },
   { label: "View students", hint: "Search the register", to: "/students", icon: Users, roles: ["principal", "teacher", "accountant"], module: "students" },
   { label: "Add user", hint: "Create a staff or parent login", to: "/users/new", icon: UserRoundCog, roles: ["school_admin"], module: "users" },
@@ -178,6 +178,11 @@ function QuickActionsPanel() {
 }
 
 function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
+  const { roles, profile } = useAuth();
+  const attendanceItem = NAV.find((n) => n.id === "attendance");
+  const canOpenAttendance = Boolean(
+    attendanceItem && canSee(attendanceItem, roles, profile?.modules ?? null),
+  );
   const years = useQuery({ queryKey: ["academic-years"], queryFn: listAcademicYears });
   const year = years.data?.find((y) => y.isCurrent) ?? null;
   const classes = useQuery({
@@ -201,7 +206,9 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium">Classes{year ? ` · ${year.name}` : ""}</h3>
-            <span className="text-xs text-muted-foreground">A daily timetable will appear here once scheduling is built.</span>
+            <span className="text-xs text-muted-foreground">
+              {canOpenAttendance ? "Select a class to open its attendance register." : "A daily timetable will appear here once scheduling is built."}
+            </span>
           </div>
           {classes.isLoading || years.isLoading ? (
             <Skeleton className="h-24 w-full" />
@@ -212,20 +219,38 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
             </p>
           ) : classes.data && classes.data.length > 0 ? (
             <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {classes.data.slice(0, 6).map((c) => (
-                <li key={c.id} className="flex items-center gap-3 rounded-2xl border border-border p-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
-                    <GraduationCap className="size-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="break-words text-sm font-medium">{c.levelName} {c.section}</div>
-                    <div className="break-words text-xs text-muted-foreground">
-                      {c.studentCount} {c.studentCount === 1 ? "student" : "students"}
-                      {c.classTeacherName ? ` · ${c.classTeacherName}` : ""}
+              {classes.data.slice(0, 6).map((c) => {
+                const content = (
+                  <>
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+                      <GraduationCap className="size-4" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words text-sm font-medium">{c.levelName} {c.section}</div>
+                      <div className="break-words text-xs text-muted-foreground">
+                        {c.studentCount} {c.studentCount === 1 ? "student" : "students"}
+                        {c.classTeacherName ? ` · ${c.classTeacherName}` : ""}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </>
+                );
+                return (
+                  <li key={c.id}>
+                    {canOpenAttendance ? (
+                      <Link
+                        to={`/attendance?class=${c.id}`}
+                        className="flex items-center gap-3 rounded-2xl border border-border p-3 transition-all hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-3 rounded-2xl border border-border p-3">
+                        {content}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="py-4 text-sm text-muted-foreground">No classes have been set up for this year yet.</p>
