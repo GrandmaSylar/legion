@@ -2,13 +2,14 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, ArrowUpRight, Bell, CalendarCheck, ChevronRight, ClipboardCheck, GraduationCap, Settings, UserCog,
+  Activity, ArrowUpRight, Bell, CalendarCheck, ChevronRight, ClipboardCheck, Clock, GraduationCap, Settings, UserCog,
   UserPlus, UserRoundCog, Users, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { NAV, canSee, hasAnyRole, type AppRole } from "../../lib/permissions";
 import { getDashboardStats, getRecentActivity } from "../../lib/data/dashboard";
 import { listAcademicYears, listClasses } from "../../lib/data/setup";
+import { listTodayTimetable } from "../../lib/data/timetable";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../components/ui/utils";
 import { PortalDashboard } from "./PortalDashboard";
@@ -147,8 +148,9 @@ const QUICK_ACTIONS: QuickAction[] = [
   { label: "Notice board", hint: "School and class announcements", to: "/notices", icon: Bell, roles: [...STAFF_ROLES, "parent", "student"], module: "notices" },
   { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, roles: ["school_admin", "receptionist"], module: "students" },
   { label: "View students", hint: "Search the register", to: "/students", icon: Users, roles: ["principal", "teacher", "accountant"], module: "students" },
+  { label: "Staff directory", hint: "Teachers and support staff", to: "/staff", icon: UserCog, roles: ["school_admin", "hr_officer", "principal"], module: "staff" },
   { label: "Add user", hint: "Create a staff or parent login", to: "/users/new", icon: UserRoundCog, roles: ["school_admin"], module: "users" },
-  { label: "School setup", hint: "Years, classes and subjects", to: "/settings", icon: Settings, roles: ["school_admin"], module: "settings" },
+  { label: "School setup", hint: "Years, classes and timetables", to: "/settings", icon: Settings, roles: ["school_admin"], module: "settings" },
 ];
 
 function QuickActionsPanel() {
@@ -203,7 +205,16 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
     queryFn: () => listClasses(year!.id),
     enabled: !!year,
   });
+
   const now = new Date();
+  const jsDay = now.getDay();
+  const scheduleDay = jsDay >= 1 && jsDay <= 5 ? jsDay : 1;
+
+  const todaySlots = useQuery({
+    queryKey: ["timetable-today", year?.id, scheduleDay],
+    queryFn: () => listTodayTimetable(year!.id, scheduleDay),
+    enabled: !!year,
+  });
 
   return (
     <Panel title="Today" icon={CalendarCheck} className="lg:col-span-3">
@@ -217,10 +228,15 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
         </div>
 
         <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">Classes{year ? ` · ${year.name}` : ""}</h3>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">
+              Classes &amp; daily schedule{year ? ` · ${year.name}` : ""}
+              {jsDay === 0 || jsDay === 6 ? " (Monday preview)" : ""}
+            </h3>
             <span className="text-xs text-muted-foreground">
-              {canOpenAttendance ? "Select a class to open its attendance register." : "A daily timetable will appear here once scheduling is built."}
+              {canOpenAttendance
+                ? "Select a class to open its attendance register."
+                : "Daily class schedule."}
             </span>
           </div>
           {classes.isLoading || years.isLoading ? (
@@ -233,31 +249,52 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
           ) : classes.data && classes.data.length > 0 ? (
             <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {classes.data.slice(0, 6).map((c) => {
+                const classSlots = (todaySlots.data ?? [])
+                  .filter((s) => s.classId === c.id && s.classSubjectId)
+                  .slice(0, 3);
                 const content = (
-                  <>
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
-                      <GraduationCap className="size-4" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="break-words text-sm font-medium">{c.levelName} {c.section}</div>
-                      <div className="break-words text-xs text-muted-foreground">
-                        {c.studentCount} {c.studentCount === 1 ? "student" : "students"}
-                        {c.classTeacherName ? ` · ${c.classTeacherName}` : ""}
+                  <div className="w-full space-y-2">
+                    <div className="flex items-center gap-3">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+                        <GraduationCap className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="break-words text-sm font-medium">{c.levelName} {c.section}</div>
+                        <div className="break-words text-xs text-muted-foreground">
+                          {c.studentCount} {c.studentCount === 1 ? "student" : "students"}
+                          {c.classTeacherName ? ` · ${c.classTeacherName}` : ""}
+                        </div>
                       </div>
                     </div>
-                  </>
+                    {classSlots.length > 0 ? (
+                      <div className="flex flex-wrap gap-1 border-t border-border/60 pt-2">
+                        {classSlots.map((slot) => (
+                          <span
+                            key={slot.id}
+                            className="inline-flex items-center gap-1 rounded-lg bg-foreground/[0.04] px-2 py-0.5 text-[11px] text-muted-foreground"
+                          >
+                            <Clock className="size-2.5 text-primary" aria-hidden />
+                            <span className="tabular-nums">{slot.startTime}</span>{" "}
+                            <span className="font-medium text-foreground">
+                              {slot.subjectName ?? slot.label}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 );
                 return (
                   <li key={c.id}>
                     {canOpenAttendance ? (
                       <Link
                         to={`/attendance?class=${c.id}`}
-                        className="flex items-center gap-3 rounded-2xl border border-border p-3 transition-all hover:border-primary/40 hover:bg-primary/5"
+                        className="flex rounded-2xl border border-border p-3 transition-all hover:border-primary/40 hover:bg-primary/5"
                       >
                         {content}
                       </Link>
                     ) : (
-                      <div className="flex items-center gap-3 rounded-2xl border border-border p-3">
+                      <div className="flex rounded-2xl border border-border p-3">
                         {content}
                       </div>
                     )}

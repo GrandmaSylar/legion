@@ -22,6 +22,7 @@ import {
   getStudentGradesOverview,
 } from "../../lib/data/grades";
 import { listNotices } from "../../lib/data/notices";
+import { WEEKDAYS, listClassTimetable } from "../../lib/data/timetable";
 import { StudentAvatar, usePhotoUrls } from "../components/StudentAvatar";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
@@ -118,6 +119,13 @@ export function PortalDashboard() {
 
   const notices = noticesQuery.data ?? [];
   const currentEnrol = activeStudent?.enrollments[0] ?? null;
+
+  const timetableQuery = useQuery({
+    queryKey: ["timetable", currentEnrol?.classId],
+    queryFn: () => listClassTimetable(currentEnrol!.classId),
+    enabled: !!currentEnrol?.classId,
+  });
+  const timetableSlots = timetableQuery.data ?? [];
 
   return (
     <div className="w-full space-y-4 sm:space-y-6">
@@ -506,6 +514,52 @@ export function PortalDashboard() {
               )}
             </section>
           </div>
+          {currentEnrol && timetableSlots.length > 0 ? (
+            <section className="surface space-y-3 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-base font-semibold">
+                  <CalendarCheck className="size-4 text-primary" aria-hidden />
+                  Weekly class timetable · {currentEnrol.className}
+                </h3>
+              </div>
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+                {WEEKDAYS.map((day) => {
+                  const daySlots = timetableSlots.filter(
+                    (s) => s.dayOfWeek === day.day,
+                  );
+                  return (
+                    <div
+                      key={day.day}
+                      className="rounded-2xl border border-border bg-background/40 p-3 text-xs"
+                    >
+                      <div className="mb-2 border-b border-border pb-1.5 font-semibold">
+                        {day.name}
+                      </div>
+                      {daySlots.length === 0 ? (
+                        <p className="text-muted-foreground">No periods</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {daySlots.map((slot) => (
+                            <li
+                              key={slot.id}
+                              className="flex items-baseline justify-between gap-2"
+                            >
+                              <span className="truncate font-medium">
+                                {slot.subjectName ?? slot.label ?? "Period"}
+                              </span>
+                              <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                                {slot.startTime}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
         </>
       )}
     </div>
