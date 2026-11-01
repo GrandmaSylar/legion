@@ -214,7 +214,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
     "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl px-0.5 py-1.5 text-[10px] font-medium leading-tight transition-colors sm:text-[11px]";
 
   return (
-    <div ref={ref} className="lg:hidden">
+    <div ref={ref} className="lg:hidden print:hidden">
       {open && rest.length > 0 ? (
         <div
           role="menu"
@@ -301,10 +301,10 @@ export function Shell() {
   };
 
   return (
-    <div className="min-h-dvh p-2 pb-24 sm:p-3 lg:p-5 lg:pb-5">
+    <div className="min-h-dvh p-2 pb-24 sm:p-3 lg:p-5 lg:pb-5 print:p-0">
       <div className="shell-card mx-auto flex min-h-[calc(100dvh-1rem)] max-w-[110rem] lg:min-h-[calc(100dvh-2.5rem)]">
         {/* Icon rail: a blob attached to the card's left edge */}
-        <aside className="hidden w-[7.5rem] shrink-0 lg:block">
+        <aside className="hidden w-[7.5rem] shrink-0 lg:block print:hidden">
           <div className="sticky top-5 flex h-[calc(100dvh-2.5rem-2px)] items-center">
             <nav aria-label="Main" className="relative h-[min(100%,54rem)] w-[7rem]">
               <RailShape />
@@ -321,7 +321,7 @@ export function Shell() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Top bar */}
-          <header className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-2 pt-4 lg:px-6 lg:pt-5">
+          <header className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-2 pt-4 lg:px-6 lg:pt-5 print:hidden">
             <div className="min-w-0 flex-1">
               <div className="break-words text-xs text-muted-foreground">{profile?.schoolName}</div>
               <div className="inline-flex items-center gap-2 border-b-2 border-primary pb-0.5 text-sm font-semibold">

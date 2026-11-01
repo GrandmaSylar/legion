@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check } from "lucide-react";
+import { ArrowLeft, Check, FileText } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { hasAnyRole } from "../../../lib/permissions";
 import {
@@ -9,6 +9,7 @@ import {
   type StudentDetail, type StudentFields,
 } from "../../../lib/data/students";
 import { getStudentAttendance, type AttendanceStatus } from "../../../lib/data/attendance";
+import { getStudentGradesOverview } from "../../../lib/data/grades";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -162,6 +163,95 @@ function AttendanceCard({ studentId }: { studentId: string }) {
           ) : null}
         </>
       )}
+    </section>
+  );
+}
+
+function GradesCard({ s }: { s: StudentDetail }) {
+  const { roles } = useAuth();
+  const canOpenGrades = hasAnyRole(roles, [
+    "school_admin",
+    "principal",
+    "teacher",
+    "parent",
+    "student",
+  ]);
+  const q = useQuery({
+    queryKey: ["student-grades-overview", s.id],
+    queryFn: () => getStudentGradesOverview(s.id),
+  });
+
+  if (q.isLoading) return <Skeleton className="h-28 w-full" />;
+  if (q.isError || !q.data) return null;
+
+  const latest = q.data[0] ?? null;
+  const currentClassId = latest?.classId ?? "";
+
+  return (
+    <section className="surface space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-medium">Grades &amp; Report cards</h2>
+          {latest ? (
+            <p className="text-xs text-muted-foreground">
+              Latest: {latest.termName} ({latest.yearName}) · {latest.className}
+            </p>
+          ) : null}
+        </div>
+        {canOpenGrades && currentClassId ? (
+          <Button asChild variant="outline" size="sm">
+            <Link
+              to={`/grades?class=${currentClassId}${latest ? `&term=${latest.termId}` : ""}&student=${s.id}&view=broadsheet`}
+            >
+              <FileText className="size-3.5" aria-hidden />
+              Open report card
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+
+      {!latest ? (
+        <p className="text-sm text-muted-foreground">
+          No term results or remarks have been recorded yet.
+        </p>
+      ) : latest.results.length > 0 ? (
+        <ul className="divide-y divide-border text-sm">
+          {latest.results.map((r) => (
+            <li
+              key={r.subjectId}
+              className="flex items-center justify-between gap-2 py-2"
+            >
+              <span className="font-medium">{r.subjectName}</span>
+              <span className="flex items-center gap-2 text-xs tabular-nums">
+                <span className="text-muted-foreground">
+                  CA {r.caTotal.toFixed(1)} · Exam {r.examScore.toFixed(1)}
+                </span>
+                <strong className="text-sm">{r.total.toFixed(1)}%</strong>
+                {r.grade ? (
+                  <span className="rounded-md bg-primary/15 px-1.5 py-0.5 font-bold text-primary">
+                    {r.grade}
+                  </span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : latest.descriptiveRemarks.length > 0 ? (
+        <ul className="divide-y divide-border text-sm">
+          {latest.descriptiveRemarks.map((r) => (
+            <li key={r.subjectId} className="space-y-0.5 py-2">
+              <div className="font-medium">{r.subjectName}</div>
+              <div className="text-xs text-muted-foreground">{r.remark}</div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {latest?.overallRemark ? (
+        <p className="rounded-xl border border-border/70 bg-foreground/[0.02] p-2.5 text-xs italic text-muted-foreground">
+          Class teacher: {latest.overallRemark}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -327,6 +417,8 @@ export default function StudentDetailPage() {
           <PhotoCard s={s} url={s.photoPath ? urls[s.id] : undefined} canEdit={canEdit} />
 
           <AttendanceCard studentId={s.id} />
+
+          <GradesCard s={s} />
 
           <GuardiansCard s={s} canEdit={canEdit} />
 

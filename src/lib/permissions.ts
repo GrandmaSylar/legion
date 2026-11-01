@@ -58,7 +58,7 @@ export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
   { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true },
   { id: "attendance", label: "Attendance", path: "/attendance", roles: ["school_admin", "principal", "teacher"], built: true },
-  { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "parent", "student"], built: false },
+  { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "parent", "student"], built: true },
   { id: "fees", label: "Fees", path: "/fees", roles: ["school_admin", "accountant", "parent"], built: false },
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: false },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: false },
