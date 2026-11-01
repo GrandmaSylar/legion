@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, ArrowUpRight, Bell, CalendarCheck, ChevronRight, ClipboardCheck, Clock, GraduationCap, Settings, UserCog,
+  Activity, ArrowUpRight, BarChart3, Bell, CalendarCheck, ChevronRight, ClipboardCheck, Clock, GraduationCap, Receipt, Settings, UserCog,
   UserPlus, UserRoundCog, Users, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
@@ -145,6 +145,8 @@ interface QuickAction { label: string; hint: string; to: string; icon: LucideIco
 const QUICK_ACTIONS: QuickAction[] = [
   { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, roles: ["school_admin", "principal", "teacher"], module: "attendance" },
   { label: "Gradebook & reports", hint: "Enter marks and print report cards", to: "/grades", icon: GraduationCap, roles: ["school_admin", "principal", "teacher", "parent", "student"], module: "grades" },
+  { label: "Fees & receipts", hint: "Invoices, payments and official receipts", to: "/fees", icon: Receipt, roles: ["school_admin", "accountant", "parent"], module: "fees" },
+  { label: "School analytics", hint: "Export PDF, PNG, Word, Excel & CSV reports", to: "/analytics", icon: BarChart3, roles: ["school_admin", "principal", "accountant", "hr_officer"], module: "analytics" },
   { label: "Notice board", hint: "School and class announcements", to: "/notices", icon: Bell, roles: [...STAFF_ROLES, "parent", "student"], module: "notices" },
   { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, roles: ["school_admin", "receptionist"], module: "students" },
   { label: "View students", hint: "Search the register", to: "/students", icon: Users, roles: ["principal", "teacher", "accountant"], module: "students" },

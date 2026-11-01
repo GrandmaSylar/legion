@@ -21,6 +21,7 @@ export interface Profile {
   email: string | null;
   schoolId: string;
   schoolName: string;
+  schoolLogoUrl: string | null;
   brandPrimary: string | null;
   isActive: boolean;
   /** Sections the user has switched on; null means everything their role allows. */
@@ -41,6 +42,8 @@ interface AuthState {
   signOut: () => Promise<void>;
   /** Sets a new password and clears the temporary-password flag. Returns an error message, or null. */
   changePassword: (newPassword: string) => Promise<string | null>;
+  /** Reloads the current user's profile and school metadata. */
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -49,7 +52,7 @@ async function loadProfile(userId: string): Promise<{ profile: Profile; roles: A
   const [{ data: p }, { data: r }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, email, school_id, is_active, modules, theme, schools(name, brand_colors)")
+      .select("id, full_name, email, school_id, is_active, modules, theme, schools(name, logo_url, brand_colors)")
       .eq("id", userId)
       .maybeSingle(),
     supabase.from("user_roles").select("role").eq("profile_id", userId),
@@ -64,6 +67,7 @@ async function loadProfile(userId: string): Promise<{ profile: Profile; roles: A
       email: p.email,
       schoolId: p.school_id,
       schoolName: school?.name ?? "",
+      schoolLogoUrl: school?.logo_url ?? null,
       brandPrimary: brand.primary ?? null,
       isActive: p.is_active,
       modules: (p.modules as string[] | null) ?? null,
@@ -110,6 +114,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [sessionReady, userId]);
 
+  const refreshProfile = useCallback(async () => {
+    if (!userId) return;
+    const result = await loadProfile(userId);
+    setLoaded(result);
+  }, [userId]);
+
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return error ? "Incorrect email or password." : null;
@@ -142,9 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const mustChangePassword = session?.user.app_metadata?.must_change_password === true;
     return {
       status, profile: loaded?.profile ?? null, roles: loaded?.roles ?? [], mustChangePassword,
-      signIn, signOut, changePassword,
+      signIn, signOut, changePassword, refreshProfile,
     };
-  }, [sessionReady, profileReady, session, loaded, signIn, signOut, changePassword]);
+  }, [sessionReady, profileReady, session, loaded, signIn, signOut, changePassword, refreshProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

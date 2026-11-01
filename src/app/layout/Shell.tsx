@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
-  Bell, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Palette, Plus, Search, Settings,
+  Bell, BarChart3, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Palette, Plus, Search, Settings,
   Sparkles, Square, Sun, UserCog, UserRoundCog, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
@@ -21,6 +21,7 @@ const ICONS: Record<string, LucideIcon> = {
   attendance: CalendarCheck,
   grades: GraduationCap,
   fees: Wallet,
+  analytics: BarChart3,
   staff: UserCog,
   notices: Bell,
   settings: Settings,

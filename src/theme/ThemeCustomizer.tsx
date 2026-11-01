@@ -245,7 +245,7 @@ export function ThemeCustomizerModal({
                       <div
                         className="relative grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/20 shadow-inner"
                         style={{
-                          background: wp?.previewGradient || (p.mode === "light" ? "#f8fafc" : "#09090b"),
+                          background: p.wallpaperType === "none" ? (p.mode === "light" ? "#f8fafc" : "#09090b") : (wp?.previewGradient || "#09090b"),
                         }}
                       >
                         <div

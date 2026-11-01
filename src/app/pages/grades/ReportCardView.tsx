@@ -1,11 +1,15 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, GraduationCap, Printer } from "lucide-react";
 import {
   saveOverallRemark,
   type BroadsheetStudent,
   type ClassBroadsheet,
 } from "../../../lib/data/grades";
+import {
+  getInstitutionDetails,
+  type InstitutionDetails,
+} from "../../../lib/data/setup";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -30,6 +34,7 @@ function ordinal(n: number | null): string {
 
 function SingleReportCardSheet({
   schoolName,
+  institution,
   broadsheet,
   student,
   photoUrl,
@@ -37,6 +42,7 @@ function SingleReportCardSheet({
   classIdForInvalidate,
 }: {
   schoolName: string;
+  institution?: InstitutionDetails | null;
   broadsheet: ClassBroadsheet;
   student: BroadsheetStudent;
   photoUrl?: string | null;
@@ -75,18 +81,39 @@ function SingleReportCardSheet({
 
       {/* School header */}
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5 print:border-slate-300">
-        <div className="flex items-center gap-3.5">
-          <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary print:border print:border-slate-300">
-            <GraduationCap className="size-8" aria-hidden />
-          </div>
-          <div>
+        <div className="flex items-start gap-3.5">
+          {institution?.logoUrl ? (
+            <img
+              src={institution.logoUrl}
+              alt={`${institution.name} crest`}
+              className="size-14 shrink-0 rounded-2xl border border-border bg-white object-contain p-1 print:border-slate-300"
+            />
+          ) : (
+            <div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary/15 text-primary print:border print:border-slate-300">
+              <GraduationCap className="size-8" aria-hidden />
+            </div>
+          )}
+          <div className="space-y-0.5">
             <h2 className="text-xl font-bold uppercase tracking-tight sm:text-2xl">
-              {schoolName || "School Report Card"}
+              {institution?.name || schoolName || "School Report Card"}
             </h2>
+            {institution?.motto ? (
+              <p className="text-xs italic text-muted-foreground print:text-slate-600">
+                &ldquo;{institution.motto}&rdquo;
+              </p>
+            ) : null}
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground print:text-slate-600">
               Official Terminal Report · {broadsheet.academicYearName} ·{" "}
               {broadsheet.termName}
             </p>
+            {institution &&
+            (institution.address || institution.phone || institution.email) ? (
+              <p className="text-[11px] text-muted-foreground print:text-slate-600">
+                {[institution.address, institution.phone, institution.email]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -343,6 +370,11 @@ export function ReportCardView({
   canEditRemark: boolean;
   onBack?: () => void;
 }) {
+  const institutionQ = useQuery({
+    queryKey: ["institution-details"],
+    queryFn: getInstitutionDetails,
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
@@ -372,6 +404,7 @@ export function ReportCardView({
           >
             <SingleReportCardSheet
               schoolName={schoolName}
+              institution={institutionQ.data}
               broadsheet={broadsheet}
               student={student}
               photoUrl={student.photoPath ? photoUrls[student.studentId] : null}
@@ -384,4 +417,3 @@ export function ReportCardView({
     </div>
   );
 }
-
