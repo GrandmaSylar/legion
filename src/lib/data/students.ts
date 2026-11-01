@@ -546,3 +546,109 @@ export async function deleteStudent(studentId: string, hadPhoto: boolean) {
   // The record is gone; remove the photo too. A leftover file is harmless, so ignore failure.
   if (hadPhoto) await invokeFunction("student-photo", { action: "delete_orphan", studentId }).catch(() => undefined);
 }
+
+// ─── Bulk Import & Year-End Class Promotion ──────────────────────────────────
+
+export interface BulkStudentRowInput {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  dateOfBirth?: string;
+  gender?: "female" | "male" | "";
+  admittedOn?: string;
+  residenceAddress?: string;
+  guardianName?: string;
+  guardianPhone?: string;
+  guardianRelationship?: string;
+  guardianEmail?: string;
+}
+
+export interface BulkAdmittedResult {
+  studentId: string;
+  admissionNo: string;
+  fullName: string;
+}
+
+export async function bulkAdmitStudents(
+  rows: BulkStudentRowInput[],
+  classId: string | null,
+): Promise<BulkAdmittedResult[]> {
+  const payload = rows.map((r) => ({
+    first_name: t(r.firstName),
+    middle_name: t(r.middleName ?? ""),
+    last_name: t(r.lastName),
+    date_of_birth: t(r.dateOfBirth ?? ""),
+    gender: r.gender ?? "",
+    admitted_on: t(r.admittedOn ?? ""),
+    residence_address: t(r.residenceAddress ?? ""),
+    guardian_name: t(r.guardianName ?? ""),
+    guardian_phone: normalizePhone(r.guardianPhone ?? ""),
+    guardian_relationship: t(r.guardianRelationship ?? ""),
+    guardian_email: t(r.guardianEmail ?? ""),
+  }));
+
+  const res = check(
+    await supabase.rpc("bulk_admit_students", {
+      p_rows: payload,
+      p_class: classId || null,
+    }),
+  );
+
+  return (res as { student_id: string; admission_no: string; full_name: string }[]).map((r) => ({
+    studentId: r.student_id,
+    admissionNo: r.admission_no,
+    fullName: r.full_name,
+  }));
+}
+
+export interface ClassRosterStudent {
+  enrollmentId: string;
+  studentId: string;
+  admissionNo: string;
+  fullName: string;
+  gender: Gender | null;
+  enrollmentStatus: string;
+}
+
+export async function listClassRosterForPromotion(classId: string): Promise<ClassRosterStudent[]> {
+  const rows = check(
+    await supabase
+      .from("enrollments")
+      .select("id, status, student_id, students(id, admission_no, first_name, middle_name, last_name, gender)")
+      .eq("class_id", classId),
+  );
+
+  return rows
+    .map((r) => {
+      const stu = Array.isArray(r.students) ? r.students[0] : r.students;
+      if (!stu) return null;
+      return {
+        enrollmentId: r.id,
+        studentId: stu.id,
+        admissionNo: stu.admission_no,
+        fullName: fullName(stu),
+        gender: stu.gender as Gender | null,
+        enrollmentStatus: r.status as string,
+      };
+    })
+    .filter((x): x is ClassRosterStudent => x !== null)
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+}
+
+export async function promoteClassStudents(input: {
+  fromClassId: string;
+  studentIds: string[];
+  action: "promote" | "repeat" | "graduate";
+  toClassId?: string | null;
+}): Promise<number> {
+  const count = check(
+    await supabase.rpc("promote_class_students", {
+      p_from_class: input.fromClassId,
+      p_student_ids: input.studentIds,
+      p_action: input.action,
+      p_to_class: input.toClassId || null,
+    }),
+  );
+  return Number(count);
+
+}

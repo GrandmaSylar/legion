@@ -104,3 +104,31 @@ export async function updateStaffMember(
 
   check(await supabase.from("staff").update(body).eq("id", id));
 }
+
+export interface BulkStaffRowInput {
+  fullName: string;
+  type: StaffType;
+  roleTitle?: string;
+  phone?: string;
+  email?: string;
+  hiredOn?: string;
+}
+
+export async function bulkCreateStaff(rows: BulkStaffRowInput[]): Promise<number> {
+  const payload = rows
+    .filter((r) => r.fullName.trim().length > 0)
+    .map((r) => ({
+      full_name: r.fullName.trim(),
+      type: r.type,
+      role_title: r.roleTitle?.trim() || null,
+      phone: r.phone?.trim() || null,
+      email: r.email?.trim() || null,
+      hired_on: r.hiredOn?.trim() || null,
+      status: "active" as const,
+    }));
+
+  if (payload.length === 0) return 0;
+  check(await supabase.from("staff").insert(payload));
+  return payload.length;
+
+}

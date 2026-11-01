@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Plus, Search } from "lucide-react";
+import { FileSpreadsheet, GraduationCap, Plus, Search } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { hasAnyRole } from "../../../lib/permissions";
 import { useDebounced } from "../../../lib/useDebounced";
@@ -12,6 +12,10 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { NativeSelect, controlClass } from "../../components/fields";
 import { cn } from "../../components/ui/utils";
 import { StudentAvatar, usePhotoUrls } from "../../components/StudentAvatar";
+import {
+  BulkStudentImportPanel,
+  ClassPromotionWizardPanel,
+} from "./BulkStudentsTools";
 
 const STATUS_LABEL: Record<StudentStatus, string> = { active: "Active", completed: "Completed", left: "Left" };
 
@@ -31,6 +35,7 @@ export function StatusPill({ status }: { status: StudentStatus }) {
 export default function StudentsList() {
   const { roles } = useAuth();
   const canAdd = hasAnyRole(roles, ["school_admin", "receptionist"]);
+  const [activeTool, setActiveTool] = useState<"import" | "promote" | null>(null);
 
   const years = useQuery({ queryKey: ["academic-years"], queryFn: listAcademicYears });
   const currentYear = years.data?.find((y) => y.isCurrent) ?? null;
@@ -74,14 +79,47 @@ export default function StudentsList() {
             {list.data ? `${total} ${total === 1 ? "student" : "students"}` : "Loading"}
           </p>
         </div>
+
         {canAdd ? (
-          <Button asChild className="sm:hidden">
-            <Link to="/students/new">
-              <Plus className="size-4" aria-hidden /> Add student
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant={activeTool === "import" ? "default" : "outline"}
+              size="sm"
+              onClick={() =>
+                setActiveTool((cur) => (cur === "import" ? null : "import"))
+              }
+            >
+              <FileSpreadsheet className="size-4" aria-hidden />
+              Bulk CSV / Excel Import
+            </Button>
+            <Button
+              type="button"
+              variant={activeTool === "promote" ? "default" : "outline"}
+              size="sm"
+              onClick={() =>
+                setActiveTool((cur) => (cur === "promote" ? null : "promote"))
+              }
+            >
+              <GraduationCap className="size-4" aria-hidden />
+              Promote / Graduate Class
+            </Button>
+            <Button asChild className="sm:hidden">
+              <Link to="/students/new">
+                <Plus className="size-4" aria-hidden /> Add student
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </div>
+
+      {canAdd && activeTool === "import" ? (
+        <BulkStudentImportPanel onClose={() => setActiveTool(null)} />
+      ) : null}
+
+      {canAdd && activeTool === "promote" ? (
+        <ClassPromotionWizardPanel onClose={() => setActiveTool(null)} />
+      ) : null}
 
       <div className="grid gap-2 sm:grid-cols-[1fr_12rem_9rem]">
         <div className="relative">
