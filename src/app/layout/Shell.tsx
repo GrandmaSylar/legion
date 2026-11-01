@@ -4,12 +4,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
-  Bell, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Plus, Search, Settings,
+  Bell, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Palette, Plus, Search, Settings,
   Sparkles, Square, Sun, UserCog, UserRoundCog, Users, Wallet, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
 import { useTheme } from "../../theme/ThemeProvider";
+import { ThemeCustomizerModal } from "../../theme/ThemeCustomizer";
 import { StudentAvatar } from "../components/StudentAvatar";
 import { Button } from "../components/ui/button";
 import { cn } from "../components/ui/utils";
@@ -122,7 +123,7 @@ function ThemeSwitch() {
   );
 }
 
-function UserMenu() {
+function UserMenu({ onOpenCustomizer }: { onOpenCustomizer: () => void }) {
   const { profile, roles, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -157,6 +158,14 @@ function UserMenu() {
             <div className="break-all text-xs text-muted-foreground">{profile?.email}</div>
             <div className="mt-1 text-xs text-primary">{topRole(roles)}</div>
           </div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); onOpenCustomizer(); }}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+          >
+            <Palette className="size-4" aria-hidden /> Appearance & theme
+          </button>
           <button
             type="button"
             role="menuitem"
@@ -279,6 +288,7 @@ export function Shell() {
   const items = navFor(roles, profile?.modules ?? null);
   const canSearch = items.some((i) => i.id === "students") && hasAnyRole(roles, ["school_admin", "principal", "teacher", "receptionist", "accountant"]);
   const [query, setQuery] = useState("");
+  const [customizerOpen, setCustomizerOpen] = useState(false);
 
   const current = items.find((i) => (i.path === "/" ? location.pathname === "/" : location.pathname.startsWith(i.path)));
   const action = PRIMARY_ACTIONS.find((a) => location.pathname === a.path && hasAnyRole(roles, a.roles));
@@ -345,12 +355,21 @@ export function Shell() {
                 {surface === "glass" ? <Sparkles className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}
               </button>
               <ThemeSwitch />
+              <button
+                type="button"
+                onClick={() => setCustomizerOpen(true)}
+                aria-label="Customize theme & background"
+                title="Customize theme, colors & background"
+                className="grid size-9 place-items-center rounded-full border border-border bg-foreground/5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
+              >
+                <Palette className="size-4" aria-hidden />
+              </button>
               {action ? (
                 <Button asChild className="hidden rounded-full sm:inline-flex">
                   <Link to={action.to}><Plus className="size-4" aria-hidden /> {action.label}</Link>
                 </Button>
               ) : null}
-              <UserMenu />
+              <UserMenu onOpenCustomizer={() => setCustomizerOpen(true)} />
             </div>
           </header>
 
@@ -361,6 +380,7 @@ export function Shell() {
       </div>
 
       <BottomNav items={items} />
+      <ThemeCustomizerModal open={customizerOpen} onClose={() => setCustomizerOpen(false)} />
     </div>
   );
 }
