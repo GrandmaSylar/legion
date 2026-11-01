@@ -5,6 +5,16 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
 import type { AppRole } from "../permissions";
 
+export interface UserThemeConfig {
+  mode?: "dark" | "light";
+  surface?: "glass" | "flat";
+  accent?: string | null;
+  wallpaperType?: "preset" | "custom" | "none";
+  wallpaperPresetId?: string;
+  bgDim?: number;
+  bgBlur?: number;
+}
+
 export interface Profile {
   id: string;
   fullName: string;
@@ -15,6 +25,7 @@ export interface Profile {
   isActive: boolean;
   /** Sections the user has switched on; null means everything their role allows. */
   modules: string[] | null;
+  theme: UserThemeConfig | null;
 }
 
 type Status = "loading" | "signedOut" | "signedIn" | "deactivated";
@@ -38,7 +49,7 @@ async function loadProfile(userId: string): Promise<{ profile: Profile; roles: A
   const [{ data: p }, { data: r }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, email, school_id, is_active, modules, schools(name, brand_colors)")
+      .select("id, full_name, email, school_id, is_active, modules, theme, schools(name, brand_colors)")
       .eq("id", userId)
       .maybeSingle(),
     supabase.from("user_roles").select("role").eq("profile_id", userId),
@@ -56,6 +67,7 @@ async function loadProfile(userId: string): Promise<{ profile: Profile; roles: A
       brandPrimary: brand.primary ?? null,
       isActive: p.is_active,
       modules: (p.modules as string[] | null) ?? null,
+      theme: (p.theme as UserThemeConfig | null) ?? null,
     },
     roles: (r ?? []).map((x) => x.role as AppRole),
   };

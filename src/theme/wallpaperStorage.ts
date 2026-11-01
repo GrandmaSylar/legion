@@ -1,12 +1,18 @@
 // Asynchronous storage for custom wallpaper images using IndexedDB,
-// with a localStorage fallback. Compresses user-uploaded photos via canvas
-// to keep storage fast and light (< 250 KB).
+// scoped per user account with a localStorage fallback. Compresses user-uploaded
+// photos via canvas to keep storage fast and light (< 250 KB).
 
 const DB_NAME = "pinks_sms_theme";
 const DB_VERSION = 1;
 const STORE_NAME = "wallpapers";
-const KEY_CUSTOM = "custom_wallpaper";
-const FALLBACK_KEY = "sms.customWallpaper";
+
+function keyFor(userId?: string | null): string {
+  return userId ? `custom_wallpaper_${userId}` : "custom_wallpaper_guest";
+}
+
+function fallbackKeyFor(userId?: string | null): string {
+  return userId ? `sms.customWallpaper.${userId}` : "sms.customWallpaper.guest";
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -26,32 +32,34 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveCustomWallpaper(dataUrl: string): Promise<void> {
+export async function saveCustomWallpaper(dataUrl: string, userId?: string | null): Promise<void> {
+  const k = keyFor(userId);
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      const req = store.put(dataUrl, KEY_CUSTOM);
+      const req = store.put(dataUrl, k);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
   } catch {
     try {
-      localStorage.setItem(FALLBACK_KEY, dataUrl);
+      localStorage.setItem(fallbackKeyFor(userId), dataUrl);
     } catch {
       /* ignore storage quota errors */
     }
   }
 }
 
-export async function loadCustomWallpaper(): Promise<string | null> {
+export async function loadCustomWallpaper(userId?: string | null): Promise<string | null> {
+  const k = keyFor(userId);
   try {
     const db = await openDb();
     const result = await new Promise<string | null>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
-      const req = store.get(KEY_CUSTOM);
+      const req = store.get(k);
       req.onsuccess = () => resolve((req.result as string) ?? null);
       req.onerror = () => reject(req.error);
     });
@@ -61,19 +69,20 @@ export async function loadCustomWallpaper(): Promise<string | null> {
   }
 
   try {
-    return localStorage.getItem(FALLBACK_KEY);
+    return localStorage.getItem(fallbackKeyFor(userId));
   } catch {
     return null;
   }
 }
 
-export async function deleteCustomWallpaper(): Promise<void> {
+export async function deleteCustomWallpaper(userId?: string | null): Promise<void> {
+  const k = keyFor(userId);
   try {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      const req = store.delete(KEY_CUSTOM);
+      const req = store.delete(k);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
@@ -82,7 +91,7 @@ export async function deleteCustomWallpaper(): Promise<void> {
   }
 
   try {
-    localStorage.removeItem(FALLBACK_KEY);
+    localStorage.removeItem(fallbackKeyFor(userId));
   } catch {
     /* ignore */
   }

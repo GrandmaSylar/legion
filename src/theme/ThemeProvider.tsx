@@ -1,9 +1,11 @@
-// Comprehensive theme provider:
-// - Mode: dark (AMOLED true black / glass) / light
-// - Surface: glass (frosted acrylic backdrop) / flat (solid, high contrast)
-// - Accent: brand primary color or user custom palette
-// - Wallpaper: curated presets (Sedela Nebula, Aurora, Cosmos, Sunset, Ocean, Minimal)
-//   or custom uploaded user photo stored in IndexedDB, with adjustable dim and blur.
+// Comprehensive theme provider with per-user account binding:
+// - All preferences (mode, surface, accent, wallpaper, dim, blur) are scoped
+//   to the signed-in user's account ID.
+// - Settings are saved locally in user-scoped storage (zero UI latency) and
+//   synchronized to the user's profile in Supabase via set_my_theme RPC.
+// - Custom uploaded wallpapers are stored in IndexedDB under custom_wallpaper_<userId>.
+// - Signing out or switching users immediately switches to that account's theme,
+//   with unauthenticated screens defaulting safely to the school brand theme.
 
 import {
   createContext,
@@ -11,10 +13,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { WALLPAPER_PRESETS, type WallpaperPreset } from "./wallpaperPresets";
+import { WALLPAPER_PRESETS } from "./wallpaperPresets";
 import {
   deleteCustomWallpaper,
   loadCustomWallpaper,
@@ -22,6 +25,8 @@ import {
   saveCustomWallpaper,
 } from "./wallpaperStorage";
 import { extractDominantColor } from "./extractColor";
+import { saveUserTheme } from "../lib/data/theme";
+import type { UserThemeConfig } from "../lib/auth/AuthProvider";
 
 export type Mode = "dark" | "light";
 export type Surface = "glass" | "flat";
@@ -122,6 +127,7 @@ interface ThemeState {
   activeWallpaperUrl: string | null;
   bgDim: number;
   bgBlur: number;
+  userId: string | null;
   setMode: (m: Mode) => void;
   setSurface: (s: Surface) => void;
   setAccent: (hex: string) => void;
@@ -139,25 +145,29 @@ interface ThemeState {
 
 const ThemeContext = createContext<ThemeState | null>(null);
 
-function read(key: string): string | null {
+function userKey(key: string, userId?: string | null): string {
+  return userId ? `sms.theme.${userId}.${key}` : `sms.theme.guest.${key}`;
+}
+
+function read(key: string, userId?: string | null): string | null {
   try {
-    return localStorage.getItem(key);
+    return localStorage.getItem(userKey(key, userId));
   } catch {
     return null;
   }
 }
 
-function write(key: string, value: string) {
+function write(key: string, value: string, userId?: string | null) {
   try {
-    localStorage.setItem(key, value);
+    localStorage.setItem(userKey(key, userId), value);
   } catch {
     /* storage can be blocked */
   }
 }
 
-function remove(key: string) {
+function removeKey(key: string, userId?: string | null) {
   try {
-    localStorage.removeItem(key);
+    localStorage.removeItem(userKey(key, userId));
   } catch {
     /* storage can be blocked */
   }
@@ -177,48 +187,95 @@ function defaultMode(): Mode {
 }
 
 export function ThemeProvider({
+  userId = null,
+  cloudTheme = null,
   accent: schoolAccentProp,
   children,
 }: {
+  userId?: string | null;
+  cloudTheme?: UserThemeConfig | null;
   accent?: string | null;
   children: ReactNode;
 }) {
-  const [mode, setModeState] = useState<Mode>(() => (read("sms.mode") as Mode | null) ?? defaultMode());
-  const [surface, setSurfaceState] = useState<Surface>(
-    () => (read("sms.surface") as Surface | null) ?? defaultSurface(),
-  );
+  // Resolve initial values based on userKey or cloudTheme
+  const resolveMode = (uid: string | null, cloud: UserThemeConfig | null): Mode => {
+    const saved = read("mode", uid) as Mode | null;
+    return saved || cloud?.mode || defaultMode();
+  };
 
-  const [customAccent, setCustomAccent] = useState<string | null>(() => read("sms.accent"));
+  const resolveSurface = (uid: string | null, cloud: UserThemeConfig | null): Surface => {
+    const saved = read("surface", uid) as Surface | null;
+    return saved || cloud?.surface || defaultSurface();
+  };
 
-  const [wallpaperType, setWallpaperTypeState] = useState<WallpaperType>(
-    () => (read("sms.wallpaperType") as WallpaperType | null) ?? "preset",
-  );
-  const [wallpaperPresetId, setWallpaperPresetIdState] = useState<string>(
-    () => read("sms.wallpaperPresetId") ?? "sedela",
-  );
+  const resolveAccent = (uid: string | null, cloud: UserThemeConfig | null): string | null => {
+    return read("accent", uid) || cloud?.accent || null;
+  };
+
+  const resolveWallpaperType = (uid: string | null, cloud: UserThemeConfig | null): WallpaperType => {
+    const saved = read("wallpaperType", uid) as WallpaperType | null;
+    return saved || cloud?.wallpaperType || "preset";
+  };
+
+  const resolveWallpaperPresetId = (uid: string | null, cloud: UserThemeConfig | null): string => {
+    return read("wallpaperPresetId", uid) || cloud?.wallpaperPresetId || "sedela";
+  };
+
+  const resolveBgDim = (uid: string | null, cloud: UserThemeConfig | null): number => {
+    const saved = read("bgDim", uid);
+    if (saved) return parseFloat(saved);
+    if (cloud?.bgDim !== undefined) return cloud.bgDim;
+    return 0.55;
+  };
+
+  const resolveBgBlur = (uid: string | null, cloud: UserThemeConfig | null): number => {
+    const saved = read("bgBlur", uid);
+    if (saved) return parseInt(saved, 10);
+    if (cloud?.bgBlur !== undefined) return cloud.bgBlur;
+    return 0;
+  };
+
+  const [mode, setModeState] = useState<Mode>(() => resolveMode(userId, cloudTheme));
+  const [surface, setSurfaceState] = useState<Surface>(() => resolveSurface(userId, cloudTheme));
+  const [customAccent, setCustomAccent] = useState<string | null>(() => resolveAccent(userId, cloudTheme));
+  const [wallpaperType, setWallpaperTypeState] = useState<WallpaperType>(() => resolveWallpaperType(userId, cloudTheme));
+  const [wallpaperPresetId, setWallpaperPresetIdState] = useState<string>(() => resolveWallpaperPresetId(userId, cloudTheme));
   const [customWallpaper, setCustomWallpaper] = useState<string | null>(null);
+  const [bgDim, setBgDimState] = useState<number>(() => resolveBgDim(userId, cloudTheme));
+  const [bgBlur, setBgBlurState] = useState<number>(() => resolveBgBlur(userId, cloudTheme));
 
-  const [bgDim, setBgDimState] = useState<number>(() => {
-    const val = read("sms.bgDim");
-    return val ? parseFloat(val) : 0.55;
-  });
+  // Switch or reload user settings whenever userId changes or cloudTheme updates
+  useEffect(() => {
+    setModeState(resolveMode(userId, cloudTheme));
+    setSurfaceState(resolveSurface(userId, cloudTheme));
+    setCustomAccent(resolveAccent(userId, cloudTheme));
+    setWallpaperTypeState(resolveWallpaperType(userId, cloudTheme));
+    setWallpaperPresetIdState(resolveWallpaperPresetId(userId, cloudTheme));
+    setBgDimState(resolveBgDim(userId, cloudTheme));
+    setBgBlurState(resolveBgBlur(userId, cloudTheme));
 
-  const [bgBlur, setBgBlurState] = useState<number>(() => {
-    const val = read("sms.bgBlur");
-    return val ? parseInt(val, 10) : 0;
-  });
+    if (userId) {
+      loadCustomWallpaper(userId).then((img) => setCustomWallpaper(img));
+    } else {
+      setCustomWallpaper(null);
+    }
+  }, [userId, cloudTheme]);
 
-  // Effective accent: user custom accent > school's brandPrimary > default '#e8562a'
+  // Debounced cloud sync helper
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queueCloudSync = useCallback(
+    (cfg: UserThemeConfig) => {
+      if (!userId) return;
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      syncTimeoutRef.current = setTimeout(() => {
+        void saveUserTheme(cfg);
+      }, 350);
+    },
+    [userId],
+  );
+
   const effectiveAccent = customAccent || schoolAccentProp || "#e8562a";
 
-  // Load custom wallpaper from IndexedDB on startup
-  useEffect(() => {
-    loadCustomWallpaper().then((img) => {
-      if (img) setCustomWallpaper(img);
-    });
-  }, []);
-
-  // Compute active wallpaper URL
   const activeWallpaperUrl = useMemo<string | null>(() => {
     if (wallpaperType === "none") return null;
     if (wallpaperType === "custom" && customWallpaper) return customWallpaper;
@@ -241,60 +298,155 @@ export function ThemeProvider({
     root.style.setProperty("--bg-blur", `${bgBlur}px`);
   }, [mode, surface, wallpaperType, effectiveAccent, bgDim, bgBlur]);
 
-  const setMode = useCallback((m: Mode) => {
-    setModeState(m);
-    write("sms.mode", m);
-  }, []);
+  const setMode = useCallback(
+    (m: Mode) => {
+      setModeState(m);
+      write("mode", m, userId);
+      queueCloudSync({
+        mode: m,
+        surface,
+        accent: customAccent,
+        wallpaperType,
+        wallpaperPresetId,
+        bgDim,
+        bgBlur,
+      });
+    },
+    [userId, surface, customAccent, wallpaperType, wallpaperPresetId, bgDim, bgBlur, queueCloudSync],
+  );
 
-  const setSurface = useCallback((s: Surface) => {
-    setSurfaceState(s);
-    write("sms.surface", s);
-  }, []);
+  const setSurface = useCallback(
+    (s: Surface) => {
+      setSurfaceState(s);
+      write("surface", s, userId);
+      queueCloudSync({
+        mode,
+        surface: s,
+        accent: customAccent,
+        wallpaperType,
+        wallpaperPresetId,
+        bgDim,
+        bgBlur,
+      });
+    },
+    [userId, mode, customAccent, wallpaperType, wallpaperPresetId, bgDim, bgBlur, queueCloudSync],
+  );
 
-  const setAccent = useCallback((hex: string) => {
-    setCustomAccent(hex);
-    write("sms.accent", hex);
-  }, []);
+  const setAccent = useCallback(
+    (hex: string) => {
+      setCustomAccent(hex);
+      write("accent", hex, userId);
+      queueCloudSync({
+        mode,
+        surface,
+        accent: hex,
+        wallpaperType,
+        wallpaperPresetId,
+        bgDim,
+        bgBlur,
+      });
+    },
+    [userId, mode, surface, wallpaperType, wallpaperPresetId, bgDim, bgBlur, queueCloudSync],
+  );
 
   const resetAccent = useCallback(() => {
     setCustomAccent(null);
-    remove("sms.accent");
-  }, []);
+    removeKey("accent", userId);
+    queueCloudSync({
+      mode,
+      surface,
+      accent: null,
+      wallpaperType,
+      wallpaperPresetId,
+      bgDim,
+      bgBlur,
+    });
+  }, [userId, mode, surface, wallpaperType, wallpaperPresetId, bgDim, bgBlur, queueCloudSync]);
 
-  const setWallpaperType = useCallback((type: WallpaperType) => {
-    setWallpaperTypeState(type);
-    write("sms.wallpaperType", type);
-  }, []);
+  const setWallpaperType = useCallback(
+    (type: WallpaperType) => {
+      setWallpaperTypeState(type);
+      write("wallpaperType", type, userId);
+      queueCloudSync({
+        mode,
+        surface,
+        accent: customAccent,
+        wallpaperType: type,
+        wallpaperPresetId,
+        bgDim,
+        bgBlur,
+      });
+    },
+    [userId, mode, surface, customAccent, wallpaperPresetId, bgDim, bgBlur, queueCloudSync],
+  );
 
-  const setWallpaperPreset = useCallback((id: string) => {
-    setWallpaperPresetIdState(id);
-    write("sms.wallpaperPresetId", id);
-    setWallpaperTypeState("preset");
-    write("sms.wallpaperType", "preset");
-    // Also adjust default dim for that preset if user hasn't heavily customized
-    const p = WALLPAPER_PRESETS.find((item) => item.id === id);
-    if (p && !read("sms.bgDim")) {
-      setBgDimState(p.recommendedDim);
-    }
-  }, []);
+  const setWallpaperPreset = useCallback(
+    (id: string) => {
+      setWallpaperPresetIdState(id);
+      write("wallpaperPresetId", id, userId);
+      setWallpaperTypeState("preset");
+      write("wallpaperType", "preset", userId);
 
-  const uploadCustomWallpaper = useCallback(async (file: File) => {
-    const optimizedDataUrl = await processWallpaperFile(file);
-    await saveCustomWallpaper(optimizedDataUrl);
-    setCustomWallpaper(optimizedDataUrl);
-    setWallpaperTypeState("custom");
-    write("sms.wallpaperType", "custom");
-    return optimizedDataUrl;
-  }, []);
+      const p = WALLPAPER_PRESETS.find((item) => item.id === id);
+      const newDim = p && !read("bgDim", userId) ? p.recommendedDim : bgDim;
+      if (newDim !== bgDim) {
+        setBgDimState(newDim);
+        write("bgDim", String(newDim), userId);
+      }
+
+      queueCloudSync({
+        mode,
+        surface,
+        accent: customAccent,
+        wallpaperType: "preset",
+        wallpaperPresetId: id,
+        bgDim: newDim,
+        bgBlur,
+      });
+    },
+    [userId, mode, surface, customAccent, bgDim, bgBlur, queueCloudSync],
+  );
+
+  const uploadCustomWallpaper = useCallback(
+    async (file: File) => {
+      const optimizedDataUrl = await processWallpaperFile(file);
+      await saveCustomWallpaper(optimizedDataUrl, userId);
+      setCustomWallpaper(optimizedDataUrl);
+      setWallpaperTypeState("custom");
+      write("wallpaperType", "custom", userId);
+
+      queueCloudSync({
+        mode,
+        surface,
+        accent: customAccent,
+        wallpaperType: "custom",
+        wallpaperPresetId,
+        bgDim,
+        bgBlur,
+      });
+      return optimizedDataUrl;
+    },
+    [userId, mode, surface, customAccent, wallpaperPresetId, bgDim, bgBlur, queueCloudSync],
+  );
 
   const removeCustomWallpaper = useCallback(async () => {
-    await deleteCustomWallpaper();
+    await deleteCustomWallpaper(userId);
     setCustomWallpaper(null);
     setWallpaperPresetIdState("sedela");
     setWallpaperTypeState("preset");
-    write("sms.wallpaperPresetId", "sedela");
-    write("sms.wallpaperType", "preset");
-  }, []);
+    write("wallpaperPresetId", "sedela", userId);
+    write("wallpaperType", "preset", userId);
+
+    queueCloudSync({
+      mode,
+      surface,
+      accent: customAccent,
+      wallpaperType: "preset",
+      wallpaperPresetId: "sedela",
+      bgDim,
+      bgBlur,
+    });
+  }, [userId, mode, surface, customAccent, bgDim, bgBlur, queueCloudSync]);
 
   const extractAndApplyColor = useCallback(
     async (imageUrl?: string) => {
@@ -302,63 +454,119 @@ export function ThemeProvider({
       if (!target) return effectiveAccent;
       const extracted = await extractDominantColor(target);
       setCustomAccent(extracted);
-      write("sms.accent", extracted);
+      write("accent", extracted, userId);
+      queueCloudSync({
+        mode,
+        surface,
+        accent: extracted,
+        wallpaperType,
+        wallpaperPresetId,
+        bgDim,
+        bgBlur,
+      });
       return extracted;
     },
-    [activeWallpaperUrl, effectiveAccent],
+    [activeWallpaperUrl, effectiveAccent, userId, mode, surface, wallpaperType, wallpaperPresetId, bgDim, bgBlur, queueCloudSync],
   );
 
-  const setBgDim = useCallback((dim: number) => {
-    setBgDimState(dim);
-    write("sms.bgDim", String(dim));
-  }, []);
+  const setBgDim = useCallback(
+    (dim: number) => {
+      setBgDimState(dim);
+      write("bgDim", String(dim), userId);
+      queueCloudSync({
+        mode,
+        surface,
+        accent: customAccent,
+        wallpaperType,
+        wallpaperPresetId,
+        bgDim: dim,
+        bgBlur,
+      });
+    },
+    [userId, mode, surface, customAccent, wallpaperType, wallpaperPresetId, bgBlur, queueCloudSync],
+  );
 
-  const setBgBlur = useCallback((blur: number) => {
-    setBgBlurState(blur);
-    write("sms.bgBlur", String(blur));
-  }, []);
+  const setBgBlur = useCallback(
+    (blur: number) => {
+      setBgBlurState(blur);
+      write("bgBlur", String(blur), userId);
+      queueCloudSync({
+        mode,
+        surface,
+        accent: customAccent,
+        wallpaperType,
+        wallpaperPresetId,
+        bgDim,
+        bgBlur: blur,
+      });
+    },
+    [userId, mode, surface, customAccent, wallpaperType, wallpaperPresetId, bgDim, queueCloudSync],
+  );
 
-  const applyThemePreset = useCallback((presetId: string) => {
-    const preset = THEME_PRESETS.find((p) => p.id === presetId);
-    if (!preset) return;
+  const applyThemePreset = useCallback(
+    (presetId: string) => {
+      const preset = THEME_PRESETS.find((p) => p.id === presetId);
+      if (!preset) return;
 
-    setModeState(preset.mode);
-    write("sms.mode", preset.mode);
+      setModeState(preset.mode);
+      write("mode", preset.mode, userId);
 
-    setSurfaceState(preset.surface);
-    write("sms.surface", preset.surface);
+      setSurfaceState(preset.surface);
+      write("surface", preset.surface, userId);
 
-    setCustomAccent(preset.accent);
-    write("sms.accent", preset.accent);
+      setCustomAccent(preset.accent);
+      write("accent", preset.accent, userId);
 
-    setWallpaperTypeState(preset.wallpaperType);
-    write("sms.wallpaperType", preset.wallpaperType);
+      setWallpaperTypeState(preset.wallpaperType);
+      write("wallpaperType", preset.wallpaperType, userId);
 
-    if (preset.wallpaperPresetId) {
-      setWallpaperPresetIdState(preset.wallpaperPresetId);
-      write("sms.wallpaperPresetId", preset.wallpaperPresetId);
-    }
+      if (preset.wallpaperPresetId) {
+        setWallpaperPresetIdState(preset.wallpaperPresetId);
+        write("wallpaperPresetId", preset.wallpaperPresetId, userId);
+      }
 
-    setBgDimState(preset.bgDim);
-    write("sms.bgDim", String(preset.bgDim));
-  }, []);
+      setBgDimState(preset.bgDim);
+      write("bgDim", String(preset.bgDim), userId);
+
+      queueCloudSync({
+        mode: preset.mode,
+        surface: preset.surface,
+        accent: preset.accent,
+        wallpaperType: preset.wallpaperType,
+        wallpaperPresetId: preset.wallpaperPresetId,
+        bgDim: preset.bgDim,
+        bgBlur,
+      });
+    },
+    [userId, bgBlur, queueCloudSync],
+  );
 
   const resetToDefaults = useCallback(() => {
     setModeState("dark");
-    write("sms.mode", "dark");
+    write("mode", "dark", userId);
     setSurfaceState("glass");
-    write("sms.surface", "glass");
+    write("surface", "glass", userId);
     setCustomAccent(null);
-    remove("sms.accent");
+    removeKey("accent", userId);
     setWallpaperTypeState("preset");
-    write("sms.wallpaperType", "preset");
+    write("wallpaperType", "preset", userId);
     setWallpaperPresetIdState("sedela");
-    write("sms.wallpaperPresetId", "sedela");
+    write("wallpaperPresetId", "sedela", userId);
     setBgDimState(0.55);
-    write("sms.bgDim", "0.55");
+    write("bgDim", "0.55", userId);
     setBgBlurState(0);
-    write("sms.bgBlur", "0");
-  }, []);
+    write("bgBlur", "0", userId);
+
+    queueCloudSync({
+      mode: "dark",
+      surface: "glass",
+      accent: null,
+      wallpaperType: "preset",
+      wallpaperPresetId: "sedela",
+      bgDim: 0.55,
+      bgBlur: 0,
+    });
+  }, [userId, queueCloudSync]);
 
   const value = useMemo<ThemeState>(
     () => ({
@@ -372,6 +580,7 @@ export function ThemeProvider({
       activeWallpaperUrl,
       bgDim,
       bgBlur,
+      userId,
       setMode,
       setSurface,
       setAccent,
@@ -397,6 +606,7 @@ export function ThemeProvider({
       activeWallpaperUrl,
       bgDim,
       bgBlur,
+      userId,
       setMode,
       setSurface,
       setAccent,
