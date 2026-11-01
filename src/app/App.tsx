@@ -18,6 +18,7 @@ const NewUserPage = lazy(() => import("./pages/users/UserForm").then((m) => ({ d
 const StudentsList = lazy(() => import("./pages/students/StudentsList"));
 const AddStudent = lazy(() => import("./pages/students/AddStudent"));
 const StudentDetail = lazy(() => import("./pages/students/StudentDetail"));
+const Attendance = lazy(() => import("./pages/attendance/Attendance"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -104,6 +105,8 @@ export default function App() {
                             <Settings />
                           ) : item.id === "students" ? (
                             <StudentsList />
+                          ) : item.id === "attendance" ? (
+                            <Attendance />
                           ) : item.id === "users" ? (
                             <Users />
                           ) : (
