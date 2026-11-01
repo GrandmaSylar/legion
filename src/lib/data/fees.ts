@@ -4,6 +4,7 @@ export type InvoiceStatus = "unpaid" | "partial" | "paid" | "void";
 export type InvoiceItemKind = "fee" | "discount" | "arrears";
 export type PaymentMethod = "cash" | "mobile_money" | "bank_transfer";
 export type MomoNetwork = "mtn" | "telecel" | "airteltigo";
+export type DiscountType = "percent" | "fixed";
 
 export interface FeeCategory {
   id: string;
@@ -21,6 +22,43 @@ export interface FeeStructureRow {
   termId: string | null;
   termName: string | null;
   amount: number;
+}
+
+export interface DiscountRow {
+  id: string;
+  name: string;
+  type: DiscountType;
+  value: number;
+  appliesToCategoryId: string | null;
+  appliesToCategoryName: string | null;
+  reason: string | null;
+  isActive: boolean;
+}
+
+export interface StudentDiscountRow {
+  id: string;
+  studentId: string;
+  studentAdmissionNo: string;
+  studentName: string;
+  discountId: string;
+  discountName: string;
+  discountType: DiscountType;
+  discountValue: number;
+  academicYearId: string;
+  academicYearName: string;
+}
+
+export interface InstallmentRow {
+  id: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  studentId: string;
+  studentAdmissionNo: string;
+  studentName: string;
+  dueOn: string;
+  amount: number;
+  invoiceBalance: number;
+  invoiceStatus: InvoiceStatus;
 }
 
 export interface InvoiceItemRow {
@@ -66,6 +104,11 @@ export interface InvoiceRow {
   dueOn: string | null;
   status: InvoiceStatus;
   items: InvoiceItemRow[];
+  installments: {
+    id: string;
+    dueOn: string;
+    amount: number;
+  }[];
   payments: {
     id: string;
     receiptNo: string;
@@ -168,6 +211,202 @@ export async function deleteFeeStructure(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ─── Scholarships & Discounts ────────────────────────────────────────────────
+
+export async function listDiscounts(): Promise<DiscountRow[]> {
+  const { data, error } = await supabase
+    .from("discounts")
+    .select(
+      "id, name, type, value, applies_to_category_id, reason, is_active, fee_categories(name)",
+    )
+    .order("name");
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const cat = Array.isArray(r.fee_categories)
+      ? r.fee_categories[0]
+      : r.fee_categories;
+    return {
+      id: r.id,
+      name: r.name,
+      type: r.type as DiscountType,
+      value: Number(r.value),
+      appliesToCategoryId: r.applies_to_category_id,
+      appliesToCategoryName: (cat as { name?: string } | null)?.name ?? null,
+      reason: r.reason,
+      isActive: r.is_active,
+    };
+  });
+}
+
+export async function createDiscount(input: {
+  name: string;
+  type: DiscountType;
+  value: number;
+  appliesToCategoryId: string | null;
+  reason?: string;
+}): Promise<void> {
+  const { error } = await supabase.from("discounts").insert({
+    name: input.name.trim(),
+    type: input.type,
+    value: input.value,
+    applies_to_category_id: input.appliesToCategoryId || null,
+    reason: input.reason?.trim() || null,
+    is_active: true,
+  });
+  if (error) throw error;
+}
+
+export async function deleteDiscount(id: string): Promise<void> {
+  const { error } = await supabase.from("discounts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function listStudentDiscounts(
+  academicYearId?: string | null,
+): Promise<StudentDiscountRow[]> {
+  let q = supabase
+    .from("student_discounts")
+    .select(
+      "id, student_id, discount_id, academic_year_id, students(admission_no, first_name, middle_name, last_name), discounts(name, type, value), academic_years(name)",
+    )
+    .order("created_at", { ascending: false });
+
+  if (academicYearId) {
+    q = q.eq("academic_year_id", academicYearId);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  return (data ?? []).map((r) => {
+    const stu = Array.isArray(r.students) ? r.students[0] : r.students;
+    const disc = Array.isArray(r.discounts) ? r.discounts[0] : r.discounts;
+    const yr = Array.isArray(r.academic_years)
+      ? r.academic_years[0]
+      : r.academic_years;
+    return {
+      id: r.id,
+      studentId: r.student_id,
+      studentAdmissionNo:
+        (stu as { admission_no?: string } | null)?.admission_no ?? "—",
+      studentName: fullName(
+        stu as {
+          first_name?: string;
+          middle_name?: string;
+          last_name?: string;
+        } | null,
+      ),
+      discountId: r.discount_id,
+      discountName: (disc as { name?: string } | null)?.name ?? "Discount",
+      discountType:
+        ((disc as { type?: string } | null)?.type as DiscountType) ?? "percent",
+      discountValue: Number((disc as { value?: number } | null)?.value ?? 0),
+      academicYearId: r.academic_year_id,
+      academicYearName: (yr as { name?: string } | null)?.name ?? "",
+    };
+  });
+}
+
+export async function assignStudentDiscount(input: {
+  studentId: string;
+  discountId: string;
+  academicYearId: string;
+}): Promise<void> {
+  const { error } = await supabase.from("student_discounts").insert({
+    student_id: input.studentId,
+    discount_id: input.discountId,
+    academic_year_id: input.academicYearId,
+  });
+  if (error) throw error;
+}
+
+export async function removeStudentDiscount(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("student_discounts")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ─── Batch Term Billing ──────────────────────────────────────────────────────
+
+export async function batchGenerateTermInvoices(input: {
+  termId: string;
+  classId?: string | null;
+  dueOn?: string | null;
+  includeOneOff?: boolean;
+}): Promise<{
+  invoicesCreated: number;
+  studentsSkipped: number;
+  totalBilled: number;
+}> {
+  const { data, error } = await supabase.rpc("batch_generate_term_invoices", {
+    p_term_id: input.termId,
+    p_class_id: input.classId || null,
+    p_due_on: input.dueOn || null,
+    p_include_one_off: Boolean(input.includeOneOff),
+  });
+  if (error) throw error;
+  const row = (
+    data as {
+      invoices_created: number;
+      students_skipped: number;
+      total_billed: number;
+    }[]
+  )?.[0];
+  return {
+    invoicesCreated: Number(row?.invoices_created ?? 0),
+    studentsSkipped: Number(row?.students_skipped ?? 0),
+    totalBilled: Number(row?.total_billed ?? 0),
+  };
+}
+
+// ─── Installment Plans ───────────────────────────────────────────────────────
+
+export async function createInstallments(input: {
+  invoiceId: string;
+  items: { dueOn: string; amount: number }[];
+}): Promise<void> {
+  const rows = input.items
+    .filter((i) => i.dueOn && i.amount > 0)
+    .map((i) => ({
+      invoice_id: input.invoiceId,
+      due_on: i.dueOn,
+      amount: i.amount,
+    }));
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("installments").insert(rows);
+  if (error) throw error;
+}
+
+export async function deleteInstallment(id: string): Promise<void> {
+  const { error } = await supabase.from("installments").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export function extractInstallmentsFromInvoices(
+  invoices: InvoiceRow[],
+): InstallmentRow[] {
+  const rows: InstallmentRow[] = [];
+  for (const inv of invoices) {
+    for (const inst of inv.installments) {
+      rows.push({
+        id: inst.id,
+        invoiceId: inv.id,
+        invoiceNumber: inv.number,
+        studentId: inv.studentId,
+        studentAdmissionNo: inv.studentAdmissionNo,
+        studentName: inv.studentName,
+        dueOn: inst.dueOn,
+        amount: inst.amount,
+        invoiceBalance: inv.balance,
+        invoiceStatus: inv.status,
+      });
+    }
+  }
+  return rows.sort((a, b) => a.dueOn.localeCompare(b.dueOn));
+}
+
 // ─── Invoices & Payments ─────────────────────────────────────────────────────
 
 export async function listInvoices(): Promise<InvoiceRow[]> {
@@ -185,6 +424,7 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
       students(id, admission_no, first_name, middle_name, last_name),
       terms(name),
       invoice_items(id, fee_category_id, kind, description, amount),
+      installments(id, due_on, amount),
       payments(id, receipt_no, amount, method, network, reference, paid_on, received_by_name, voided_at)
     `,
     )
@@ -202,6 +442,11 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
       kind: it.kind as InvoiceItemKind,
       description: it.description,
       amount: Number(it.amount),
+    }));
+    const installments = (inv.installments ?? []).map((inst) => ({
+      id: inst.id,
+      dueOn: inst.due_on,
+      amount: Number(inst.amount),
     }));
     const payments = (inv.payments ?? []).map((p) => ({
       id: p.id,
@@ -240,6 +485,7 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
       dueOn: inv.due_on,
       status: inv.status as InvoiceStatus,
       items,
+      installments,
       payments,
       totalAmount,
       paidAmount,

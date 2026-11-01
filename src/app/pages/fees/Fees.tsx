@@ -2,10 +2,13 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Award,
   Building2,
+  CalendarClock,
   Check,
   CreditCard,
   FileText,
+  Layers,
   Plus,
   Printer,
   Receipt,
@@ -14,15 +17,26 @@ import {
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { hasAnyRole } from "../../../lib/permissions";
 import {
+  assignStudentDiscount,
+  batchGenerateTermInvoices,
+  createDiscount,
   createFeeCategory,
   createFeeStructure,
+  createInstallments,
   createStudentInvoice,
+  deleteDiscount,
   deleteFeeStructure,
+  deleteInstallment,
+  extractInstallmentsFromInvoices,
   extractPaymentsFromInvoices,
+  listDiscounts,
   listFeeCategories,
   listFeeStructures,
   listInvoices,
+  listStudentDiscounts,
   recordPayment,
+  removeStudentDiscount,
+  type DiscountType,
   type InvoiceItemKind,
   type InvoiceRow,
   type MomoNetwork,
@@ -31,6 +45,7 @@ import {
 import {
   getInstitutionDetails,
   listAcademicYears,
+  listClasses,
   listLevels,
   listTerms,
 } from "../../../lib/data/setup";
@@ -82,7 +97,14 @@ export default function Fees() {
     new Date().toISOString().slice(0, 10),
   );
 
-  // Invoice creation state
+  // Batch term billing state
+  const [batchTermId, setBatchTermId] = useState<string>("");
+  const [batchClassId, setBatchClassId] = useState<string>("");
+  const [batchDueOn, setBatchDueOn] = useState<string>("");
+  const [batchIncludeOneOff, setBatchIncludeOneOff] = useState<boolean>(false);
+  const [batchResult, setBatchResult] = useState<string | null>(null);
+
+  // Single invoice creation state
   const [invStudentId, setInvStudentId] = useState<string>("");
   const [invTermId, setInvTermId] = useState<string>("");
   const [invDueOn, setInvDueOn] = useState<string>("");
@@ -90,6 +112,25 @@ export default function Fees() {
     { kind: InvoiceItemKind; description: string; amount: string }[]
   >([
     { kind: "fee", description: "Tuition & Academic Fees", amount: "" },
+  ]);
+
+  // Scholarships & discounts state
+  const [discName, setDiscName] = useState("");
+  const [discType, setDiscType] = useState<DiscountType>("percent");
+  const [discValue, setDiscValue] = useState("");
+  const [discCatId, setDiscCatId] = useState("");
+  const [discReason, setDiscReason] = useState("");
+
+  const [assignStudentId, setAssignStudentId] = useState("");
+  const [assignDiscountId, setAssignDiscountId] = useState("");
+
+  // Installment plan state
+  const [instInvoiceId, setInstInvoiceId] = useState("");
+  const [instRows, setInstRows] = useState<
+    { dueOn: string; amount: string }[]
+  >([
+    { dueOn: "", amount: "" },
+    { dueOn: "", amount: "" },
   ]);
 
   // Fee structure state
@@ -129,6 +170,12 @@ export default function Fees() {
     [termsQ.data, currentYear],
   );
 
+  const classesQ = useQuery({
+    queryKey: ["classes", currentYear?.id],
+    queryFn: () => listClasses(currentYear!.id),
+    enabled: Boolean(currentYear?.id) && canManage,
+  });
+
   const studentsQ = useQuery({
     queryKey: ["students-for-billing", currentYear?.id],
     queryFn: () =>
@@ -154,6 +201,18 @@ export default function Fees() {
     enabled: canManage,
   });
 
+  const discountsQ = useQuery({
+    queryKey: ["discounts"],
+    queryFn: listDiscounts,
+    enabled: canManage,
+  });
+
+  const studentDiscountsQ = useQuery({
+    queryKey: ["student-discounts", currentYear?.id],
+    queryFn: () => listStudentDiscounts(currentYear?.id ?? null),
+    enabled: canManage,
+  });
+
   const levelsQ = useQuery({
     queryKey: ["levels"],
     queryFn: listLevels,
@@ -162,6 +221,11 @@ export default function Fees() {
 
   const allPayments = useMemo(
     () => extractPaymentsFromInvoices(invoicesQ.data ?? []),
+    [invoicesQ.data],
+  );
+
+  const allInstallments = useMemo(
+    () => extractInstallmentsFromInvoices(invoicesQ.data ?? []),
     [invoicesQ.data],
   );
 
@@ -183,6 +247,17 @@ export default function Fees() {
     unpaidInvoices[0] ??
     null;
 
+  const activeInstInvoice =
+    unpaidInvoices.find((inv) => inv.id === instInvoiceId) ??
+    unpaidInvoices[0] ??
+    null;
+
+  const effectiveBatchTermId =
+    batchTermId ||
+    currentYearTerms.find((t) => t.isCurrent)?.id ||
+    currentYearTerms[0]?.id ||
+    "";
+
   const recordPaymentMut = useMutation({
     mutationFn: async () => {
       const targetInv = activePayInvoice;
@@ -202,7 +277,29 @@ export default function Fees() {
       setPayAmount("");
       setPayReference("");
       await qc.invalidateQueries({ queryKey: ["invoices"] });
+      void qc.invalidateQueries({ queryKey: ["school-analytics"] });
       setSelectedReceiptId(created.id);
+    },
+  });
+
+  const batchBillMut = useMutation({
+    mutationFn: async () => {
+      if (!effectiveBatchTermId) {
+        throw new Error("Select a term to generate batch invoices for.");
+      }
+      return batchGenerateTermInvoices({
+        termId: effectiveBatchTermId,
+        classId: batchClassId || null,
+        dueOn: batchDueOn || null,
+        includeOneOff: batchIncludeOneOff,
+      });
+    },
+    onSuccess: async (res) => {
+      setBatchResult(
+        `Created ${res.invoicesCreated} term ${res.invoicesCreated === 1 ? "invoice" : "invoices"} (${formatMoney(res.totalBilled, currency)} net billed after scholarships/discounts). Skipped ${res.studentsSkipped} ${res.studentsSkipped === 1 ? "pupil" : "pupils"} (already billed or no matching fee schedule).`,
+      );
+      await qc.invalidateQueries({ queryKey: ["invoices"] });
+      void qc.invalidateQueries({ queryKey: ["school-analytics"] });
     },
   });
 
@@ -230,6 +327,85 @@ export default function Fees() {
       setInvItems([{ kind: "fee", description: "Tuition & Academic Fees", amount: "" }]);
       setPayInvoiceId(newInvoiceId);
       await qc.invalidateQueries({ queryKey: ["invoices"] });
+      void qc.invalidateQueries({ queryKey: ["school-analytics"] });
+    },
+  });
+
+  const createDiscountMut = useMutation({
+    mutationFn: () =>
+      createDiscount({
+        name: discName,
+        type: discType,
+        value: Number(discValue),
+        appliesToCategoryId: discCatId || null,
+        reason: discReason,
+      }),
+    onSuccess: () => {
+      setDiscName("");
+      setDiscValue("");
+      setDiscCatId("");
+      setDiscReason("");
+      void qc.invalidateQueries({ queryKey: ["discounts"] });
+    },
+  });
+
+  const delDiscountMut = useMutation({
+    mutationFn: (id: string) => deleteDiscount(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["discounts"] });
+    },
+  });
+
+  const assignDiscMut = useMutation({
+    mutationFn: () => {
+      if (!currentYear) throw new Error("Set a current academic year first.");
+      return assignStudentDiscount({
+        studentId: assignStudentId,
+        discountId: assignDiscountId,
+        academicYearId: currentYear.id,
+      });
+    },
+    onSuccess: () => {
+      setAssignStudentId("");
+      setAssignDiscountId("");
+      void qc.invalidateQueries({ queryKey: ["student-discounts"] });
+    },
+  });
+
+  const removeStudentDiscMut = useMutation({
+    mutationFn: (id: string) => removeStudentDiscount(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["student-discounts"] });
+    },
+  });
+
+  const saveInstallmentsMut = useMutation({
+    mutationFn: async () => {
+      if (!activeInstInvoice) throw new Error("Select an invoice.");
+      const parsed = instRows
+        .map((r) => ({ dueOn: r.dueOn, amount: Number(r.amount) }))
+        .filter((r) => r.dueOn && !Number.isNaN(r.amount) && r.amount > 0);
+      if (parsed.length === 0) {
+        throw new Error("Enter at least one installment date and amount.");
+      }
+      await createInstallments({
+        invoiceId: activeInstInvoice.id,
+        items: parsed,
+      });
+    },
+    onSuccess: () => {
+      setInstRows([
+        { dueOn: "", amount: "" },
+        { dueOn: "", amount: "" },
+      ]);
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
+    },
+  });
+
+  const delInstallmentMut = useMutation({
+    mutationFn: (id: string) => deleteInstallment(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
     },
   });
 
@@ -265,6 +441,7 @@ export default function Fees() {
   });
 
   const currency = institutionQ.data?.currency || "GHS";
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   if (selectedPayment && institutionQ.data) {
     return (
@@ -297,8 +474,8 @@ export default function Fees() {
           <h1 className="text-2xl font-semibold">Fees, billing &amp; receipts</h1>
           <p className="text-sm text-muted-foreground">
             {canManage
-              ? "Issue pupil invoices, record fee payments, and print official school receipts."
-              : "View fee statements, outstanding balances, and official payment receipts."}
+              ? "Batch term billing, scholarships & discounts, installment plans, and official school receipts."
+              : "View fee statements, installment schedules, and official payment receipts."}
           </p>
         </div>
 
@@ -358,7 +535,15 @@ export default function Fees() {
             Receipts &amp; Payments ({allPayments.length})
           </TabsTrigger>
           <TabsTrigger value="invoices">
-            Invoices &amp; Statements ({(invoicesQ.data ?? []).length})
+            Invoices &amp; Batch Billing ({(invoicesQ.data ?? []).length})
+          </TabsTrigger>
+          {canManage ? (
+            <TabsTrigger value="discounts">
+              Scholarships &amp; Discounts ({(studentDiscountsQ.data ?? []).length})
+            </TabsTrigger>
+          ) : null}
+          <TabsTrigger value="installments">
+            Installment Plans ({allInstallments.length})
           </TabsTrigger>
           {canManage ? (
             <TabsTrigger value="structure">Fee Structure</TabsTrigger>
@@ -388,7 +573,7 @@ export default function Fees() {
               {unpaidInvoices.length === 0 ? (
                 <p className="rounded-xl border border-border bg-foreground/[0.02] p-3 text-sm text-muted-foreground">
                   All existing invoices are settled, or no invoices have been billed yet. Open the{" "}
-                  <strong>Invoices &amp; Statements</strong> tab to create a pupil invoice first.
+                  <strong>Invoices &amp; Batch Billing</strong> tab to bill pupils first.
                 </p>
               ) : (
                 <form
@@ -590,187 +775,284 @@ export default function Fees() {
           </section>
         </TabsContent>
 
-        {/* ─── TAB 2: INVOICES & STATEMENTS ───────────────────────────────── */}
+        {/* ─── TAB 2: INVOICES & BATCH BILLING ────────────────────────────── */}
         <TabsContent value="invoices" className="space-y-5">
           {canManage ? (
-            <section className="surface space-y-4 p-5">
-              <div>
-                <h2 className="flex items-center gap-2 text-base font-semibold">
-                  <FileText className="size-4 text-primary" aria-hidden />
-                  Create student invoice
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Bill a pupil for term tuition, PTA levies, uniforms, or arrears.
-                </p>
-              </div>
+            <>
+              {/* One-Click Batch Class / Term Billing */}
+              <section className="surface space-y-4 p-5">
+                <div>
+                  <h2 className="flex items-center gap-2 text-base font-semibold">
+                    <Layers className="size-4 text-primary" aria-hidden />
+                    One-click batch term billing (with automatic scholarships &amp; discounts)
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically generate term invoices for all active pupils in a class (or the entire school) using your configured{" "}
+                    <strong>Fee Structure</strong> rates and deduct any assigned{" "}
+                    <strong>Student Scholarships / Discounts</strong>. Pupils who already have an invoice for the selected term are safely skipped.
+                  </p>
+                </div>
 
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  createInvoiceMut.mutate();
-                }}
-                className="space-y-4"
-              >
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Student" htmlFor="inv-student">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setBatchResult(null);
+                    batchBillMut.mutate();
+                  }}
+                  className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"
+                >
+                  <Field label="Term to bill" htmlFor="batch-term">
                     <NativeSelect
-                      id="inv-student"
-                      value={invStudentId}
-                      onChange={(e) => setInvStudentId(e.target.value)}
+                      id="batch-term"
+                      value={effectiveBatchTermId}
+                      onChange={(e) => setBatchTermId(e.target.value)}
                       required
                     >
-                      <option value="">Select active student...</option>
-                      {(studentsQ.data?.rows ?? []).map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.fullName} ({s.admissionNo}
-                          {s.className ? ` · ${s.className}` : ""})
-                        </option>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-
-                  <Field label="Term (optional)" htmlFor="inv-term">
-                    <NativeSelect
-                      id="inv-term"
-                      value={invTermId}
-                      onChange={(e) => setInvTermId(e.target.value)}
-                    >
-                      <option value="">General / All terms</option>
+                      <option value="">Select term...</option>
                       {currentYearTerms.map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.name}
+                          {t.name} {t.isCurrent ? "(Current)" : ""}
                         </option>
                       ))}
                     </NativeSelect>
                   </Field>
 
-                  <Field label="Due date (optional)" htmlFor="inv-due">
+                  <Field label="Target class" htmlFor="batch-class">
+                    <NativeSelect
+                      id="batch-class"
+                      value={batchClassId}
+                      onChange={(e) => setBatchClassId(e.target.value)}
+                    >
+                      <option value="">Entire school (all classes)</option>
+                      {(classesQ.data ?? []).map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.levelName} {c.section} ({c.studentCount} pupils)
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+
+                  <Field label="Due date (optional)" htmlFor="batch-due">
                     <Input
-                      id="inv-due"
+                      id="batch-due"
                       type="date"
-                      value={invDueOn}
-                      onChange={(e) => setInvDueOn(e.target.value)}
+                      value={batchDueOn}
+                      onChange={(e) => setBatchDueOn(e.target.value)}
                     />
                   </Field>
-                </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Invoice Line Items
-                    </span>
+                  <label className="flex items-center gap-2 pt-6 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={batchIncludeOneOff}
+                      onChange={(e) => setBatchIncludeOneOff(e.target.checked)}
+                    />
+                    Include one-off admission fees
+                  </label>
+
+                  <div className="flex items-end justify-end">
                     <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setInvItems((prev) => [
-                          ...prev,
-                          { kind: "fee", description: "", amount: "" },
-                        ])
-                      }
+                      type="submit"
+                      disabled={batchBillMut.isPending || !effectiveBatchTermId}
                     >
-                      <Plus className="size-3.5" aria-hidden />
-                      Add item
+                      <Layers className="size-4" aria-hidden />
+                      {batchBillMut.isPending
+                        ? "Generating invoices..."
+                        : "Run batch billing"}
                     </Button>
                   </div>
-
-                  {invItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="grid gap-2 sm:grid-cols-[9rem_1fr_10rem_auto]"
-                    >
-                      <NativeSelect
-                        aria-label={`Line item ${idx + 1} type`}
-                        value={item.kind}
-                        onChange={(e) =>
-                          setInvItems((prev) =>
-                            prev.map((row, i) =>
-                              i === idx
-                                ? {
-                                    ...row,
-                                    kind: e.target.value as InvoiceItemKind,
-                                  }
-                                : row,
-                            ),
-                          )
-                        }
-                      >
-                        <option value="fee">Fee</option>
-                        <option value="arrears">Arrears</option>
-                        <option value="discount">Discount (-)</option>
-                      </NativeSelect>
-                      <Input
-                        placeholder="Item description (e.g. Tuition Fee, Uniform, Scholarship)"
-                        value={item.description}
-                        onChange={(e) =>
-                          setInvItems((prev) =>
-                            prev.map((row, i) =>
-                              i === idx
-                                ? { ...row, description: e.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                        required
-                      />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        placeholder={`Amount (${currency})`}
-                        value={item.amount}
-                        onChange={(e) =>
-                          setInvItems((prev) =>
-                            prev.map((row, i) =>
-                              i === idx
-                                ? { ...row, amount: e.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                        required
-                      />
-                      {invItems.length > 1 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Remove line item"
-                          onClick={() =>
-                            setInvItems((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            )
-                          }
-                        >
-                          <Trash2 className="size-4 text-muted-foreground" />
-                        </Button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
+                </form>
 
                 <FormMessage
                   error={
-                    createInvoiceMut.isError
-                      ? friendlyError(createInvoiceMut.error)
+                    batchBillMut.isError
+                      ? friendlyError(batchBillMut.error)
                       : null
                   }
+                  ok={batchResult}
                 />
+              </section>
 
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={createInvoiceMut.isPending}
-                  >
-                    <Check className="size-4" aria-hidden />
-                    {createInvoiceMut.isPending
-                      ? "Issuing invoice..."
-                      : "Issue invoice"}
-                  </Button>
+              {/* Single Custom Invoice Creation */}
+              <section className="surface space-y-4 p-5">
+                <div>
+                  <h2 className="flex items-center gap-2 text-base font-semibold">
+                    <FileText className="size-4 text-primary" aria-hidden />
+                    Create custom individual invoice
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Bill an individual pupil for custom items, uniforms, books, or brought-forward arrears.
+                  </p>
                 </div>
-              </form>
-            </section>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    createInvoiceMut.mutate();
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="Student" htmlFor="inv-student">
+                      <NativeSelect
+                        id="inv-student"
+                        value={invStudentId}
+                        onChange={(e) => setInvStudentId(e.target.value)}
+                        required
+                      >
+                        <option value="">Select active student...</option>
+                        {(studentsQ.data?.rows ?? []).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.fullName} ({s.admissionNo}
+                            {s.className ? ` · ${s.className}` : ""})
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </Field>
+
+                    <Field label="Term (optional)" htmlFor="inv-term">
+                      <NativeSelect
+                        id="inv-term"
+                        value={invTermId}
+                        onChange={(e) => setInvTermId(e.target.value)}
+                      >
+                        <option value="">General / All terms</option>
+                        {currentYearTerms.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </Field>
+
+                    <Field label="Due date (optional)" htmlFor="inv-due">
+                      <Input
+                        id="inv-due"
+                        type="date"
+                        value={invDueOn}
+                        onChange={(e) => setInvDueOn(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Invoice Line Items
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setInvItems((prev) => [
+                            ...prev,
+                            { kind: "fee", description: "", amount: "" },
+                          ])
+                        }
+                      >
+                        <Plus className="size-3.5" aria-hidden />
+                        Add item
+                      </Button>
+                    </div>
+
+                    {invItems.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="grid gap-2 sm:grid-cols-[9rem_1fr_10rem_auto]"
+                      >
+                        <NativeSelect
+                          aria-label={`Line item ${idx + 1} type`}
+                          value={item.kind}
+                          onChange={(e) =>
+                            setInvItems((prev) =>
+                              prev.map((row, i) =>
+                                i === idx
+                                  ? {
+                                      ...row,
+                                      kind: e.target.value as InvoiceItemKind,
+                                    }
+                                  : row,
+                              ),
+                            )
+                          }
+                        >
+                          <option value="fee">Fee</option>
+                          <option value="arrears">Arrears</option>
+                          <option value="discount">Discount (-)</option>
+                        </NativeSelect>
+                        <Input
+                          placeholder="Item description (e.g. Tuition Fee, Uniform, Scholarship)"
+                          value={item.description}
+                          onChange={(e) =>
+                            setInvItems((prev) =>
+                              prev.map((row, i) =>
+                                i === idx
+                                  ? { ...row, description: e.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                          required
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          placeholder={`Amount (${currency})`}
+                          value={item.amount}
+                          onChange={(e) =>
+                            setInvItems((prev) =>
+                              prev.map((row, i) =>
+                                i === idx
+                                  ? { ...row, amount: e.target.value }
+                                  : row,
+                              ),
+                            )
+                          }
+                          required
+                        />
+                        {invItems.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Remove line item"
+                            onClick={() =>
+                              setInvItems((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                          >
+                            <Trash2 className="size-4 text-muted-foreground" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <FormMessage
+                    error={
+                      createInvoiceMut.isError
+                        ? friendlyError(createInvoiceMut.error)
+                        : null
+                    }
+                  />
+
+                  <div className="flex justify-end">
+                    <Button
+                      type="submit"
+                      disabled={createInvoiceMut.isPending}
+                    >
+                      <Check className="size-4" aria-hidden />
+                      {createInvoiceMut.isPending
+                        ? "Issuing invoice..."
+                        : "Issue invoice"}
+                    </Button>
+                  </div>
+                </form>
+              </section>
+            </>
           ) : null}
 
           <section className="surface overflow-hidden">
@@ -837,7 +1119,495 @@ export default function Fees() {
           </section>
         </TabsContent>
 
-        {/* ─── TAB 3: FEE STRUCTURE (Admin/Accountant) ────────────────────── */}
+        {/* ─── TAB 3: SCHOLARSHIPS & DISCOUNTS ────────────────────────────── */}
+        {canManage ? (
+          <TabsContent value="discounts" className="space-y-5">
+            <div className="grid gap-5 lg:grid-cols-2">
+              {/* Define Scholarship / Discount Schemes */}
+              <section className="surface space-y-4 p-5">
+                <div>
+                  <h2 className="flex items-center gap-2 text-base font-semibold">
+                    <Award className="size-4 text-primary" aria-hidden />
+                    Scholarship &amp; discount schemes
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Define reusable percentage or fixed-amount concessions (e.g. Academic Scholarship 50%, Staff Ward 25%, Sibling Discount).
+                  </p>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!discName.trim()) return;
+                    createDiscountMut.mutate();
+                  }}
+                  className="grid gap-3 sm:grid-cols-2"
+                >
+                  <Field label="Scheme name" htmlFor="disc-name">
+                    <Input
+                      id="disc-name"
+                      value={discName}
+                      onChange={(e) => setDiscName(e.target.value)}
+                      placeholder="e.g. Staff Ward Concession"
+                      required
+                    />
+                  </Field>
+
+                  <Field label="Type" htmlFor="disc-type">
+                    <NativeSelect
+                      id="disc-type"
+                      value={discType}
+                      onChange={(e) =>
+                        setDiscType(e.target.value as DiscountType)
+                      }
+                    >
+                      <option value="percent">Percentage (%)</option>
+                      <option value="fixed">Fixed Amount ({currency})</option>
+                    </NativeSelect>
+                  </Field>
+
+                  <Field
+                    label={
+                      discType === "percent"
+                        ? "Percentage (0–100%)"
+                        : `Fixed deduction (${currency})`
+                    }
+                    htmlFor="disc-val"
+                  >
+                    <Input
+                      id="disc-val"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={discType === "percent" ? "100" : undefined}
+                      value={discValue}
+                      onChange={(e) => setDiscValue(e.target.value)}
+                      required
+                    />
+                  </Field>
+
+                  <Field label="Applies to category" htmlFor="disc-cat">
+                    <NativeSelect
+                      id="disc-cat"
+                      value={discCatId}
+                      onChange={(e) => setDiscCatId(e.target.value)}
+                    >
+                      <option value="">All billed fee categories</option>
+                      {(categoriesQ.data ?? []).map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} only
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+
+                  <div className="sm:col-span-2">
+                    <Field label="Reason / policy note (optional)" htmlFor="disc-reason">
+                      <Input
+                        id="disc-reason"
+                        value={discReason}
+                        onChange={(e) => setDiscReason(e.target.value)}
+                        placeholder="e.g. Approved by School Board for 3+ siblings"
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="flex justify-end sm:col-span-2">
+                    <Button
+                      type="submit"
+                      disabled={createDiscountMut.isPending}
+                    >
+                      <Plus className="size-4" aria-hidden />
+                      Save discount scheme
+                    </Button>
+                  </div>
+                </form>
+
+                <FormMessage
+                  error={
+                    createDiscountMut.isError
+                      ? friendlyError(createDiscountMut.error)
+                      : null
+                  }
+                />
+
+                <ul className="divide-y divide-border text-sm">
+                  {(discountsQ.data ?? []).map((d) => (
+                    <li
+                      key={d.id}
+                      className="flex items-center justify-between gap-2 py-2.5"
+                    >
+                      <div>
+                        <div className="font-medium">{d.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {d.type === "percent"
+                            ? `${d.value}% off`
+                            : `${formatMoney(d.value, currency)} off`}{" "}
+                          ·{" "}
+                          {d.appliesToCategoryName
+                            ? `${d.appliesToCategoryName} only`
+                            : "All fees"}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Delete ${d.name}`}
+                        onClick={() => delDiscountMut.mutate(d.id)}
+                      >
+                        <Trash2 className="size-4 text-muted-foreground" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              {/* Assign Scholarship / Discount to Student */}
+              <section className="surface space-y-4 p-5">
+                <div>
+                  <h2 className="text-base font-semibold">
+                    Awarded student scholarships &amp; discounts (
+                    {currentYear?.name ?? "Current year"})
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Assign a scheme to a pupil so batch term billing automatically applies the deduction.
+                  </p>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!assignStudentId || !assignDiscountId) return;
+                    assignDiscMut.mutate();
+                  }}
+                  className="grid gap-3 sm:grid-cols-2"
+                >
+                  <Field label="Student" htmlFor="assign-disc-student">
+                    <NativeSelect
+                      id="assign-disc-student"
+                      value={assignStudentId}
+                      onChange={(e) => setAssignStudentId(e.target.value)}
+                      required
+                    >
+                      <option value="">Select active student...</option>
+                      {(studentsQ.data?.rows ?? []).map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.fullName} ({s.admissionNo})
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+
+                  <Field label="Scholarship / Discount" htmlFor="assign-disc-scheme">
+                    <NativeSelect
+                      id="assign-disc-scheme"
+                      value={assignDiscountId}
+                      onChange={(e) => setAssignDiscountId(e.target.value)}
+                      required
+                    >
+                      <option value="">Select scheme...</option>
+                      {(discountsQ.data ?? []).map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} (
+                          {d.type === "percent"
+                            ? `${d.value}%`
+                            : formatMoney(d.value, currency)}
+                          )
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+
+                  <div className="flex justify-end sm:col-span-2">
+                    <Button type="submit" disabled={assignDiscMut.isPending}>
+                      <Check className="size-4" aria-hidden />
+                      Assign to student
+                    </Button>
+                  </div>
+                </form>
+
+                <FormMessage
+                  error={
+                    assignDiscMut.isError
+                      ? friendlyError(assignDiscMut.error)
+                      : null
+                  }
+                />
+
+                {(studentDiscountsQ.data ?? []).length === 0 ? (
+                  <p className="py-4 text-xs text-muted-foreground">
+                    No student scholarships or discounts assigned for this academic year yet.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border text-sm">
+                    {(studentDiscountsQ.data ?? []).map((sd) => (
+                      <li
+                        key={sd.id}
+                        className="flex items-center justify-between gap-2 py-2.5"
+                      >
+                        <div>
+                          <div className="font-medium">{sd.studentName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {sd.studentAdmissionNo} ·{" "}
+                            <span className="font-semibold text-primary">
+                              {sd.discountName}
+                            </span>{" "}
+                            (
+                            {sd.discountType === "percent"
+                              ? `${sd.discountValue}%`
+                              : formatMoney(sd.discountValue, currency)}
+                            )
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Remove student discount"
+                          onClick={() => removeStudentDiscMut.mutate(sd.id)}
+                        >
+                          <Trash2 className="size-4 text-muted-foreground" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
+          </TabsContent>
+        ) : null}
+
+        {/* ─── TAB 4: INSTALLMENT PLANS ───────────────────────────────────── */}
+        <TabsContent value="installments" className="space-y-5">
+          {canManage ? (
+            <section className="surface space-y-4 p-5">
+              <div>
+                <h2 className="flex items-center gap-2 text-base font-semibold">
+                  <CalendarClock className="size-4 text-primary" aria-hidden />
+                  Create payment installment schedule
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Break an unpaid or partial pupil invoice into agreed installment due dates and amounts.
+                </p>
+              </div>
+
+              {unpaidInvoices.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No unpaid invoices available to attach an installment plan to.
+                </p>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveInstallmentsMut.mutate();
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="max-w-md">
+                    <Field label="Target invoice" htmlFor="inst-invoice">
+                      <NativeSelect
+                        id="inst-invoice"
+                        value={activeInstInvoice?.id ?? ""}
+                        onChange={(e) => setInstInvoiceId(e.target.value)}
+                      >
+                        {unpaidInvoices.map((inv) => (
+                          <option key={inv.id} value={inv.id}>
+                            {inv.number} · {inv.studentName} (Bal:{" "}
+                            {formatMoney(inv.balance, currency)})
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </Field>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Installment Tranches
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setInstRows((prev) => [
+                            ...prev,
+                            { dueOn: "", amount: "" },
+                          ])
+                        }
+                      >
+                        <Plus className="size-3.5" aria-hidden />
+                        Add tranche
+                      </Button>
+                    </div>
+
+                    {instRows.map((row, idx) => (
+                      <div
+                        key={idx}
+                        className="grid gap-2 sm:grid-cols-[12rem_12rem_auto]"
+                      >
+                        <Input
+                          type="date"
+                          value={row.dueOn}
+                          onChange={(e) =>
+                            setInstRows((prev) =>
+                              prev.map((r, i) =>
+                                i === idx
+                                  ? { ...r, dueOn: e.target.value }
+                                  : r,
+                              ),
+                            )
+                          }
+                          required
+                        />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          placeholder={`Amount (${currency})`}
+                          value={row.amount}
+                          onChange={(e) =>
+                            setInstRows((prev) =>
+                              prev.map((r, i) =>
+                                i === idx
+                                  ? { ...r, amount: e.target.value }
+                                  : r,
+                              ),
+                            )
+                          }
+                          required
+                        />
+                        {instRows.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Remove tranche"
+                            onClick={() =>
+                              setInstRows((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                          >
+                            <Trash2 className="size-4 text-muted-foreground" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <FormMessage
+                    error={
+                      saveInstallmentsMut.isError
+                        ? friendlyError(saveInstallmentsMut.error)
+                        : null
+                    }
+                  />
+
+                  <div className="flex justify-end">
+                    <Button
+                      type="submit"
+                      disabled={saveInstallmentsMut.isPending}
+                    >
+                      <Check className="size-4" aria-hidden />
+                      Save installment schedule
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </section>
+          ) : null}
+
+          <section className="surface overflow-hidden">
+            <div className="border-b border-border p-4">
+              <h2 className="text-base font-semibold">
+                Agreed Installment Schedules &amp; Due Dates
+              </h2>
+            </div>
+
+            {allInstallments.length === 0 ? (
+              <p className="p-6 text-sm text-muted-foreground">
+                No installment schedules have been recorded yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-foreground/[0.02] text-xs uppercase tracking-wider text-muted-foreground">
+                      <th className="py-3 pl-4 pr-2">Due Date</th>
+                      <th className="py-3 px-2">Student</th>
+                      <th className="py-3 px-2">Invoice</th>
+                      <th className="py-3 px-2 text-right">Tranche Amount</th>
+                      <th className="py-3 px-2 text-right">Invoice Balance</th>
+                      <th className="py-3 pl-2 pr-4 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {allInstallments.map((inst) => {
+                      const isOverdue =
+                        inst.invoiceStatus !== "paid" &&
+                        inst.dueOn < todayIso;
+                      return (
+                        <tr
+                          key={inst.id}
+                          className="hover:bg-foreground/[0.02]"
+                        >
+                          <td className="py-3 pl-4 pr-2 font-mono tabular-nums">
+                            {inst.dueOn}
+                            {isOverdue ? (
+                              <span className="ml-2 rounded bg-rose-500/15 px-1.5 py-0.5 font-sans text-[10px] font-bold uppercase text-rose-700 dark:text-rose-300">
+                                Overdue
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="py-3 px-2">
+                            <div className="font-medium">
+                              {inst.studentName}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {inst.studentAdmissionNo}
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 font-mono text-xs">
+                            {inst.invoiceNumber}
+                          </td>
+                          <td className="py-3 px-2 text-right font-mono font-semibold tabular-nums">
+                            {formatMoney(inst.amount, currency)}
+                          </td>
+                          <td className="py-3 px-2 text-right font-mono tabular-nums text-muted-foreground">
+                            {formatMoney(inst.invoiceBalance, currency)}
+                          </td>
+                          <td className="py-3 pl-2 pr-4 text-right">
+                            <div className="inline-flex items-center gap-2">
+                              <StatusBadge status={inst.invoiceStatus} />
+                              {canManage ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Delete installment"
+                                  onClick={() =>
+                                    delInstallmentMut.mutate(inst.id)
+                                  }
+                                  className="size-7"
+                                >
+                                  <Trash2 className="size-3.5 text-muted-foreground" />
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </TabsContent>
+
+        {/* ─── TAB 5: FEE STRUCTURE (Admin/Accountant) ────────────────────── */}
         {canManage ? (
           <TabsContent value="structure" className="space-y-5">
             <div className="grid gap-5 lg:grid-cols-2">
