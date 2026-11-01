@@ -60,6 +60,7 @@ export const NAV: NavItem[] = [
   { id: "attendance", label: "Attendance", path: "/attendance", roles: ["school_admin", "principal", "teacher"], built: true },
   { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "parent", "student"], built: true },
   { id: "fees", label: "Fees", path: "/fees", roles: ["school_admin", "accountant", "parent"], built: true },
+  { id: "analytics", label: "Analytics", path: "/analytics", roles: ["school_admin", "principal", "accountant", "hr_officer"], built: true },
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true },
   { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true },
