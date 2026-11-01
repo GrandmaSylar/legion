@@ -6,6 +6,7 @@
 // - Custom uploaded wallpapers are stored in IndexedDB under custom_wallpaper_<userId>.
 // - Signing out or switching users immediately switches to that account's theme,
 //   with unauthenticated screens defaulting safely to the school brand theme.
+// - By default, there is no background wallpaper image ("none").
 
 import {
   createContext,
@@ -44,6 +45,16 @@ export interface ThemePresetOption {
 }
 
 export const THEME_PRESETS: ThemePresetOption[] = [
+  {
+    id: "minimal-amoled",
+    name: "Default Clean (No Wallpaper)",
+    mode: "dark",
+    surface: "glass",
+    accent: "#e8562a",
+    wallpaperType: "none",
+    wallpaperPresetId: "sedela",
+    bgDim: 0.7,
+  },
   {
     id: "sedela-glass",
     name: "Sedela Glass",
@@ -95,22 +106,12 @@ export const THEME_PRESETS: ThemePresetOption[] = [
     bgDim: 0.6,
   },
   {
-    id: "minimal-amoled",
-    name: "Pure AMOLED",
-    mode: "dark",
-    surface: "flat",
-    accent: "#e8562a",
-    wallpaperType: "none",
-    wallpaperPresetId: "sedela",
-    bgDim: 0.7,
-  },
-  {
     id: "frosted-light",
     name: "Frosted Light",
     mode: "light",
     surface: "glass",
     accent: "#2563eb",
-    wallpaperType: "preset",
+    wallpaperType: "none",
     wallpaperPresetId: "ocean",
     bgDim: 0.25,
   },
@@ -214,7 +215,7 @@ export function ThemeProvider({
 
   const resolveWallpaperType = (uid: string | null, cloud: UserThemeConfig | null): WallpaperType => {
     const saved = read("wallpaperType", uid) as WallpaperType | null;
-    return saved || cloud?.wallpaperType || "preset";
+    return saved || cloud?.wallpaperType || "none";
   };
 
   const resolveWallpaperPresetId = (uid: string | null, cloud: UserThemeConfig | null): string => {
@@ -432,21 +433,19 @@ export function ThemeProvider({
   const removeCustomWallpaper = useCallback(async () => {
     await deleteCustomWallpaper(userId);
     setCustomWallpaper(null);
-    setWallpaperPresetIdState("sedela");
-    setWallpaperTypeState("preset");
-    write("wallpaperPresetId", "sedela", userId);
-    write("wallpaperType", "preset", userId);
+    setWallpaperTypeState("none");
+    write("wallpaperType", "none", userId);
 
     queueCloudSync({
       mode,
       surface,
       accent: customAccent,
-      wallpaperType: "preset",
-      wallpaperPresetId: "sedela",
+      wallpaperType: "none",
+      wallpaperPresetId,
       bgDim,
       bgBlur,
     });
-  }, [userId, mode, surface, customAccent, bgDim, bgBlur, queueCloudSync]);
+  }, [userId, mode, surface, customAccent, wallpaperPresetId, bgDim, bgBlur, queueCloudSync]);
 
   const extractAndApplyColor = useCallback(
     async (imageUrl?: string) => {
@@ -548,8 +547,8 @@ export function ThemeProvider({
     write("surface", "glass", userId);
     setCustomAccent(null);
     removeKey("accent", userId);
-    setWallpaperTypeState("preset");
-    write("wallpaperType", "preset", userId);
+    setWallpaperTypeState("none");
+    write("wallpaperType", "none", userId);
     setWallpaperPresetIdState("sedela");
     write("wallpaperPresetId", "sedela", userId);
     setBgDimState(0.55);
@@ -561,7 +560,7 @@ export function ThemeProvider({
       mode: "dark",
       surface: "glass",
       accent: null,
-      wallpaperType: "preset",
+      wallpaperType: "none",
       wallpaperPresetId: "sedela",
       bgDim: 0.55,
       bgBlur: 0,
@@ -625,7 +624,7 @@ export function ThemeProvider({
 
   return (
     <ThemeContext.Provider value={value}>
-      {/* Background wallpaper layer: fixed behind all content */}
+      {/* Background wallpaper layer: fixed behind all content only when explicitly enabled */}
       {wallpaperType !== "none" && activeWallpaperUrl ? (
         <div
           aria-hidden="true"
