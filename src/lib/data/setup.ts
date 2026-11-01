@@ -315,3 +315,78 @@ export async function deleteClass(id: string) {
 export async function deleteSubject(id: string) {
   deleted(await supabase.from("subjects").delete().eq("id", id).select("id"));
 }
+
+// ─── School / Institution details (displayed on receipts, invoices & reports) ─
+
+export interface InstitutionDetails {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  motto: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  taxOrRegNo: string;
+  currency: string;
+  brandPrimary: string | null;
+  receiptFooter: string;
+  bankDetails: string;
+}
+
+export async function getInstitutionDetails(): Promise<InstitutionDetails> {
+  const r = check(
+    await supabase
+      .from("schools")
+      .select(
+        "id, name, logo_url, motto, address, phone, email, website, tax_or_reg_no, currency, brand_colors, receipt_footer, bank_details",
+      )
+      .single(),
+  );
+  const brand = (r.brand_colors ?? {}) as { primary?: string };
+  return {
+    id: r.id,
+    name: r.name ?? "",
+    logoUrl: r.logo_url ?? null,
+    motto: r.motto ?? "",
+    address: r.address ?? "",
+    phone: r.phone ?? "",
+    email: r.email ?? "",
+    website: r.website ?? "",
+    taxOrRegNo: r.tax_or_reg_no ?? "",
+    currency: r.currency ?? "GHS",
+    brandPrimary: brand.primary ?? null,
+    receiptFooter: r.receipt_footer ?? "",
+    bankDetails: r.bank_details ?? "",
+  };
+}
+
+export async function updateInstitutionDetails(
+  id: string,
+  input: Omit<InstitutionDetails, "id">,
+): Promise<void> {
+  const brandColors: Record<string, string> = {};
+  if (input.brandPrimary && input.brandPrimary.trim()) {
+    brandColors.primary = input.brandPrimary.trim();
+  }
+  check(
+    await supabase
+      .from("schools")
+      .update({
+        name: input.name.trim(),
+        logo_url: input.logoUrl || null,
+        motto: input.motto.trim() || null,
+        address: input.address.trim() || null,
+        phone: input.phone.trim() || null,
+        email: input.email.trim() || null,
+        website: input.website.trim() || null,
+        tax_or_reg_no: input.taxOrRegNo.trim() || null,
+        currency: input.currency.trim() || "GHS",
+        brand_colors: brandColors,
+        receipt_footer: input.receiptFooter.trim() || null,
+        bank_details: input.bankDetails.trim() || null,
+      })
+      .eq("id", id),
+  );
+
+}
