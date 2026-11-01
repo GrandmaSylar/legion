@@ -20,6 +20,7 @@ const AddStudent = lazy(() => import("./pages/students/AddStudent"));
 const StudentDetail = lazy(() => import("./pages/students/StudentDetail"));
 const Attendance = lazy(() => import("./pages/attendance/Attendance"));
 const Grades = lazy(() => import("./pages/grades/Grades"));
+const Notices = lazy(() => import("./pages/notices/Notices"));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -110,6 +111,8 @@ export default function App() {
                             <Attendance />
                           ) : item.id === "grades" ? (
                             <Grades />
+                          ) : item.id === "notices" ? (
+                            <Notices />
                           ) : item.id === "users" ? (
                             <Users />
                           ) : (
