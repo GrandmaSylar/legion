@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity, ArrowUpRight, CalendarCheck, ChevronRight, ClipboardCheck, GraduationCap, Settings, UserCog,
+  Activity, ArrowUpRight, Bell, CalendarCheck, ChevronRight, ClipboardCheck, GraduationCap, Settings, UserCog,
   UserPlus, UserRoundCog, Users, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
@@ -11,6 +11,17 @@ import { getDashboardStats, getRecentActivity } from "../../lib/data/dashboard";
 import { listAcademicYears, listClasses } from "../../lib/data/setup";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../components/ui/utils";
+import { PortalDashboard } from "./PortalDashboard";
+
+const STAFF_ROLES: AppRole[] = [
+  "school_admin",
+  "principal",
+  "teacher",
+  "hr_officer",
+  "accountant",
+  "librarian",
+  "receptionist",
+];
 
 // ─── Stat cards ──────────────────────────────────────────────────────────────
 
@@ -133,6 +144,7 @@ interface QuickAction { label: string; hint: string; to: string; icon: LucideIco
 const QUICK_ACTIONS: QuickAction[] = [
   { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, roles: ["school_admin", "principal", "teacher"], module: "attendance" },
   { label: "Gradebook & reports", hint: "Enter marks and print report cards", to: "/grades", icon: GraduationCap, roles: ["school_admin", "principal", "teacher", "parent", "student"], module: "grades" },
+  { label: "Notice board", hint: "School and class announcements", to: "/notices", icon: Bell, roles: [...STAFF_ROLES, "parent", "student"], module: "notices" },
   { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, roles: ["school_admin", "receptionist"], module: "students" },
   { label: "View students", hint: "Search the register", to: "/students", icon: Users, roles: ["principal", "teacher", "accountant"], module: "students" },
   { label: "Add user", hint: "Create a staff or parent login", to: "/users/new", icon: UserRoundCog, roles: ["school_admin"], module: "users" },
@@ -264,7 +276,7 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export default function Dashboard() {
+function StaffDashboard() {
   const { profile, roles } = useAuth();
   const isAdmin = hasAnyRole(roles, ["school_admin"]);
   const { data, isError, refetch } = useQuery({
@@ -324,4 +336,13 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+export default function Dashboard() {
+  const { roles } = useAuth();
+  const isStaff = hasAnyRole(roles, STAFF_ROLES);
+  if (!isStaff && hasAnyRole(roles, ["parent", "student"])) {
+    return <PortalDashboard />;
+  }
+  return <StaffDashboard />;
 }
