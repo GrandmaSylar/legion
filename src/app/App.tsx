@@ -64,7 +64,15 @@ function RequireRole({ allowed, module, children }: { allowed: string[]; module?
 // Themed with the school's brand colour once the profile is known.
 function Themed({ children }: { children: ReactElement }) {
   const { profile } = useAuth();
-  return <ThemeProvider accent={profile?.brandPrimary}>{children}</ThemeProvider>;
+  return (
+    <ThemeProvider
+      userId={profile?.id}
+      cloudTheme={profile?.theme}
+      accent={profile?.brandPrimary}
+    >
+      {children}
+    </ThemeProvider>
+  );
 }
 
 export default function App() {
