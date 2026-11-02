@@ -1,10 +1,14 @@
-import { Suspense, lazy, type ReactElement } from "react";
+import { Suspense, lazy, useEffect, type ReactElement } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "../lib/auth/AuthProvider";
 import { NAV, hasAnyRole } from "../lib/permissions";
 import { Button } from "./components/ui/button";
 import { ThemeProvider } from "../theme/ThemeProvider";
+import {
+  hydratePersistedQueryCache,
+  subscribeQueryCachePersistence,
+} from "../lib/queryPersistence";
 import { Shell } from "./layout/Shell";
 import ComingSoon from "./pages/ComingSoon";
 
@@ -26,7 +30,14 @@ const Fees = lazy(() => import("./pages/fees/Fees"));
 const Analytics = lazy(() => import("./pages/analytics/Analytics"));
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 2 * 60_000,
+      gcTime: 30 * 60_000,
+    },
+  },
 });
 
 function Splash() {
@@ -70,6 +81,10 @@ function RequireRole({ allowed, module, children }: { allowed: string[]; module?
 // Themed with the school's brand colour once the profile is known.
 function Themed({ children }: { children: ReactElement }) {
   const { profile } = useAuth();
+  hydratePersistedQueryCache(queryClient, profile?.id);
+  useEffect(() => {
+    return subscribeQueryCachePersistence(queryClient, profile?.id);
+  }, [profile?.id]);
   return (
     <ThemeProvider
       userId={profile?.id}

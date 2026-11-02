@@ -37,6 +37,35 @@ async function count(query: PromiseLike<{ count: number | null; error: unknown }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   const day = today();
+  const monthStart = firstOfMonth();
+  const fast = await supabase.rpc("get_dashboard_stats_fast", {
+    p_today: day,
+    p_first_of_month: monthStart,
+  });
+  if (!fast.error && fast.data) {
+    const d = fast.data as {
+      activeStudents?: number;
+      admittedThisMonth?: number;
+      staff?: number;
+      teachingStaff?: number;
+      classes?: number;
+      yearName?: string | null;
+      markedToday?: number;
+      presentToday?: number;
+    };
+    return {
+      activeStudents: Number(d.activeStudents ?? 0),
+      admittedThisMonth: Number(d.admittedThisMonth ?? 0),
+      staff: Number(d.staff ?? 0),
+      teachingStaff: Number(d.teachingStaff ?? 0),
+      classes: Number(d.classes ?? 0),
+      yearName: d.yearName ?? null,
+      attendanceToday: {
+        marked: Number(d.markedToday ?? 0),
+        present: Number(d.presentToday ?? 0),
+      },
+    };
+  }
   const [activeStudents, admittedThisMonth, staff, teachingStaff, classes, marked, present, year] = await Promise.all([
     count(supabase.from("students").select("id", { count: "exact", head: true }).eq("status", "active")),
     count(supabase.from("students").select("id", { count: "exact", head: true }).gte("admitted_on", firstOfMonth())),
