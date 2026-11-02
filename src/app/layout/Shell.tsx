@@ -5,11 +5,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
   Bell, BarChart3, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Palette, Plus, Search, Settings,
-  Sparkles, Square, Sun, UserCog, UserRoundCog, Users, Wallet, type LucideIcon,
+  Sparkles, Square, Sun, UserCog, UserRoundCog, Users, Wallet, WifiOff, Download, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
 import { useTheme } from "../../theme/ThemeProvider";
+import { usePwaStatus } from "../../lib/pwa";
 import { ThemeCustomizerModal } from "../../theme/ThemeCustomizer";
 import { StudentAvatar } from "../components/StudentAvatar";
 import { Button } from "../components/ui/button";
@@ -284,6 +285,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
 export function Shell() {
   const { profile, roles } = useAuth();
   const { surface, setSurface } = useTheme();
+  const { isOnline, canInstall, draftCount, installApp } = usePwaStatus();
   const navigate = useNavigate();
   const location = useLocation();
   const items = navFor(roles, profile?.modules ?? null);
@@ -346,6 +348,35 @@ export function Shell() {
             ) : null}
 
             <div className="flex flex-wrap items-center gap-2">
+              {!isOnline ? (
+                <Link
+                  to="/attendance"
+                  title="Offline mode active — attendance drafts are stored on this device until connection returns"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300"
+                >
+                  <WifiOff className="size-3.5" aria-hidden />
+                  <span>Offline{draftCount > 0 ? ` · ${draftCount} draft${draftCount === 1 ? "" : "s"}` : ""}</span>
+                </Link>
+              ) : draftCount > 0 ? (
+                <Link
+                  to="/attendance"
+                  title="You have unsaved local attendance drafts ready to sync"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+                >
+                  <span>{draftCount} local draft{draftCount === 1 ? "" : "s"}</span>
+                </Link>
+              ) : null}
+              {canInstall ? (
+                <button
+                  type="button"
+                  onClick={() => void installApp()}
+                  title="Install app for offline access"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-foreground/5 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Download className="size-3.5" aria-hidden />
+                  <span className="hidden sm:inline">Install App</span>
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setSurface(surface === "glass" ? "flat" : "glass")}

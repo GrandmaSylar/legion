@@ -1,0 +1,36 @@
+{
+  "name": "School Management System",
+  "short_name": "School SMS",
+  "description": "Pre-school to Basic 9 School Management System with offline-ready attendance, gradebook, BECE analytics, and finance.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#c2410c",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mark Attendance",
+      "short_name": "Attendance",
+      "url": "/attendance"
+    },
+    {
+      "name": "Gradebook & BECE",
+      "short_name": "Grades",
+      "url": "/grades"
+    },
+    {
+      "name": "Fees & Finance",
+      "short_name": "Finance",
+      "url": "/fees"
+    }
+  ]
+}
+
