@@ -115,10 +115,6 @@ export default function Login() {
           {/* Left Column: Brand Showcase (Large displays) */}
           <section className="hidden space-y-8 lg:col-span-7 lg:block lg:pr-8">
             <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-xs font-semibold text-primary backdrop-blur-xs">
-                <Award className="size-3.5" aria-hidden />
-                <span>Basic 1–9 &amp; BECE Operating System</span>
-              </div>
 
               <h1 className="text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl lg:text-5xl">
                 Unified intelligence for modern schools.
