@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
   Bell, BarChart3, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Palette, Plus, Search, Settings,
-  Sparkles, Square, Sun, UserCog, UserRoundCog, Users, Wallet, WifiOff, Download, type LucideIcon,
+  Layers, Square, Sun, UserCog, UserRoundCog, Users, Wallet, WifiOff, Download, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
@@ -398,7 +398,7 @@ export function Shell() {
                 title={surface === "glass" ? "Glass surfaces on" : "Flat surfaces on"}
                 className="grid size-9 place-items-center rounded-full border border-border bg-foreground/5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
               >
-                {surface === "glass" ? <Sparkles className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}
+                {surface === "glass" ? <Layers className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}
               </button>
               <ThemeSwitch />
               <button

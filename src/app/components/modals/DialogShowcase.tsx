@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, AlertTriangle, CheckCircle2, HelpCircle, ShieldAlert, Sparkles } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, HelpCircle, ShieldAlert } from "lucide-react";
 import { Button } from "../ui/button";
 import { useActionDialog } from "./ActionDialogContext";
 import { LegionCrest } from "../brand/LegionCrest";
@@ -153,7 +153,7 @@ export function DialogShowcase() {
 
       {lastAction ? (
         <div className="flex items-center gap-2 rounded-xl border border-border/80 bg-foreground/[0.02] px-3 py-2 text-xs text-muted-foreground font-mono">
-          <Sparkles className="size-3.5 text-primary" aria-hidden />
+          <CheckCircle2 className="size-3.5 text-primary" aria-hidden />
           <span>Last Window Result:</span>
           <span className="font-semibold text-foreground truncate">{lastAction}</span>
         </div>
@@ -161,3 +161,4 @@ export function DialogShowcase() {
     </div>
   );
 }
+

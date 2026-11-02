@@ -6,11 +6,11 @@ import {
   Palette,
   RotateCcw,
   Sliders,
-  Sparkles,
+  Layers,
   Sun,
   Trash2,
   Upload,
-  Wand2,
+  Pipette,
   X,
 } from "lucide-react";
 import {
@@ -170,7 +170,7 @@ export function ThemeCustomizerModal({
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            <Sparkles className="size-3.5" />
+            <Sliders className="size-3.5" />
             Curated Presets
           </button>
           <button
@@ -209,7 +209,7 @@ export function ThemeCustomizerModal({
               className="mb-4 flex items-center justify-between rounded-xl bg-primary/15 px-3 py-2 text-xs font-medium text-primary shadow-sm"
             >
               <span className="flex items-center gap-1.5">
-                <Wand2 className="size-3.5" /> {matchedToast}
+                <Pipette className="size-3.5" /> {matchedToast}
               </span>
             </div>
           ) : null}
@@ -331,7 +331,7 @@ export function ThemeCustomizerModal({
                           : "border-border hover:bg-foreground/5 text-muted-foreground",
                       )}
                     >
-                      <Sparkles className="size-3.5" />
+                      <Layers className="size-3.5" />
                       Frosted Glass
                     </button>
                     <button
@@ -411,7 +411,7 @@ export function ThemeCustomizerModal({
                       disabled={extracting}
                       className="text-xs"
                     >
-                      <Wand2 className="size-3.5" />
+                      <Pipette className="size-3.5" />
                       {extracting ? "Sampling..." : "Extract from wallpaper"}
                     </Button>
                   ) : null}
@@ -550,7 +550,7 @@ export function ThemeCustomizerModal({
                           onClick={handleExtractClick}
                           disabled={extracting}
                         >
-                          <Wand2 className="size-3.5" />
+                          <Pipette className="size-3.5" />
                           Auto-accent
                         </Button>
                       </div>

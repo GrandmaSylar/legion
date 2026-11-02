@@ -11,7 +11,7 @@ import {
   Mail,
   Moon,
   ShieldCheck,
-  Sparkles,
+  Award,
   Sun,
   Wifi,
 } from "lucide-react";
@@ -116,7 +116,7 @@ export default function Login() {
           <section className="hidden space-y-8 lg:col-span-7 lg:block lg:pr-8">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-xs font-semibold text-primary backdrop-blur-xs">
-                <Sparkles className="size-3.5" aria-hidden />
+                <Award className="size-3.5" aria-hidden />
                 <span>Basic 1–9 &amp; BECE Operating System</span>
               </div>
 
@@ -158,7 +158,7 @@ export default function Login() {
               <div className="surface p-4 transition-transform hover:-translate-y-0.5">
                 <div className="flex items-center gap-3">
                   <div className="grid size-10 place-items-center rounded-xl bg-primary/15 text-primary">
-                    <Sparkles className="size-5" />
+                    <Award className="size-5" />
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">WAEC 10-Digit Indices</h3>

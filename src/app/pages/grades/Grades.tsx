@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
-  Sparkles,
+  GraduationCap,
   Trash2,
   Users,
 } from "lucide-react";
@@ -460,7 +460,7 @@ function SubjectGradebookSection({
                   disabled={createPresetMutation.isPending}
                   onClick={() => createPresetMutation.mutate()}
                 >
-                  <Sparkles className="size-3.5" aria-hidden />
+                  <GraduationCap className="size-3.5" aria-hidden />
                   {createPresetMutation.isPending
                     ? "Creating..."
                     : "Use standard GES assessments (CA 30 + Exam 70)"}
@@ -1354,7 +1354,7 @@ export default function GradesPage() {
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Sparkles className="size-4" aria-hidden />
+            <Award className="size-4" aria-hidden />
             BECE &amp; Mock Analytics
           </button>
         </div>
