@@ -48,6 +48,7 @@ import { cn } from "../../components/ui/utils";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
 import { StudentAvatar, usePhotoUrls } from "../../components/StudentAvatar";
 import { ReportCardView } from "./ReportCardView";
+import { BeceCandidatesSection } from "./BeceCandidatesSection";
 
 function matchBand(total: number, bands: GradeBand[]): { grade: string; remark: string } | null {
   for (const b of bands) {
@@ -1150,7 +1151,8 @@ export default function GradesPage() {
   const { profile, roles } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const isStaff = hasAnyRole(roles, ["school_admin", "principal", "teacher"]);
+  const isStaff = hasAnyRole(roles, ["school_admin", "principal", "teacher", "receptionist"]);
+  const canEditBeceRegistration = hasAnyRole(roles, ["school_admin", "receptionist"]);
   const isAdmin = hasAnyRole(roles, ["school_admin"]);
   const isPrincipal = hasAnyRole(roles, ["principal"]);
   const isTeacher = hasAnyRole(roles, ["teacher"]);
@@ -1285,7 +1287,7 @@ export default function GradesPage() {
   const updateParams = (patch: {
     classId?: string;
     termId?: string;
-    view?: "subject" | "broadsheet";
+    view?: "subject" | "broadsheet" | "bece";
   }) => {
     setSearchParams(
       (prev) => {
@@ -1321,7 +1323,7 @@ export default function GradesPage() {
             onClick={() => updateParams({ view: "subject" })}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm",
-              paramView !== "broadsheet"
+              paramView !== "broadsheet" && paramView !== "bece"
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
@@ -1341,6 +1343,19 @@ export default function GradesPage() {
           >
             <Award className="size-4" aria-hidden />
             Broadsheet &amp; Report cards
+          </button>
+          <button
+            type="button"
+            onClick={() => updateParams({ view: "bece" })}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm",
+              paramView === "bece"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Sparkles className="size-4" aria-hidden />
+            BECE &amp; Mock Analytics
           </button>
         </div>
       </div>
@@ -1403,7 +1418,7 @@ export default function GradesPage() {
               </NativeSelect>
             </Field>
 
-            {paramView !== "broadsheet" ? (
+            {paramView !== "broadsheet" && paramView !== "bece" ? (
               <Field label="Subject" htmlFor="grades-subject">
                 <NativeSelect
                   id="grades-subject"
@@ -1429,7 +1444,19 @@ export default function GradesPage() {
       </section>
 
       {selectedClassId && selectedTerm ? (
-        paramView === "broadsheet" ? (
+        paramView === "bece" ? (
+          <BeceCandidatesSection
+            classId={selectedClassId}
+            termId={selectedTerm.id}
+            defaultExamYear={
+              currentYear?.endDate
+                ? Number.parseInt(currentYear.endDate.slice(0, 4), 10) ||
+                  new Date().getFullYear()
+                : new Date().getFullYear()
+            }
+            canEditRegistration={canEditBeceRegistration}
+          />
+        ) : paramView === "broadsheet" ? (
           <BroadsheetSection
             classId={selectedClassId}
             termId={selectedTerm.id}
