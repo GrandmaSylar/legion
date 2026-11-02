@@ -57,6 +57,7 @@ import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { ReceiptView } from "./ReceiptView";
+import { ExpensesTab } from "./ExpensesTab";
 
 function formatMoney(amount: number, currency = "GHS"): string {
   return `${currency} ${amount.toLocaleString(undefined, {
@@ -84,6 +85,9 @@ function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
 export default function Fees() {
   const { roles } = useAuth();
   const canManage = hasAnyRole(roles, ["school_admin", "accountant"]);
+  const canAccessExpenses = hasAnyRole(roles, ["school_admin", "accountant", "principal"]);
+  const canApproveExpenses = hasAnyRole(roles, ["school_admin", "principal"]);
+  const canReadInvoices = hasAnyRole(roles, ["school_admin", "accountant", "parent"]);
   const isAdmin = hasAnyRole(roles, ["school_admin"]);
   const qc = useQueryClient();
 
@@ -529,7 +533,7 @@ export default function Fees() {
         </section>
       </div>
 
-      <Tabs defaultValue="receipts" className="space-y-4">
+      <Tabs defaultValue={canReadInvoices ? "receipts" : "expenses"} className="space-y-4">
         <TabsList className="h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="receipts">
             Receipts &amp; Payments ({allPayments.length})
@@ -547,6 +551,9 @@ export default function Fees() {
           </TabsTrigger>
           {canManage ? (
             <TabsTrigger value="structure">Fee Structure</TabsTrigger>
+          ) : null}
+          {canAccessExpenses ? (
+            <TabsTrigger value="expenses">Expenses &amp; Approvals</TabsTrigger>
           ) : null}
         </TabsList>
 
@@ -1797,6 +1804,17 @@ export default function Fees() {
                 </ul>
               </section>
             </div>
+          </TabsContent>
+        ) : null}
+
+        {canAccessExpenses ? (
+          <TabsContent value="expenses">
+            <ExpensesTab
+              currency={currency}
+              terms={currentYearTerms}
+              canManageFinance={canManage}
+              canApproveExpenses={canApproveExpenses}
+            />
           </TabsContent>
         ) : null}
       </Tabs>

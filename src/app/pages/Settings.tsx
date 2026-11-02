@@ -5,14 +5,15 @@ import ClassesTab from "./settings/ClassesTab";
 import SubjectsTab from "./settings/SubjectsTab";
 import GradingTab from "./settings/GradingTab";
 import TimetableTab from "./settings/TimetableTab";
+import AuditLogTab from "./settings/AuditLogTab";
 
 export default function Settings() {
   return (
     <div className="w-full space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold">School setup</h1>
+        <h1 className="text-2xl font-semibold">School setup &amp; security</h1>
         <p className="text-sm text-muted-foreground">
-          Institution details, receipt branding, academic years, classes, subjects, grading scales and timetables.
+          Institution details, receipt branding, academic years, classes, subjects, grading scales, timetables and security audit logs.
         </p>
       </div>
 
@@ -25,6 +26,7 @@ export default function Settings() {
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="grading">Grading</TabsTrigger>
             <TabsTrigger value="timetable">Timetable</TabsTrigger>
+            <TabsTrigger value="audit">Security &amp; Audit Log</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="institution"><InstitutionTab /></TabsContent>
@@ -33,6 +35,7 @@ export default function Settings() {
         <TabsContent value="subjects"><SubjectsTab /></TabsContent>
         <TabsContent value="grading"><GradingTab /></TabsContent>
         <TabsContent value="timetable"><TimetableTab /></TabsContent>
+        <TabsContent value="audit"><AuditLogTab /></TabsContent>
       </Tabs>
     </div>
   );

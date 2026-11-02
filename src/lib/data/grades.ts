@@ -693,7 +693,64 @@ const CORE_SUBJECT_NAMES = new Set([
   "social studies",
 ]);
 
-function computeBestSixAggregate(
+export function scoreToBeceStanine(total: number): { grade: number; remark: string } {
+  if (total >= 80) return { grade: 1, remark: "Highest" };
+  if (total >= 70) return { grade: 2, remark: "Higher" };
+  if (total >= 65) return { grade: 3, remark: "High" };
+  if (total >= 60) return { grade: 4, remark: "High Average" };
+  if (total >= 55) return { grade: 5, remark: "Average" };
+  if (total >= 50) return { grade: 6, remark: "Low Average" };
+  if (total >= 45) return { grade: 7, remark: "Low" };
+  if (total >= 40) return { grade: 8, remark: "Lower" };
+  return { grade: 9, remark: "Lowest" };
+}
+
+export function isCoreBeceSubject(subjectName: string): boolean {
+  const lower = subjectName.trim().toLowerCase();
+  if (CORE_SUBJECT_NAMES.has(lower)) return true;
+  return (
+    lower.includes("english") ||
+    lower === "maths" ||
+    lower.includes("mathematics") ||
+    lower.includes("science") ||
+    lower.includes("social studies")
+  );
+}
+
+export function computeBestSixAggregate(
+  subjects: BroadsheetStudentSubject[],
+): number | null {
+  const numericGrades = subjects
+    .map((s) => {
+      const parsed = s.grade ? Number.parseInt(s.grade, 10) : Number.NaN;
+      const gradeNum =
+        Number.isFinite(parsed) && parsed >= 1 && parsed <= 9
+          ? parsed
+          : s.total !== null
+            ? scoreToBeceStanine(s.total).grade
+            : Number.NaN;
+      return {
+        name: s.subjectName,
+        isCore: isCoreBeceSubject(s.subjectName),
+        gradeNum,
+      };
+    })
+    .filter((g) => Number.isFinite(g.gradeNum) && g.gradeNum >= 1 && g.gradeNum <= 9);
+
+  if (numericGrades.length === 0) return null;
+
+  const cores = numericGrades
+    .filter((g) => g.isCore)
+    .sort((a, b) => a.gradeNum - b.gradeNum);
+  const others = numericGrades
+    .filter((g) => !g.isCore)
+    .sort((a, b) => a.gradeNum - b.gradeNum);
+
+  const chosen = [...cores.slice(0, 4), ...others].slice(0, 6);
+  return chosen.reduce((sum, g) => sum + g.gradeNum, 0);
+}
+
+function _legacyBestSixUnused(
   subjects: BroadsheetStudentSubject[],
 ): number | null {
   const numericGrades = subjects
@@ -1133,4 +1190,100 @@ export async function getStudentGradesOverview(
   }
 
   return out;
+}
+
+// ─── BECE Candidate Registration & Mock Exam Analytics ───────────────────────
+
+export type BeceRegistrationStatus = "pending" | "registered" | "withdrawn";
+
+export interface BeceRegistrationRow {
+  id: string;
+  studentId: string;
+  examYear: number;
+  indexNumber: string | null;
+  centreNumber: string | null;
+  registrationStatus: BeceRegistrationStatus;
+  officialAggregate: number | null;
+  enteredOn: string | null;
+}
+
+export async function listBeceRegistrations(
+  examYear: number,
+): Promise<BeceRegistrationRow[]> {
+  const rows = check(
+    await supabase
+      .from("bece_registrations")
+      .select(
+        "id, student_id, exam_year, index_number, centre_number, registration_status, official_aggregate, entered_on",
+      )
+      .eq("exam_year", examYear),
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    studentId: r.student_id,
+    examYear: Number(r.exam_year),
+    indexNumber: r.index_number ?? null,
+    centreNumber: r.centre_number ?? null,
+    registrationStatus:
+      (r.registration_status as BeceRegistrationStatus | null) ?? "registered",
+    officialAggregate:
+      r.official_aggregate !== null && r.official_aggregate !== undefined
+        ? Number(r.official_aggregate)
+        : null,
+    enteredOn: r.entered_on ?? null,
+  }));
+}
+
+export async function upsertBeceRegistration(input: {
+  studentId: string;
+  examYear: number;
+  indexNumber: string | null;
+  centreNumber?: string | null;
+  registrationStatus?: BeceRegistrationStatus;
+  officialAggregate?: number | null;
+}): Promise<void> {
+  const cleanIdx = input.indexNumber?.trim() || null;
+  const cleanCentre = input.centreNumber?.trim() || null;
+  check(
+    await supabase.from("bece_registrations").upsert(
+      {
+        student_id: input.studentId,
+        exam_year: input.examYear,
+        index_number: cleanIdx,
+        centre_number: cleanCentre,
+        registration_status: input.registrationStatus ?? "registered",
+        official_aggregate: input.officialAggregate ?? null,
+      },
+      { onConflict: "student_id,exam_year" },
+    ),
+  );
+}
+
+export async function bulkAssignBeceIndexNumbers(input: {
+  examYear: number;
+  centreNumber: string;
+  studentIdsInOrder: string[];
+  startingSerial?: number;
+}): Promise<number> {
+  const centre = input.centreNumber.trim().replace(/\s+/g, "");
+  if (!centre) throw new Error("Enter a WAEC school/centre code first.");
+  const start = Math.max(1, input.startingSerial ?? 1);
+  const rows = input.studentIdsInOrder.map((studentId, idx) => {
+    const serial = String(start + idx).padStart(3, "0");
+    return {
+      student_id: studentId,
+      exam_year: input.examYear,
+      centre_number: centre,
+      index_number: `${centre}${serial}`,
+      registration_status: "registered" as const,
+    };
+  });
+  if (rows.length === 0) return 0;
+  check(
+    await supabase
+      .from("bece_registrations")
+      .upsert(rows, { onConflict: "student_id,exam_year" }),
+  );
+  return rows.length;
 }

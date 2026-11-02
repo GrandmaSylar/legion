@@ -598,3 +598,159 @@ export function extractPaymentsFromInvoices(
   }
   return rows.sort((a, b) => b.receiptNo.localeCompare(a.receiptNo));
 }
+
+// ─── Expense Tracking & Approval Workflow ────────────────────────────────────
+
+export type ExpenseStatus = "pending" | "approved" | "rejected" | "paid";
+
+export interface ExpenseCategoryRow {
+  id: string;
+  name: string;
+  budgetLimit: number | null;
+  isActive: boolean;
+}
+
+export interface ExpenseRow {
+  id: string;
+  voucherNo: string;
+  expenseCategoryId: string;
+  categoryName: string;
+  termId: string | null;
+  termName: string | null;
+  title: string;
+  vendor: string | null;
+  amount: number;
+  incurredOn: string;
+  paymentMethod: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  receiptUrl: string | null;
+  status: ExpenseStatus;
+  requestedByName: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export async function listExpenseCategories(): Promise<ExpenseCategoryRow[]> {
+  const { data, error } = await supabase
+    .from("expense_categories")
+    .select("id, name, budget_limit, is_active")
+    .order("name");
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    budgetLimit: r.budget_limit !== null ? Number(r.budget_limit) : null,
+    isActive: r.is_active,
+  }));
+}
+
+export async function createExpenseCategory(input: {
+  name: string;
+  budgetLimit: number | null;
+}): Promise<void> {
+  const { error } = await supabase.from("expense_categories").insert({
+    name: input.name.trim(),
+    budget_limit: input.budgetLimit,
+    is_active: true,
+  });
+  if (error) throw error;
+}
+
+export async function deleteExpenseCategory(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("expense_categories")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function listExpenses(): Promise<ExpenseRow[]> {
+  const { data, error } = await supabase
+    .from("expenses")
+    .select(
+      "id, voucher_no, expense_category_id, term_id, title, vendor, amount, incurred_on, payment_method, reference, notes, receipt_url, status, requested_by_name, reviewed_by_name, reviewed_at, review_note, paid_at, created_at, expense_categories(name), terms(name)",
+    )
+    .order("incurred_on", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  return (data ?? []).map((r) => {
+    const cat = Array.isArray(r.expense_categories)
+      ? r.expense_categories[0]
+      : r.expense_categories;
+    const trm = Array.isArray(r.terms) ? r.terms[0] : r.terms;
+    return {
+      id: r.id,
+      voucherNo: r.voucher_no,
+      expenseCategoryId: r.expense_category_id,
+      categoryName: (cat as { name?: string } | null)?.name ?? "Category",
+      termId: r.term_id,
+      termName: (trm as { name?: string } | null)?.name ?? null,
+      title: r.title,
+      vendor: r.vendor,
+      amount: Number(r.amount),
+      incurredOn: r.incurred_on,
+      paymentMethod: r.payment_method as PaymentMethod,
+      reference: r.reference,
+      notes: r.notes,
+      receiptUrl: r.receipt_url,
+      status: r.status as ExpenseStatus,
+      requestedByName: r.requested_by_name,
+      reviewedByName: r.reviewed_by_name,
+      reviewedAt: r.reviewed_at,
+      reviewNote: r.review_note,
+      paidAt: r.paid_at,
+      createdAt: r.created_at,
+    };
+  });
+}
+
+export async function createExpense(input: {
+  expenseCategoryId: string;
+  termId: string | null;
+  title: string;
+  vendor?: string;
+  amount: number;
+  incurredOn: string;
+  paymentMethod: PaymentMethod;
+  reference?: string;
+  notes?: string;
+  receiptUrl?: string | null;
+}): Promise<void> {
+  const { error } = await supabase.from("expenses").insert({
+    expense_category_id: input.expenseCategoryId,
+    term_id: input.termId || null,
+    voucher_no: "", // Trigger expenses_before_insert assigns EXP-YYYY-NNNN
+    title: input.title.trim(),
+    vendor: input.vendor?.trim() || null,
+    amount: input.amount,
+    incurred_on: input.incurredOn,
+    payment_method: input.paymentMethod,
+    reference: input.reference?.trim() || null,
+    notes: input.notes?.trim() || null,
+    receipt_url: input.receiptUrl || null,
+  });
+  if (error) throw error;
+}
+
+export async function reviewExpense(input: {
+  expenseId: string;
+  decision: ExpenseStatus;
+  reviewNote?: string;
+}): Promise<void> {
+  const { error } = await supabase.rpc("review_expense", {
+    p_expense_id: input.expenseId,
+    p_decision: input.decision,
+    p_review_note: input.reviewNote?.trim() || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const { error } = await supabase.from("expenses").delete().eq("id", id);
+  if (error) throw error;
+}
