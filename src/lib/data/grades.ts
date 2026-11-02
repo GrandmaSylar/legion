@@ -1287,3 +1287,263 @@ export async function bulkAssignBeceIndexNumbers(input: {
   );
   return rows.length;
 }
+
+
+// ─── Behavioral Traits, Remarks & Report Publication ─────────────────────────
+
+export type PromotionalStatus =
+  | "promoted"
+  | "promoted_on_trial"
+  | "repeated"
+  | "withdrawn"
+  | "pending";
+
+export interface StudentBehavioralAssessment {
+  id: string;
+  enrollmentId: string;
+  termId: string;
+  punctuality: number | null;
+  neatness: number | null;
+  politeness: number | null;
+  attitudeToWork: number | null;
+  leadership: number | null;
+  teacherRemarks: string | null;
+  headteacherRemarks: string | null;
+  promotionalStatus: PromotionalStatus;
+  updatedAt: string;
+}
+
+export interface TermReportPublication {
+  id: string;
+  classId: string;
+  termId: string;
+  isPublished: boolean;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  reopeningDate: string | null;
+  vacationDate: string | null;
+  nextTermFees: number | null;
+  updatedAt: string;
+}
+
+export interface ClassAssessmentProgress {
+  classSubjectId: string;
+  subjectId: string;
+  subjectName: string;
+  teacherName: string | null;
+  assessmentCount: number;
+  enrolledStudents: number;
+  gradedStudents: number;
+  completionPct: number;
+}
+
+export async function getStudentBehavioralAssessment(
+  enrollmentId: string,
+  termId: string,
+): Promise<StudentBehavioralAssessment | null> {
+  const row = check(
+    await supabase
+      .from("student_behavioral_assessments")
+      .select("*")
+      .eq("enrollment_id", enrollmentId)
+      .eq("term_id", termId)
+      .maybeSingle(),
+  );
+
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    enrollmentId: row.enrollment_id,
+    termId: row.term_id,
+    punctuality: row.punctuality ?? null,
+    neatness: row.neatness ?? null,
+    politeness: row.politeness ?? null,
+    attitudeToWork: row.attitude_to_work ?? null,
+    leadership: row.leadership ?? null,
+    teacherRemarks: row.teacher_remarks ?? null,
+    headteacherRemarks: row.headteacher_remarks ?? null,
+    promotionalStatus: (row.promotional_status ?? "pending") as PromotionalStatus,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function listClassBehavioralAssessments(
+  classId: string,
+  termId: string,
+): Promise<Record<string, StudentBehavioralAssessment>> {
+  const enrollments = check(
+    await supabase
+      .from("enrollments")
+      .select("id")
+      .eq("class_id", classId)
+      .eq("status", "enrolled"),
+  );
+
+  if (enrollments.length === 0) return {};
+
+  const enrollmentIds = enrollments.map((e) => e.id);
+  const rows = check(
+    await supabase
+      .from("student_behavioral_assessments")
+      .select("*")
+      .in("enrollment_id", enrollmentIds)
+      .eq("term_id", termId),
+  );
+
+  const res: Record<string, StudentBehavioralAssessment> = {};
+  for (const r of rows) {
+    res[r.enrollment_id] = {
+      id: r.id,
+      enrollmentId: r.enrollment_id,
+      termId: r.term_id,
+      punctuality: r.punctuality ?? null,
+      neatness: r.neatness ?? null,
+      politeness: r.politeness ?? null,
+      attitudeToWork: r.attitude_to_work ?? null,
+      leadership: r.leadership ?? null,
+      teacherRemarks: r.teacher_remarks ?? null,
+      headteacherRemarks: r.headteacher_remarks ?? null,
+      promotionalStatus: (r.promotional_status ?? "pending") as PromotionalStatus,
+      updatedAt: r.updated_at,
+    };
+  }
+  return res;
+}
+
+export async function saveStudentBehavioralAssessment(input: {
+  enrollmentId: string;
+  termId: string;
+  punctuality?: number | null;
+  neatness?: number | null;
+  politeness?: number | null;
+  attitudeToWork?: number | null;
+  leadership?: number | null;
+  teacherRemarks?: string | null;
+  headteacherRemarks?: string | null;
+  promotionalStatus?: PromotionalStatus;
+}): Promise<StudentBehavioralAssessment> {
+  const row = check(
+    await supabase.rpc("save_behavioral_assessment", {
+      p_enrollment: input.enrollmentId,
+      p_term: input.termId,
+      p_punctuality: input.punctuality ?? null,
+      p_neatness: input.neatness ?? null,
+      p_politeness: input.politeness ?? null,
+      p_attitude: input.attitudeToWork ?? null,
+      p_leadership: input.leadership ?? null,
+      p_teacher_remarks: input.teacherRemarks ?? null,
+      p_headteacher_remarks: input.headteacherRemarks ?? null,
+      p_promotional_status: input.promotionalStatus ?? "pending",
+    }),
+  );
+
+  return {
+    id: row.id,
+    enrollmentId: row.enrollment_id,
+    termId: row.term_id,
+    punctuality: row.punctuality ?? null,
+    neatness: row.neatness ?? null,
+    politeness: row.politeness ?? null,
+    attitudeToWork: row.attitude_to_work ?? null,
+    leadership: row.leadership ?? null,
+    teacherRemarks: row.teacher_remarks ?? null,
+    headteacherRemarks: row.headteacher_remarks ?? null,
+    promotionalStatus: (row.promotional_status ?? "pending") as PromotionalStatus,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getTermReportPublication(
+  classId: string,
+  termId: string,
+): Promise<TermReportPublication | null> {
+  const row = check(
+    await supabase
+      .from("term_report_publications")
+      .select("*")
+      .eq("class_id", classId)
+      .eq("term_id", termId)
+      .maybeSingle(),
+  );
+
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    classId: row.class_id,
+    termId: row.term_id,
+    isPublished: row.is_published,
+    publishedAt: row.published_at,
+    publishedBy: row.published_by,
+    reopeningDate: row.reopening_date,
+    vacationDate: row.vacation_date,
+    nextTermFees: row.next_term_fees !== null ? Number(row.next_term_fees) : null,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function setTermReportPublication(input: {
+  classId: string;
+  termId: string;
+  isPublished: boolean;
+  reopeningDate?: string | null;
+  vacationDate?: string | null;
+  nextTermFees?: number | null;
+}): Promise<TermReportPublication> {
+  const row = check(
+    await supabase.rpc("set_term_report_publication", {
+      p_class: input.classId,
+      p_term: input.termId,
+      p_is_published: input.isPublished,
+      p_reopening_date: input.reopeningDate ?? null,
+      p_vacation_date: input.vacationDate ?? null,
+      p_next_term_fees: input.nextTermFees ?? null,
+    }),
+  );
+
+  return {
+    id: row.id,
+    classId: row.class_id,
+    termId: row.term_id,
+    isPublished: row.is_published,
+    publishedAt: row.published_at,
+    publishedBy: row.published_by,
+    reopeningDate: row.reopening_date,
+    vacationDate: row.vacation_date,
+    nextTermFees: row.next_term_fees !== null ? Number(row.next_term_fees) : null,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getClassAssessmentProgress(
+  classId: string,
+  termId: string,
+): Promise<ClassAssessmentProgress[]> {
+  const rows = check(
+    await supabase.rpc("get_class_assessment_progress", {
+      p_class: classId,
+      p_term: termId,
+    }),
+  );
+
+  return rows.map((r: {
+    class_subject_id: string;
+    subject_id: string;
+    subject_name: string;
+    teacher_name: string | null;
+    assessment_count: number | string;
+    enrolled_students: number | string;
+    graded_students: number | string;
+    completion_pct: number | string;
+  }) => ({
+    classSubjectId: r.class_subject_id,
+    subjectId: r.subject_id,
+    subjectName: r.subject_name,
+    teacherName: r.teacher_name,
+    assessmentCount: Number(r.assessment_count),
+    enrolledStudents: Number(r.enrolled_students),
+    gradedStudents: Number(r.graded_students),
+    completionPct: Number(r.completion_pct),
+  }));
+}

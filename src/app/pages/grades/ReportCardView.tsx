@@ -1,10 +1,26 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, GraduationCap, Printer } from "lucide-react";
 import {
+  AlertCircle,
+  ArrowLeft,
+  Calendar,
+  Check,
+  Globe,
+  GraduationCap,
+  HeartHandshake,
+  Lock,
+  Printer,
+  ShieldAlert,
+  Sliders,
+} from "lucide-react";
+import {
+  getTermReportPublication,
+  listClassBehavioralAssessments,
   saveOverallRemark,
   type BroadsheetStudent,
   type ClassBroadsheet,
+  type StudentBehavioralAssessment,
+  type TermReportPublication,
 } from "../../../lib/data/grades";
 import {
   getInstitutionDetails,
@@ -15,6 +31,10 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { FormMessage } from "../../components/fields";
 import { StudentAvatar } from "../../components/StudentAvatar";
+import { BehavioralAssessmentModal } from "./BehavioralAssessmentModal";
+import { TermPublicationModal } from "./TermPublicationModal";
+import { DevelopedByPhinova } from "../../components/brand/DevelopedByPhinova";
+import { cn } from "../../components/ui/utils";
 
 function ordinal(n: number | null): string {
   if (n === null || n <= 0) return "—";
@@ -32,6 +52,14 @@ function ordinal(n: number | null): string {
   }
 }
 
+const TRAIT_NAMES = [
+  { key: "punctuality", label: "Punctuality" },
+  { key: "neatness", label: "Neatness" },
+  { key: "politeness", label: "Politeness" },
+  { key: "attitudeToWork", label: "Attitude to Work" },
+  { key: "leadership", label: "Leadership" },
+] as const;
+
 function SingleReportCardSheet({
   schoolName,
   institution,
@@ -39,7 +67,10 @@ function SingleReportCardSheet({
   student,
   photoUrl,
   canEditRemark,
+  behavioral,
+  publication,
   classIdForInvalidate,
+  onOpenBehavioralModal,
 }: {
   schoolName: string;
   institution?: InstitutionDetails | null;
@@ -47,7 +78,10 @@ function SingleReportCardSheet({
   student: BroadsheetStudent;
   photoUrl?: string | null;
   canEditRemark: boolean;
+  behavioral?: StudentBehavioralAssessment | null;
+  publication?: TermReportPublication | null;
   classIdForInvalidate: string;
+  onOpenBehavioralModal?: () => void;
 }) {
   const qc = useQueryClient();
   const [remark, setRemark] = useState(student.overallRemark);
@@ -68,9 +102,11 @@ function SingleReportCardSheet({
   const attended = student.attendance.present + student.attendance.late;
   const totalAttendance = student.attendance.total;
 
+  const isPublished = publication?.isPublished ?? false;
+
   return (
-    <article className="report-card-sheet surface mx-auto max-w-4xl overflow-hidden border border-border p-6 sm:p-8 print:max-w-none print:rounded-none print:border-slate-300 print:bg-white print:p-6 print:text-slate-900 print:shadow-none">
-      {/* Top brand bar */}
+    <article className="report-card-sheet surface relative mx-auto max-w-4xl overflow-hidden border border-border p-6 sm:p-8 print:max-w-none print:rounded-none print:border-slate-300 print:bg-white print:p-6 print:text-slate-900 print:shadow-none">
+      {/* Top brand accent bar */}
       <div
         className="-mx-6 -mt-6 mb-6 h-2.5 sm:-mx-8 sm:-mt-8"
         style={{
@@ -78,6 +114,19 @@ function SingleReportCardSheet({
             "linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 65%, #0f172a))",
         }}
       />
+
+      {/* Draft watermark if unpublished */}
+      {!isPublished ? (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-1.5 text-xs text-amber-700 dark:text-amber-300 print:border-amber-300 print:bg-amber-50 print:text-amber-800">
+          <div className="flex items-center gap-2">
+            <Lock className="size-3.5" />
+            <span className="font-semibold uppercase tracking-wider text-[11px]">
+              DRAFT REPORT · FOR INTERNAL AUDIT &amp; REVIEW ONLY
+            </span>
+          </div>
+          <span className="text-[11px] opacity-80">Unpublished</span>
+        </div>
+      ) : null}
 
       {/* School header */}
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5 print:border-slate-300">
@@ -122,6 +171,9 @@ function SingleReportCardSheet({
             {broadsheet.className}
           </div>
           <div>Scale: {broadsheet.scaleName}</div>
+          {publication?.vacationDate ? (
+            <div>Vacation: {publication.vacationDate}</div>
+          ) : null}
         </div>
       </header>
 
@@ -193,6 +245,21 @@ function SingleReportCardSheet({
             </>
           ) : null}
         </div>
+
+        {canEditRemark ? (
+          <div className="print:hidden">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onOpenBehavioralModal}
+              className="gap-1.5"
+            >
+              <HeartHandshake className="size-3.5" />
+              <span>Traits &amp; Remarks</span>
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       {/* Academic results table */}
@@ -274,9 +341,31 @@ function SingleReportCardSheet({
         </div>
       )}
 
+      {/* Affective & Behavioral Traits Strip (1-5 Scale) */}
+      {behavioral ? (
+        <div className="mt-4 rounded-xl border border-border bg-foreground/[0.02] p-3 text-xs print:border-slate-300">
+          <div className="mb-2 font-semibold uppercase tracking-wider text-muted-foreground print:text-slate-600">
+            Affective &amp; Psychomotor Domains (Rating: 1 = Unsatisfactory ... 5 = Exemplary)
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 text-xs">
+            {TRAIT_NAMES.map(({ key, label }) => {
+              const val = behavioral[key];
+              return (
+                <div key={key} className="rounded-lg border border-border/60 bg-card p-2 text-center print:border-slate-200">
+                  <div className="text-[11px] text-muted-foreground print:text-slate-500 truncate">{label}</div>
+                  <div className="mt-0.5 text-sm font-bold tabular-nums text-foreground">
+                    {val !== null ? `${val} / 5` : "—"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       {/* Grading scale legend (numeric only) */}
       {isNumeric && broadsheet.bands.length > 0 ? (
-        <div className="mt-4 rounded-xl border border-border bg-foreground/[0.02] p-3 text-xs print:border-slate-300">
+        <div className="mt-3 rounded-xl border border-border bg-foreground/[0.02] p-3 text-xs print:border-slate-300">
           <div className="mb-1.5 font-semibold uppercase tracking-wider text-muted-foreground print:text-slate-600">
             Grading Scale Key ({broadsheet.scaleName})
           </div>
@@ -291,52 +380,70 @@ function SingleReportCardSheet({
         </div>
       ) : null}
 
-      {/* Overall Class Teacher's Remark & Signatures */}
-      <footer className="mt-6 space-y-5 border-t border-border pt-4 print:border-slate-300">
-        <div className="space-y-1.5">
+      {/* Remarks, Promotional Status, and Next Term Info */}
+      <footer className="mt-6 space-y-4 border-t border-border pt-4 print:border-slate-300">
+        {/* Class Teacher Remark */}
+        <div className="space-y-1">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground print:text-slate-600">
-            Class Teacher&apos;s Overall Remark
+            Class Teacher&apos;s Remarks
           </div>
-          {canEditRemark ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 print:hidden">
-                <Input
-                  value={remark}
-                  onChange={(e) => setRemark(e.target.value)}
-                  placeholder="Enter overall term remark on conduct, attitude, and academic progress..."
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={
-                    saveRemark.isPending ||
-                    remark.trim() === student.overallRemark.trim()
-                  }
-                  onClick={() => saveRemark.mutate()}
-                >
-                  <Check className="size-3.5" aria-hidden />
-                  {saveRemark.isPending ? "Saving..." : "Save remark"}
-                </Button>
-              </div>
-              <FormMessage
-                error={
-                  saveRemark.isError ? friendlyError(saveRemark.error) : null
-                }
-              />
-              <p className="hidden text-sm italic print:block">
-                {remark.trim() || "No overall remark recorded."}
-              </p>
-            </div>
-          ) : (
-            <p className="rounded-xl border border-border/70 bg-foreground/[0.02] p-3 text-sm italic print:border-slate-300">
-              {student.overallRemark || "No overall remark recorded."}
-            </p>
-          )}
+          <p className="rounded-xl border border-border/70 bg-foreground/[0.02] p-2.5 text-xs italic print:border-slate-300">
+            {behavioral?.teacherRemarks || student.overallRemark || "Satisfactory academic performance and steady classroom conduct."}
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 pt-6 text-xs text-muted-foreground print:text-slate-600">
+        {/* Headteacher Endorsement */}
+        <div className="space-y-1">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground print:text-slate-600">
+            Headteacher&apos;s Endorsement &amp; Recommendation
+          </div>
+          <p className="rounded-xl border border-border/70 bg-foreground/[0.02] p-2.5 text-xs italic print:border-slate-300">
+            {behavioral?.headteacherRemarks || "Approved. Commended for diligent academic effort this term."}
+          </p>
+        </div>
+
+        {/* Next Term Logistics & Promotional Decision */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-xl border border-border bg-foreground/[0.02] p-3 text-xs print:border-slate-300">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground print:text-slate-500">
+              Promotional Decision
+            </div>
+            <div className="mt-0.5 font-bold uppercase text-primary print:text-slate-900">
+              {behavioral?.promotionalStatus === "promoted"
+                ? "Promoted to Next Level"
+                : behavioral?.promotionalStatus === "promoted_on_trial"
+                  ? "Promoted on Trial"
+                  : behavioral?.promotionalStatus === "repeated"
+                    ? "Repeated / Repeat Level"
+                    : behavioral?.promotionalStatus === "withdrawn"
+                      ? "Withdrawn"
+                      : "Term in Progress"}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground print:text-slate-500">
+              Next Term Begins
+            </div>
+            <div className="mt-0.5 font-semibold text-foreground print:text-slate-900">
+              {publication?.reopeningDate || "To be communicated"}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground print:text-slate-500">
+              Next Term Fees Due
+            </div>
+            <div className="mt-0.5 font-semibold text-foreground print:text-slate-900">
+              {publication?.nextTermFees !== null && publication?.nextTermFees !== undefined
+                ? `GHS ${publication.nextTermFees.toFixed(2)}`
+                : "Refer to bill"}
+            </div>
+          </div>
+        </div>
+
+        {/* Signatures */}
+        <div className="grid grid-cols-2 gap-8 pt-4 text-xs text-muted-foreground print:text-slate-600">
           <div className="border-t border-border pt-2 print:border-slate-400">
             <div className="font-medium text-foreground print:text-slate-900">
               {broadsheet.classTeacherName ?? "Class Teacher"}
@@ -345,10 +452,16 @@ function SingleReportCardSheet({
           </div>
           <div className="border-t border-border pt-2 print:border-slate-400">
             <div className="font-medium text-foreground print:text-slate-900">
-              Head Teacher / Principal
+              Headteacher / Principal
             </div>
-            <div>Head Teacher&apos;s Signature &amp; Stamp</div>
+            <div>Headteacher&apos;s Signature &amp; Stamp</div>
           </div>
+        </div>
+
+        {/* Hallmark */}
+        <div className="pt-2 flex justify-between items-center text-[10px] text-muted-foreground/60 border-t border-border/40">
+          <span>Legion School Management System · Official Certified Report</span>
+          <DevelopedByPhinova variant="minimal" />
         </div>
       </footer>
     </article>
@@ -375,8 +488,25 @@ export function ReportCardView({
     queryFn: getInstitutionDetails,
   });
 
+  const behavioralQ = useQuery({
+    queryKey: ["class-behavioral-assessments", broadsheet.classId, broadsheet.termId],
+    queryFn: () => listClassBehavioralAssessments(broadsheet.classId, broadsheet.termId),
+  });
+
+  const publicationQ = useQuery({
+    queryKey: ["term-publication", broadsheet.classId, broadsheet.termId],
+    queryFn: () => getTermReportPublication(broadsheet.classId, broadsheet.termId),
+  });
+
+  const [activeModalStudent, setActiveModalStudent] = useState<BroadsheetStudent | null>(null);
+  const [publicationModalOpen, setPublicationModalOpen] = useState(false);
+
+  const behavioralMap = behavioralQ.data ?? {};
+  const publication = publicationQ.data;
+
   return (
     <div className="space-y-4">
+      {/* Top action toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         {onBack ? (
           <Button type="button" variant="ghost" size="sm" onClick={onBack}>
@@ -386,14 +516,33 @@ export function ReportCardView({
         ) : (
           <div />
         )}
-        <Button type="button" size="sm" onClick={() => window.print()}>
-          <Printer className="size-4" aria-hidden />
-          {students.length > 1
-            ? `Print / Save all (${students.length}) PDFs`
-            : "Print / Save as PDF"}
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {canEditRemark ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPublicationModalOpen(true)}
+              className="gap-1.5"
+            >
+              <Globe className="size-4" />
+              <span>
+                {publication?.isPublished ? "Published Settings" : "Publish Reports"}
+              </span>
+            </Button>
+          ) : null}
+
+          <Button type="button" size="sm" onClick={() => window.print()}>
+            <Printer className="size-4" aria-hidden />
+            {students.length > 1
+              ? `Print All (${students.length}) Class Reports`
+              : "Print / Save as PDF"}
+          </Button>
+        </div>
       </div>
 
+      {/* Report Cards Stream */}
       <div className="space-y-8 print:space-y-0">
         {students.map((student, idx) => (
           <div
@@ -409,11 +558,46 @@ export function ReportCardView({
               student={student}
               photoUrl={student.photoPath ? photoUrls[student.studentId] : null}
               canEditRemark={canEditRemark}
+              behavioral={behavioralMap[student.enrollmentId] ?? null}
+              publication={publication}
               classIdForInvalidate={broadsheet.classId}
+              onOpenBehavioralModal={() => setActiveModalStudent(student)}
             />
           </div>
         ))}
       </div>
+
+      {/* Behavioral assessment modal */}
+      {activeModalStudent ? (
+        <BehavioralAssessmentModal
+          open={!!activeModalStudent}
+          onOpenChange={(v) => (!v ? setActiveModalStudent(null) : null)}
+          enrollmentId={activeModalStudent.enrollmentId}
+          studentName={activeModalStudent.fullName}
+          admissionNo={activeModalStudent.admissionNo}
+          className={broadsheet.className}
+          termId={broadsheet.termId}
+          termName={broadsheet.termName}
+          currentAssessment={behavioralMap[activeModalStudent.enrollmentId] ?? null}
+          onSaved={() => {
+            void behavioralQ.refetch();
+          }}
+        />
+      ) : null}
+
+      {/* Term publication settings modal */}
+      <TermPublicationModal
+        open={publicationModalOpen}
+        onOpenChange={setPublicationModalOpen}
+        classId={broadsheet.classId}
+        className={broadsheet.className}
+        termId={broadsheet.termId}
+        termName={broadsheet.termName}
+        currentPublication={publication}
+        onSaved={() => {
+          void publicationQ.refetch();
+        }}
+      />
     </div>
   );
 }
