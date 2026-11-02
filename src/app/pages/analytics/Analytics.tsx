@@ -38,13 +38,7 @@ import {
   listAcademicYears,
   listTerms,
 } from "../../../lib/data/setup";
-import {
-  exportAnalyticsAsCsv,
-  exportAnalyticsAsDocx,
-  exportAnalyticsAsExcel,
-  exportAnalyticsAsImage,
-  exportAnalyticsAsPdf,
-} from "../../../lib/export/analyticsExport";
+// Dynamically imported on export click: ../../../lib/export/analyticsExport
 import { Field, NativeSelect } from "../../components/fields";
 import { Button } from "../../components/ui/button";
 import { Skeleton } from "../../components/ui/skeleton";
@@ -121,6 +115,13 @@ export default function Analytics() {
     setExportingFormat(format);
     setExportStatus(null);
     try {
+      const {
+        exportAnalyticsAsCsv,
+        exportAnalyticsAsDocx,
+        exportAnalyticsAsExcel,
+        exportAnalyticsAsImage,
+        exportAnalyticsAsPdf,
+      } = await import("../../../lib/export/analyticsExport");
       if (format === "pdf") {
         await exportAnalyticsAsPdf(previewRef.current, schoolName);
         setExportStatus("Exported PDF report matching live preview.");

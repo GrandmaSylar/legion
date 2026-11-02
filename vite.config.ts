@@ -30,6 +30,22 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('@supabase/')) return 'vendor-supabase'
+          if (id.includes('@tanstack/react-query')) return 'vendor-query'
+          if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts'
+          if (id.includes('@radix-ui/')) return 'vendor-radix'
+          if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('html-to-image')) return 'vendor-export-pdf'
+          if (id.includes('docx')) return 'vendor-export-docx'
+          if (id.includes('xlsx')) return 'vendor-export-xlsx'
+        },
+      },
+    },
+  },
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],

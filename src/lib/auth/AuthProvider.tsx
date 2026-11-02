@@ -47,6 +47,35 @@ interface AuthState {
 }
 
 const AuthContext = createContext<AuthState | null>(null);
+const PROFILE_CACHE_KEY = "sms_auth_profile_cache_v1";
+
+function readCachedProfile(): { profile: Profile; roles: AppRole[] } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PROFILE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { profile?: Profile; roles?: AppRole[] };
+    if (parsed?.profile?.id && Array.isArray(parsed.roles)) {
+      return { profile: parsed.profile, roles: parsed.roles };
+    }
+  } catch {
+    // Ignore storage read errors
+  }
+  return null;
+}
+
+function writeCachedProfile(data: { profile: Profile; roles: AppRole[] } | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (!data) {
+      window.localStorage.removeItem(PROFILE_CACHE_KEY);
+    } else {
+      window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch {
+    // Ignore storage write errors
+  }
+}
 
 async function loadProfile(userId: string): Promise<{ profile: Profile; roles: AppRole[] } | null> {
   const [{ data: p }, { data: r }] = await Promise.all([
@@ -80,8 +109,8 @@ async function loadProfile(userId: string): Promise<{ profile: Profile; roles: A
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
-  const [loaded, setLoaded] = useState<{ profile: Profile; roles: AppRole[] } | null>(null);
-  const [profileReady, setProfileReady] = useState(false);
+  const [loaded, setLoaded] = useState<{ profile: Profile; roles: AppRole[] } | null>(() => readCachedProfile());
+  const [profileReady, setProfileReady] = useState<boolean>(() => readCachedProfile() !== null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -99,14 +128,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sessionReady) return;
     if (!userId) {
       setLoaded(null);
+      writeCachedProfile(null);
       setProfileReady(true);
       return;
     }
     let cancelled = false;
-    setProfileReady(false);
+    const cached = readCachedProfile();
+    if (cached && cached.profile.id === userId) {
+      setLoaded(cached);
+      setProfileReady(true);
+    } else {
+      setProfileReady(false);
+    }
     loadProfile(userId).then((result) => {
       if (cancelled) return;
       setLoaded(result);
+      writeCachedProfile(result);
       setProfileReady(true);
     });
     return () => {
@@ -118,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     const result = await loadProfile(userId);
     setLoaded(result);
+    writeCachedProfile(result);
   }, [userId]);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -126,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    writeCachedProfile(null);
     await supabase.auth.signOut();
   }, []);
 

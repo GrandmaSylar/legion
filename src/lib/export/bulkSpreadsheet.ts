@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type { BulkStudentRowInput } from "../data/students";
 import type { BulkStaffRowInput } from "../data/staff";
 
@@ -21,9 +20,7 @@ function getVal(row: Record<string, unknown>, aliases: string[]): string {
 
 function normalizeDateString(raw: string): string {
   if (!raw) return "";
-  // Already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  // DD/MM/YYYY or DD-MM-YYYY
   const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (dmy) {
     const [, d, m, y] = dmy;
@@ -39,7 +36,10 @@ function normalizeDateString(raw: string): string {
 export async function parseStudentSpreadsheet(
   file: File,
 ): Promise<BulkStudentRowInput[]> {
-  const buf = await file.arrayBuffer();
+  const [XLSX, buf] = await Promise.all([
+    import("xlsx"),
+    file.arrayBuffer(),
+  ]);
   const wb = XLSX.read(buf, { type: "array", cellDates: true });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) return [];
@@ -60,7 +60,6 @@ export async function parseStudentSpreadsheet(
     let middleName = getVal(r, ["middlename", "middle", "othername", "othernames"]);
     let lastName = getVal(r, ["lastname", "surname", "familyname", "last"]);
 
-    // Support single "Full Name" / "Name" column if First/Last weren't split
     if (!firstName && !lastName) {
       const full = getVal(r, ["fullname", "studentname", "pupilname", "name"]);
       if (full) {
@@ -160,30 +159,35 @@ export function downloadStudentImportTemplate(format: "csv" | "xlsx"): void {
     },
   ];
 
-  const ws = XLSX.utils.json_to_sheet(sample);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Students Import Template");
+  void import("xlsx").then((XLSX) => {
+    const ws = XLSX.utils.json_to_sheet(sample);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Students Import Template");
 
-  if (format === "csv") {
-    const csv = "\uFEFF" + XLSX.utils.sheet_to_csv(ws);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "students-bulk-import-template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-  } else {
-    XLSX.writeFile(wb, "students-bulk-import-template.xlsx");
-  }
+    if (format === "csv") {
+      const csv = "\uFEFF" + XLSX.utils.sheet_to_csv(ws);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "students-bulk-import-template.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } else {
+      XLSX.writeFile(wb, "students-bulk-import-template.xlsx");
+    }
+  });
 }
 
 export async function parseStaffSpreadsheet(
   file: File,
 ): Promise<BulkStaffRowInput[]> {
-  const buf = await file.arrayBuffer();
+  const [XLSX, buf] = await Promise.all([
+    import("xlsx"),
+    file.arrayBuffer(),
+  ]);
   const wb = XLSX.read(buf, { type: "array", cellDates: true });
   const sheetName = wb.SheetNames[0];
   if (!sheetName) return [];
@@ -242,23 +246,24 @@ export function downloadStaffImportTemplate(format: "csv" | "xlsx"): void {
     },
   ];
 
-  const ws = XLSX.utils.json_to_sheet(sample);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Staff Import Template");
+  void import("xlsx").then((XLSX) => {
+    const ws = XLSX.utils.json_to_sheet(sample);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Staff Import Template");
 
-  if (format === "csv") {
-    const csv = "\uFEFF" + XLSX.utils.sheet_to_csv(ws);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "staff-bulk-import-template.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-  } else {
-    XLSX.writeFile(wb, "staff-bulk-import-template.xlsx");
-  }
+    if (format === "csv") {
+      const csv = "\uFEFF" + XLSX.utils.sheet_to_csv(ws);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "staff-bulk-import-template.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } else {
+      XLSX.writeFile(wb, "staff-bulk-import-template.xlsx");
+    }
+  });
 }
-

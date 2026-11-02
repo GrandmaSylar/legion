@@ -11,6 +11,8 @@ import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
 import { useTheme } from "../../theme/ThemeProvider";
 import { usePwaStatus } from "../../lib/pwa";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchRouteAndData } from "../../lib/queryPersistence";
 import { ThemeCustomizerModal } from "../../theme/ThemeCustomizer";
 import { StudentAvatar } from "../components/StudentAvatar";
 import { Button } from "../components/ui/button";
@@ -47,11 +49,14 @@ const PRIMARY_ACTIONS: { path: string; label: string; to: string; roles: AppRole
 ];
 
 function RailLink({ to, end, label, Icon }: { to: string; end: boolean; label: string; Icon: LucideIcon }) {
+  const qc = useQueryClient();
   return (
     <NavLink
       to={to}
       end={end}
       aria-label={label}
+      onMouseEnter={() => prefetchRouteAndData(to, qc)}
+      onFocus={() => prefetchRouteAndData(to, qc)}
       className={({ isActive }) =>
         cn(
           "group relative grid size-12 place-items-center rounded-2xl outline-offset-2 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white [@media(max-height:780px)]:size-10",
