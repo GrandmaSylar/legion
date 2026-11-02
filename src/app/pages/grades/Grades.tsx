@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -243,6 +243,7 @@ function SubjectGradebookSection({
   const [newMaxScore, setNewMaxScore] = useState("20");
   const [newWeight, setNewWeight] = useState("10");
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
 
   const configQuery = useQuery({
     queryKey: ["class-grading-config", classId],
@@ -401,6 +402,82 @@ function SubjectGradebookSection({
       invalidateGradebook();
     },
   });
+
+  const handleExportExcel = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      const exportRows = students.map((s) => {
+        const rowEdits = scoreEdits[s.enrollmentId] ?? {};
+        const row: Record<string, string | number> = {
+          "Student ID": s.studentId,
+          "Admission No": s.admissionNo,
+          "Full Name": s.fullName,
+        };
+        for (const a of assessments) {
+          const val = rowEdits[a.id];
+          row[`${a.title} (Max ${a.maxScore})`] = val !== undefined && val !== "" ? Number(val) : "";
+        }
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Gradebook");
+      const safeSub = subjectName.replace(/[^a-zA-Z0-9_-]/g, "_");
+      XLSX.writeFile(wb, `${safeSub}_Gradebook.xlsx`);
+      setSavedBanner("Exported Excel gradebook template.");
+    } catch (err) {
+      console.error("Excel export error:", err);
+    }
+  };
+
+  const handleImportExcel = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const XLSX = await import("xlsx");
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+
+      const nextScores = { ...scoreEdits };
+      let updatedCount = 0;
+
+      for (const row of rawRows) {
+        const studentId = String(row["Student ID"] ?? "").trim();
+        const admissionNo = String(row["Admission No"] ?? "").trim();
+        const targetStudent = students.find(
+          (s) => (studentId && s.studentId === studentId) || (admissionNo && s.admissionNo.toLowerCase() === admissionNo.toLowerCase())
+        );
+
+        if (!targetStudent) continue;
+
+        const currentEnrollmentScores = { ...(nextScores[targetStudent.enrollmentId] ?? {}) };
+
+        for (const a of assessments) {
+          const matchKey = Object.keys(row).find((k) =>
+            k.toLowerCase().includes(a.title.toLowerCase())
+          );
+          if (matchKey && row[matchKey] !== undefined && row[matchKey] !== "") {
+            const num = Number(row[matchKey]);
+            if (!Number.isNaN(num) && num >= 0 && num <= a.maxScore) {
+              currentEnrollmentScores[a.id] = String(num);
+              updatedCount++;
+            }
+          }
+        }
+        nextScores[targetStudent.enrollmentId] = currentEnrollmentScores;
+      }
+
+      setScoreEdits(nextScores);
+      setSavedBanner(`Imported ${updatedCount} score values from spreadsheet. Review and click Save.`);
+    } catch (err) {
+      console.error("Excel import error:", err);
+    } finally {
+      if (e.target) e.target.value = "";
+    }
+  };
 
   const weightsSummary = useMemo(() => {
     let caWeight = 0;
@@ -712,7 +789,7 @@ function SubjectGradebookSection({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredStudents.map((s: GradebookStudentRow) => {
+                {filteredStudents.map((s: GradebookStudentRow, sIdx: number) => {
                   const rowEdits = scoreEdits[s.enrollmentId] ?? {};
                   const live = computeLiveRowResult(
                     assessments,
