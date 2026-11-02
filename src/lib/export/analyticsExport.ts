@@ -141,6 +141,9 @@ export async function exportAnalyticsAsPdf(
     heightLeft -= usableHeight;
   }
 
+  pdf.setFontSize(8);
+  pdf.setTextColor(140, 140, 160);
+  pdf.text("Legion School Management System · Developed by phinova", margin, pageHeight - 3);
   pdf.save(safeFilename(schoolName, "pdf"));
 }
 
@@ -665,6 +668,10 @@ export function exportAnalyticsAsCsv(
       f.balance.toFixed(2),
     ]);
   }
+
+  lines.push([]);
+  lines.push(["Platform", "Legion School Management System"]);
+  lines.push(["Attribution", "Developed by phinova"]);
 
   const csvContent =
     "\uFEFF" + lines.map((row) => row.map(csvEscape).join(",")).join("\r\n");

@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, Clock, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Calendar, Clock, Plus, Trash2 } from "lucide-react";
 import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import { listClassSubjectsWithDetails } from "../../../lib/data/grades";
 import {
@@ -137,7 +137,7 @@ export default function TimetableTab() {
           disabled={autoFillMutation.isPending || subjects.length === 0}
           onClick={() => autoFillMutation.mutate()}
         >
-          <Sparkles className="size-4" aria-hidden />
+          <Calendar className="size-4" aria-hidden />
           {autoFillMutation.isPending
             ? "Generating..."
             : "Auto-fill Mon–Fri schedule from class subjects"}

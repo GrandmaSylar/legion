@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
   Bell, BarChart3, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Palette, Plus, Search, Settings,
-  Sparkles, Square, Sun, UserCog, UserRoundCog, Users, Wallet, WifiOff, Download, type LucideIcon,
+  Layers, Square, Sun, UserCog, UserRoundCog, Users, Wallet, WifiOff, Download, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
@@ -17,6 +17,8 @@ import { ThemeCustomizerModal } from "../../theme/ThemeCustomizer";
 import { StudentAvatar } from "../components/StudentAvatar";
 import { Button } from "../components/ui/button";
 import { cn } from "../components/ui/utils";
+import { LegionLogo } from "../components/brand/LegionLogo";
+import { DevelopedByPhinova } from "../components/brand/DevelopedByPhinova";
 
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -181,6 +183,9 @@ function UserMenu({ onOpenCustomizer }: { onOpenCustomizer: () => void }) {
           >
             <LogOut className="size-4" aria-hidden /> Sign out
           </button>
+          <div className="border-t border-border/60 mt-1 pt-2 pb-0.5 flex justify-center">
+            <DevelopedByPhinova variant="minimal" />
+          </div>
         </div>
       ) : null}
     </div>
@@ -330,11 +335,15 @@ export function Shell() {
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Top bar */}
           <header className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-2 pt-4 lg:px-6 lg:pt-5 print:hidden">
-            <div className="min-w-0 flex-1">
-              <div className="break-words text-xs text-muted-foreground">{profile?.schoolName}</div>
-              <div className="inline-flex items-center gap-2 border-b-2 border-primary pb-0.5 text-sm font-semibold">
-                <CurrentIcon className="size-4" aria-hidden />
-                {current?.label ?? "Overview"}
+            <div className="min-w-0 flex-1 flex items-center gap-3.5">
+              <LegionLogo variant="compact" size="xs" className="hidden sm:inline-flex" />
+              <div className="hidden sm:block h-7 w-px bg-border/70" />
+              <div>
+                <div className="break-words text-xs text-muted-foreground">{profile?.schoolName}</div>
+                <div className="inline-flex items-center gap-2 border-b-2 border-primary pb-0.5 text-sm font-semibold">
+                  <CurrentIcon className="size-4" aria-hidden />
+                  {current?.label ?? "Overview"}
+                </div>
               </div>
             </div>
 
@@ -389,7 +398,7 @@ export function Shell() {
                 title={surface === "glass" ? "Glass surfaces on" : "Flat surfaces on"}
                 className="grid size-9 place-items-center rounded-full border border-border bg-foreground/5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring)]"
               >
-                {surface === "glass" ? <Sparkles className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}
+                {surface === "glass" ? <Layers className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}
               </button>
               <ThemeSwitch />
               <button
@@ -410,8 +419,18 @@ export function Shell() {
             </div>
           </header>
 
-          <main className="flex-1 px-4 pb-6 pt-3 lg:px-6">
-            <Outlet />
+          <main className="flex-1 px-4 pb-6 pt-3 lg:px-6 flex flex-col justify-between">
+            <div className="flex-1">
+              <Outlet />
+            </div>
+            <footer className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-4 pb-2 text-xs text-muted-foreground print:hidden">
+              <div className="flex items-center gap-2">
+                <span className="font-bold tracking-widest text-[11px] uppercase font-mono text-foreground/80">Legion SMS</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-[11px] text-muted-foreground/70">{profile?.schoolName}</span>
+              </div>
+              <DevelopedByPhinova variant="minimal" />
+            </footer>
           </main>
         </div>
       </div>

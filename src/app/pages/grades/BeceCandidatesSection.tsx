@@ -6,7 +6,7 @@ import {
   GraduationCap,
   Hash,
   Search,
-  Sparkles,
+
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -436,7 +436,7 @@ export function BeceCandidatesSection({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 text-base font-semibold">
-                <Sparkles className="size-4 text-primary" aria-hidden />{" "}
+                <Hash className="size-4 text-primary" aria-hidden />{" "}
                 WAEC BECE Sequential Index Number Generator
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -489,7 +489,7 @@ export function BeceCandidatesSection({
               disabled={bulkAssignMut.isPending || students.length === 0}
               onClick={() => bulkAssignMut.mutate()}
             >
-              <Sparkles className="size-4" aria-hidden />{" "}
+              <Hash className="size-4" aria-hidden />{" "}
               {bulkAssignMut.isPending
                 ? "Assigning index numbers…"
                 : `Auto-Assign (${students.length})`}
