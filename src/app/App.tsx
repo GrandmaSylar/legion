@@ -9,6 +9,7 @@ import {
   hydratePersistedQueryCache,
   subscribeQueryCachePersistence,
 } from "../lib/queryPersistence";
+import { ActionDialogProvider } from "./components/modals";
 import { Shell } from "./layout/Shell";
 import ComingSoon from "./pages/ComingSoon";
 
@@ -91,7 +92,7 @@ function Themed({ children }: { children: ReactElement }) {
       cloudTheme={profile?.theme}
       accent={profile?.brandPrimary}
     >
-      {children}
+      <ActionDialogProvider>{children}</ActionDialogProvider>
     </ThemeProvider>
   );
 }

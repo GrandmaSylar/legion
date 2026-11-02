@@ -6,15 +6,21 @@ import SubjectsTab from "./settings/SubjectsTab";
 import GradingTab from "./settings/GradingTab";
 import TimetableTab from "./settings/TimetableTab";
 import AuditLogTab from "./settings/AuditLogTab";
+import { DialogShowcase } from "../components/modals/DialogShowcase";
+import { LegionLogo } from "../components/brand/LegionLogo";
+import { DevelopedByPhinova } from "../components/brand/DevelopedByPhinova";
 
 export default function Settings() {
   return (
-    <div className="w-full space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold">School setup &amp; security</h1>
-        <p className="text-sm text-muted-foreground">
-          Institution details, receipt branding, academic years, classes, subjects, grading scales, timetables and security audit logs.
-        </p>
+    <div className="w-full space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">School setup &amp; security</h1>
+          <p className="text-sm text-muted-foreground">
+            Institution details, receipt branding, academic years, classes, subjects, grading scales, timetables and security audit logs.
+          </p>
+        </div>
+        <LegionLogo variant="compact" size="sm" />
       </div>
 
       <Tabs defaultValue="institution" className="space-y-4">
@@ -37,6 +43,19 @@ export default function Settings() {
         <TabsContent value="timetable"><TimetableTab /></TabsContent>
         <TabsContent value="audit"><AuditLogTab /></TabsContent>
       </Tabs>
+
+      {/* Interactive System Dialogs Showcase & System Credit */}
+      <div className="space-y-3 pt-4">
+        <DialogShowcase />
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <span>Legion OS Engine v2.4</span>
+            <span>·</span>
+            <span>Supabase RLS Enforced</span>
+          </div>
+          <DevelopedByPhinova variant="vintage" />
+        </div>
+      </div>
     </div>
   );
 }

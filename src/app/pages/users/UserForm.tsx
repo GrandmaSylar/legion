@@ -10,6 +10,7 @@ import {
   resetUserPassword, setUserActive, updateUser, type UserRow,
 } from "../../../lib/data/users";
 import { Button } from "../../components/ui/button";
+import { ActionConfirmDialog } from "../../components/modals";
 import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
@@ -305,15 +306,15 @@ function EditUser({ user }: { user: UserRow }) {
               <p className="text-sm text-muted-foreground">
                 Only possible if the person has no recorded activity. Otherwise deactivate them.
               </p>
-              {!confirmDelete ? (
-                <Button variant="outline" size="sm" onClick={() => setConfirmDelete(true)}>Delete…</Button>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm">Delete {user.fullName} permanently?</span>
-                  <Button variant="destructive" size="sm" disabled={remove.isPending} onClick={() => remove.mutate()}>{remove.isPending ? "Deleting" : "Yes, delete"}</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-                </div>
-              )}
+              <>
+                <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setConfirmDelete(true)}>Delete…</Button>
+                <ActionConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} title={`Delete ${user.fullName}?`} description="This will permanently delete the user account and associated role records. This action cannot be reversed." variant="destructive" confirmText="Delete account" loading={remove.isPending} onConfirm={async () => { await remove.mutateAsync(); }} />
+
+
+
+
+
+              </>
               <FormMessage error={remove.isError ? message(remove.error) : null} />
             </div>
           ) : null}

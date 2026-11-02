@@ -23,6 +23,7 @@ import {
 import { ACCENT_PALETTE, WALLPAPER_PRESETS } from "./wallpaperPresets";
 import { Button } from "../app/components/ui/button";
 import { cn } from "../app/components/ui/utils";
+import { DevelopedByPhinova } from "../app/components/brand/DevelopedByPhinova";
 
 export function ThemeCustomizerModal({
   open,
@@ -636,6 +637,9 @@ export function ThemeCustomizerModal({
           >
             <RotateCcw className="size-3.5" />
             Reset all
+          </button>
+          <DevelopedByPhinova variant="minimal" />
+          <button style={{ display: "none" }}>
           </button>
           <Button type="button" onClick={onClose} size="sm">
             Done

@@ -1,12 +1,12 @@
 {
-  "name": "School Management System",
-  "short_name": "School SMS",
-  "description": "Pre-school to Basic 9 School Management System with offline-ready attendance, gradebook, BECE analytics, and finance.",
+  "name": "Legion School Management System",
+  "short_name": "Legion SMS",
+  "description": "Legion School Management System: Unified academic, financial, attendance, and BECE analytics operating system for basic schools. Developed by phinova.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#c2410c",
+  "background_color": "#0d0d14",
+  "theme_color": "#e8562a",
   "icons": [
     {
       "src": "/icon.svg",
@@ -16,6 +16,11 @@
     }
   ],
   "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/"
+    },
     {
       "name": "Mark Attendance",
       "short_name": "Attendance",
@@ -27,10 +32,9 @@
       "url": "/grades"
     },
     {
-      "name": "Fees & Finance",
+      "name": "Fees & Billing",
       "short_name": "Finance",
       "url": "/fees"
     }
   ]
 }
-

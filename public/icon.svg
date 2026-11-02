@@ -1,8 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="116" fill="#c2410c"/>
-  <path d="M256 116L88 192L256 268L424 192L256 116Z" fill="#ffffff"/>
-  <path d="M144 238V336C144 368 194 396 256 396C318 396 368 368 368 336V238L256 289L144 238Z" fill="#ffedd5"/>
-  <path d="M408 206V324" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
-  <circle cx="408" cy="340" r="18" fill="#ffffff"/>
-</svg>
+  <defs>
+    <linearGradient id="shield-grad" x1="68" y1="34" x2="444" y2="478" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#e8562a"/>
+      <stop offset="60%" stopColor="#c2410c"/>
+      <stop offset="100%" stopColor="#7c2d12"/>
+    </linearGradient>
+    <linearGradient id="gold-grad" x1="128" y1="85" x2="384" y2="426" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stopColor="#fef08a"/>
+      <stop offset="45%" stopColor="#f59e0b"/>
+      <stop offset="100%" stopColor="#b45309"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stopColor="#ea580c" stopOpacity="0.3"/>
+      <stop offset="100%" stopColor="#000000" stopOpacity="0"/>
+    </radialGradient>
+  </defs>
 
+  <!-- Dark rounded container -->
+  <rect width="512" height="512" rx="116" fill="#0c0d14"/>
+  <rect width="512" height="512" rx="116" fill="url(#glow)"/>
+  <rect x="2" y="2" width="508" height="508" rx="114" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
+
+  <!-- Legion Shield Shape -->
+  <path d="M256 52 L418 102 C418 256 371 392 256 460 C141 392 94 256 94 102 Z" fill="url(#shield-grad)" stroke="rgba(255,255,255,0.25)" stroke-width="6"/>
+
+  <!-- Inner Dark Inset -->
+  <path d="M256 80 L388 122 C388 242 348 352 256 408 C164 352 124 242 124 122 Z" fill="rgba(8, 9, 15, 0.5)"/>
+
+  <!-- Heraldic "L" Core -->
+  <path d="M192 144 H230 V290 H320 V330 H192 Z" fill="#ffffff" filter="drop-shadow(0 6px 12px rgba(0,0,0,0.5))"/>
+
+  <!-- Gold Chevron Blades -->
+  <path d="M252 152 L332 174 L332 208 L264 190 Z" fill="url(#gold-grad)"/>
+  <path d="M260 204 L350 226 L350 256 L268 238 Z" fill="url(#gold-grad)"/>
+  <path d="M272 250 L358 268 L350 298 L280 286 Z" fill="url(#gold-grad)" opacity="0.9"/>
+
+  <!-- Open Book of Knowledge -->
+  <path d="M162 360 C196 352 230 356 256 368 C282 356 316 352 350 360 L342 382 C312 374 282 378 256 392 C230 378 200 374 170 382 Z" fill="#ffffff" opacity="0.95"/>
+
+  <!-- Star of Wisdom -->
+  <path d="M256 96 L264 117 L285 121 L268 134 L272 155 L256 142 L240 155 L244 134 L227 121 L248 117 Z" fill="#ffffff"/>
+</svg>
