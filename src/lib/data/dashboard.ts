@@ -106,6 +106,10 @@ function describe(r: Row): string | null {
       return r.action === "INSERT" ? `A payment of GHS ${str(String(row.amount ?? ""))} was recorded (${str(row.receipt_no)})` : null;
     case "bece_registrations":
       return str(row.index_number) ? "A BECE index number was entered" : null;
+    case "expenses":
+      if (r.action === "INSERT") return `Expense ${str(row.voucher_no)} (${str(row.title) || "Expenditure"}) of GHS ${str(String(row.amount ?? ""))} was submitted`;
+      if (r.before && r.after && r.before.status !== r.after.status) return `Expense ${str(row.voucher_no)} (${str(row.title)}) was marked ${str(r.after.status)}`;
+      return null;
     default:
       return null;
   }
