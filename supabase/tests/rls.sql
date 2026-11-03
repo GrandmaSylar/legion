@@ -81,7 +81,7 @@ declare
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
   u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();  u_off uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
-  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid; mb uuid; rm int; rb int; rt int;
+  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid; mb uuid; rm int; rb int; rt int; ra int; ri int; rpay int;
   r record;
 begin
   select id into a from public.schools where name = 'Pinks Academy';
@@ -129,6 +129,9 @@ begin
   insert into public.enrollments (school_id,student_id,class_id,academic_year_id) values (a,s2,c2,yr) returning id into e2;
   insert into public.attendance (school_id,enrollment_id,date,status) values (a,e1,current_date,'present'),(a,e2,current_date,'absent');
   insert into public.bece_registrations (school_id,student_id,exam_year) values (a,s1,2027);
+  select count(*) into ra from public.attendance where school_id = a;
+  select count(*) into ri from public.invoices where school_id = a;
+  select count(*) into rpay from public.payments where school_id = a;
   select count(*) into rm from public.messages where school_id = a;
   select count(*) into rb from public.message_batches where school_id = a;
   select count(*) into rt from public.message_templates where school_id = a;
@@ -167,21 +170,21 @@ begin
     ('students other school admin', pg_temp.t_count(u_adminb,'students')::text,'1'),
     ('students anonymous',  pg_temp.t_count(null,'students')::text,'0'),
     -- attendance
-    ('attendance admin',    pg_temp.t_count(u_admin,'attendance')::text,'2'),
-    ('attendance principal',pg_temp.t_count(u_prin,'attendance')::text,'2'),
+    ('attendance admin',    pg_temp.t_count(u_admin,'attendance')::text,ra::text),
+    ('attendance principal',pg_temp.t_count(u_prin,'attendance')::text,ra::text),
     ('attendance teacher1', pg_temp.t_count(u_t1,'attendance')::text,'1'),
     ('attendance parent1',  pg_temp.t_count(u_p1,'attendance')::text,'1'),
     ('attendance student1', pg_temp.t_count(u_s1,'attendance')::text,'1'),
     ('attendance accountant', pg_temp.t_count(u_acc,'attendance')::text,'0'),
     ('attendance hr',       pg_temp.t_count(u_hr,'attendance')::text,'0'),
     -- finance
-    ('invoices admin',      pg_temp.t_count(u_admin,'invoices')::text,'2'),
-    ('invoices accountant', pg_temp.t_count(u_acc,'invoices')::text,'2'),
+    ('invoices admin',      pg_temp.t_count(u_admin,'invoices')::text,(ri + 2)::text),
+    ('invoices accountant', pg_temp.t_count(u_acc,'invoices')::text,(ri + 2)::text),
     ('invoices principal',  pg_temp.t_count(u_prin,'invoices')::text,'0'),
     ('invoices teacher1',   pg_temp.t_count(u_t1,'invoices')::text,'0'),
     ('invoices reception',  pg_temp.t_count(u_rec,'invoices')::text,'0'),
     ('invoices parent1',    pg_temp.t_count(u_p1,'invoices')::text,'1'),
-    ('payments accountant', pg_temp.t_count(u_acc,'payments')::text,'2'),
+    ('payments accountant', pg_temp.t_count(u_acc,'payments')::text,(rpay + 2)::text),
     ('payments principal',  pg_temp.t_count(u_prin,'payments')::text,'0'),
     ('payments parent1',    pg_temp.t_count(u_p1,'payments')::text,'1'),
     ('payments other school admin', pg_temp.t_count(u_adminb,'payments')::text,'0'),
@@ -210,8 +213,8 @@ begin
     ('bece teacher2 sees none',       pg_temp.t_count(u_t2,'bece_registrations')::text,'0'),
     -- developer sees at least everything an admin sees
     ('students developer',  pg_temp.t_count(u_dev,'students')::text,(rs + 3)::text),
-    ('attendance developer',pg_temp.t_count(u_dev,'attendance')::text,'2'),
-    ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,'2'),
+    ('attendance developer',pg_temp.t_count(u_dev,'attendance')::text,ra::text),
+    ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,(ri + 2)::text),
     ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,(rst + 3)::text),
     ('profiles developer',  pg_temp.t_count(u_dev,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
     ('developer is scoped to own school', pg_temp.t_count(u_dev,'classes')::text,(select count(*) from public.classes where school_id = a)::text),

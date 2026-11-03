@@ -834,7 +834,7 @@ export default function AttendancePage() {
                             <div className="flex flex-wrap items-center gap-1.5">
                               <Link
                                 to={`/students/${item.studentId}`}
-                                className="truncate text-sm font-medium hover:text-primary hover:underline"
+                                className="break-words text-sm font-medium hover:text-primary hover:underline"
                               >
                                 {item.fullName}
                               </Link>
