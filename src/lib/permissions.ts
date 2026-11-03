@@ -82,6 +82,12 @@ export const STAFF_ACTIONS = ["staff.view"];
 /** Analytics: any of the three kinds of report opens it; each section shows only for the kind the person may see. */
 export const ANALYTICS_ACTIONS = ["analytics.view_finance", "analytics.view_academic", "analytics.view_staff"];
 
+/** Users: the list of logins. Creating, editing and resetting are separate actions checked where they happen. */
+export const USERS_ACTIONS = ["users.view"];
+
+/** Settings: viewing or changing the school's set-up. */
+export const SETTINGS_ACTIONS = ["settings.view", "settings.edit"];
+
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
   { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true, anyAction: STUDENT_ACTIONS },
@@ -92,8 +98,8 @@ export const NAV: NavItem[] = [
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true, anyAction: STAFF_ACTIONS },
   { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true },
-  { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true },
-  { id: "settings", label: "Settings", path: "/settings", roles: ["school_admin"], built: true },
+  { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true, anyAction: USERS_ACTIONS },
+  { id: "settings", label: "Settings", path: "/settings", roles: ["school_admin"], built: true, anyAction: SETTINGS_ACTIONS },
 ];
 
 /**

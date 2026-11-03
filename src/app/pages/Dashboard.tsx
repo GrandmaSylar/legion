@@ -1,3 +1,4 @@
+import { useCapabilities } from "../../lib/access/useCapabilities";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -140,27 +141,37 @@ function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-interface QuickAction { label: string; hint: string; to: string; icon: LucideIcon; roles: AppRole[]; module: string; soon?: boolean }
+/** A shortcut shows for anyone holding one of `any` (staff, by action), or for the `portalRoles` (parents, students). */
+interface QuickAction {
+  label: string; hint: string; to: string; icon: LucideIcon; module: string;
+  any?: string[]; portalRoles?: AppRole[]; always?: boolean; unless?: string; soon?: boolean;
+}
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, roles: ["school_admin", "principal", "teacher"], module: "attendance" },
-  { label: "Gradebook & reports", hint: "Enter marks and print report cards", to: "/grades", icon: GraduationCap, roles: ["school_admin", "principal", "teacher", "parent", "student"], module: "grades" },
-  { label: "Fees & receipts", hint: "Invoices, payments and official receipts", to: "/fees", icon: Receipt, roles: ["school_admin", "accountant", "parent"], module: "fees" },
-  { label: "School analytics", hint: "Export PDF, PNG, Word, Excel & CSV reports", to: "/analytics", icon: BarChart3, roles: ["school_admin", "principal", "accountant", "hr_officer"], module: "analytics" },
-  { label: "Notice board", hint: "School and class announcements", to: "/notices", icon: Bell, roles: [...STAFF_ROLES, "parent", "student"], module: "notices" },
-  { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, roles: ["school_admin", "receptionist"], module: "students" },
-  { label: "View students", hint: "Search the register", to: "/students", icon: Users, roles: ["principal", "teacher", "accountant"], module: "students" },
-  { label: "Staff directory", hint: "Teachers and support staff", to: "/staff", icon: UserCog, roles: ["school_admin", "hr_officer", "principal"], module: "staff" },
-  { label: "Add user", hint: "Create a staff or parent login", to: "/users/new", icon: UserRoundCog, roles: ["school_admin"], module: "users" },
-  { label: "School setup", hint: "Years, classes and timetables", to: "/settings", icon: Settings, roles: ["school_admin"], module: "settings" },
+  { label: "Mark attendance", hint: "Take today's register", to: "/attendance", icon: ClipboardCheck, module: "attendance", any: ["attendance.take_own_classes", "attendance.take_any"] },
+  { label: "Gradebook & reports", hint: "Enter marks and print report cards", to: "/grades", icon: GraduationCap, module: "grades", any: ["grades.view", "grades.enter_own_classes", "grades.enter_any"], portalRoles: ["parent", "student"] },
+  { label: "Fees & receipts", hint: "Invoices, payments and official receipts", to: "/fees", icon: Receipt, module: "fees", any: ["fees.view"], portalRoles: ["parent"] },
+  { label: "School analytics", hint: "Export PDF, PNG, Word, Excel & CSV reports", to: "/analytics", icon: BarChart3, module: "analytics", any: ["analytics.view_finance", "analytics.view_academic", "analytics.view_staff"] },
+  { label: "Notice board", hint: "School and class announcements", to: "/notices", icon: Bell, module: "notices", always: true },
+  { label: "Add student", hint: "Admit a new pupil", to: "/students/new", icon: UserPlus, module: "students", any: ["students.create"] },
+  { label: "View students", hint: "Search the register", to: "/students", icon: Users, module: "students", any: ["students.view", "students.view_own_classes"], unless: "students.create" },
+  { label: "Staff directory", hint: "Teachers and support staff", to: "/staff", icon: UserCog, module: "staff", any: ["staff.view"] },
+  { label: "Add user", hint: "Create a staff or parent login", to: "/users/new", icon: UserRoundCog, module: "users", any: ["users.create"] },
+  { label: "School setup", hint: "Years, classes and timetables", to: "/settings", icon: Settings, module: "settings", any: ["settings.view", "settings.edit"] },
 ];
 
 function QuickActionsPanel() {
   const { roles, profile } = useAuth();
   const modules = profile?.modules ?? null;
+  // Shown by what the person may do (their actions), still narrowed by any sections switched off for them.
+  const { caps } = useCapabilities();
   const actions = QUICK_ACTIONS.filter((a) => {
     const item = NAV.find((n) => n.id === a.module);
-    return hasAnyRole(roles, a.roles) && (!item || canSee(item, roles, modules));
+    const allowed =
+      a.always ||
+      (!!a.portalRoles && hasAnyRole(roles, a.portalRoles)) ||
+      (!!caps && !!a.any && a.any.some((x) => caps.includes(x)) && !(a.unless && caps.includes(a.unless)));
+    return allowed && (!item || canSee(item, roles, modules, caps));
   });
   return (
     <Panel title="Quick actions" icon={ClipboardCheck}>
@@ -316,8 +327,8 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 function StaffDashboard() {
-  const { profile, roles } = useAuth();
-  const isAdmin = hasAnyRole(roles, ["school_admin"]);
+  const { profile } = useAuth();
+  const { can } = useCapabilities();
   const { data, isError, refetch } = useQuery({
     queryKey: ["dashboard"],
     queryFn: getDashboardStats,
@@ -369,9 +380,9 @@ function StaffDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <ActivityPanel isAdmin={isAdmin} />
+        <ActivityPanel isAdmin={can("audit.view")} />
         <QuickActionsPanel />
-        <TodayPanel isAdmin={isAdmin} />
+        <TodayPanel isAdmin={can("settings.edit")} />
       </div>
     </div>
   );

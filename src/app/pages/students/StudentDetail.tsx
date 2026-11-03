@@ -170,13 +170,9 @@ function AttendanceCard({ studentId }: { studentId: string }) {
 
 function GradesCard({ s }: { s: StudentDetail }) {
   const { roles } = useAuth();
-  const canOpenGrades = hasAnyRole(roles, [
-    "school_admin",
-    "principal",
-    "teacher",
-    "parent",
-    "student",
-  ]);
+  const { canAny } = useCapabilities();
+  // Parents and students open their own results; staff open them by their actions.
+  const canOpenGrades = hasAnyRole(roles, ["parent", "student"]) || canAny(["grades.view", "grades.enter_own_classes", "grades.enter_any"]);
   const q = useQuery({
     queryKey: ["student-grades-overview", s.id],
     queryFn: () => getStudentGradesOverview(s.id),
