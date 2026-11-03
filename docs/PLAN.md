@@ -2,6 +2,25 @@
 
 Source: `SMS_Master_Blueprint.docx` (pre-school to Basic 9, Ghana-first, pilot school then SaaS) and `expected.png` (the "Sedela" glassmorphic dashboard). The current code is a prototype and design reference only. This repo becomes the real frontend.
 
+## Where we are (updated 2026-11-03)
+
+Phases 0 to 3 are done, and most of Phase 4 is built. The system runs against the real Supabase project with a demo school loaded (`supabase/demo/`).
+
+| Area | State |
+|---|---|
+| Foundation, shell, roles, RLS, tests | Done |
+| Students, admission, photos, parents and guardians, bulk import, promotion | Done |
+| Attendance, gradebook, report cards, timetable, notices | Done |
+| Fees, invoices, discounts, instalments, receipts, expenses | Done |
+| SMS through Arkesel (compose, history, templates, absence and fee reminders, parent opt-out) | Done; one real SMS still to be sent as a final check |
+| Paystack online payments, parent overview fees card and Pay now | Built and tested with test money; waiting on a real test-card trial |
+| Parent portal | Own login, children switcher, attendance, grades, notices, fees |
+| Public admission form, parent self-signup | Not started |
+| HR, payroll, library, at-risk analytics, report builder | Not started |
+| Audit log screen, two-step sign-in, restorable backups, monitoring | Not started |
+
+**What comes next, and how specific people get specific access, is in [`ACCESS_AND_FEATURE_PLAN.md`](ACCESS_AND_FEATURE_PLAN.md).** The phases below are the original plan, kept for context.
+
 ## Planning principles
 
 1. **Pilot school first.** The blueprint's 34-week, 8-phase roadmap assumes 5 people. Solo, treat roughly 40-50% of it as the first year. After the pilot MVP, re-plan from the pilot school's feedback.
@@ -74,7 +93,7 @@ Timetable generation and substitutions, HR, recruitment, payroll (SSNIT/PAYE), l
 - Retrofitting schema-per-tenant onto a working app is risky; decide the tenancy approach before data piles up.
 
 ## Immediate next actions
-1. Frontend and backend decisions are made: Vite + Supabase (see `DECISIONS.md`).
-2. Identify the pilot school and gather their current forms and report card format.
-3. Draft the ERD.
-4. Restructure the repo, add `.gitignore`, and commit on a feature branch (never `main`).
+1. Merge the open pull requests and add automatic checks (typecheck, build, tests) on every change.
+2. Money safety before real payments: online payments review screen, cancel receipt and refund, double-payment guard, Paystack reconciliation report.
+3. Capability-based access, so one person can be given one feature (see `ACCESS_AND_FEATURE_PLAN.md`, section 3).
+4. Parent alerts and self-service details, then the public admission form.
