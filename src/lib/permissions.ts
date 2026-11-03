@@ -76,14 +76,20 @@ export const GRADES_ACTIONS = ["grades.view", "grades.enter_own_classes", "grade
 /** Fees: seeing invoices and receipts, or the school's expenses. Parents reach their own fees as portal accounts. */
 export const FEES_ACTIONS = ["fees.view", "expenses.view"];
 
+/** Staff: the staff directory screen. (Reading colleagues' names elsewhere is a separate, wider action.) */
+export const STAFF_ACTIONS = ["staff.view"];
+
+/** Analytics: any of the three kinds of report opens it; each section shows only for the kind the person may see. */
+export const ANALYTICS_ACTIONS = ["analytics.view_finance", "analytics.view_academic", "analytics.view_staff"];
+
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
   { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true, anyAction: STUDENT_ACTIONS },
   { id: "attendance", label: "Attendance", path: "/attendance", roles: ["school_admin", "principal", "teacher"], built: true, anyAction: ATTENDANCE_ACTIONS },
   { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "receptionist", "parent", "student"], built: true, anyAction: GRADES_ACTIONS, portalRoles: ["parent", "student"] },
   { id: "fees", label: "Fees & Finance", path: "/fees", roles: ["school_admin", "accountant", "principal", "parent"], built: true, anyAction: FEES_ACTIONS, portalRoles: ["parent"] },
-  { id: "analytics", label: "Analytics", path: "/analytics", roles: ["school_admin", "principal", "accountant", "hr_officer"], built: true },
-  { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true },
+  { id: "analytics", label: "Analytics", path: "/analytics", roles: ["school_admin", "principal", "accountant", "hr_officer"], built: true, anyAction: ANALYTICS_ACTIONS },
+  { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true, anyAction: STAFF_ACTIONS },
   { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true },
   { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true },

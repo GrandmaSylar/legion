@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
-import { hasAnyRole } from "../../../lib/permissions";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import {
   bulkCreateStaff,
   createStaffMember,
@@ -59,12 +59,13 @@ const STATUS_BADGE: Record<StaffStatus, { label: string; className: string }> = 
 type StaffFilter = "all" | "teaching" | "non_teaching" | "on_leave" | "left";
 
 export default function StaffPage() {
-  const { roles } = useAuth();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const canEdit = hasAnyRole(roles, ["school_admin", "hr_officer"]);
-  const isAdmin = hasAnyRole(roles, ["school_admin"]);
+  const { can } = useCapabilities();
+  const canEdit = can("staff.edit");          // changes and removes staff records
+  const canCreate = can("staff.create");      // adds staff, singly or in bulk
+  const isAdmin = can("users.create");        // can create a login for them
 
   const [filter, setFilter] = useState<StaffFilter>("all");
   const [search, setSearch] = useState("");
@@ -242,7 +243,7 @@ export default function StaffPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {canEdit ? (
+          {canCreate ? (
             <Button
               type="button"
               variant={bulkOpen ? "default" : "outline"}
@@ -264,7 +265,7 @@ export default function StaffPage() {
               </Link>
             </Button>
           ) : null}
-          {canEdit && !formOpen ? (
+          {canCreate && !formOpen ? (
             <Button
               type="button"
               size="sm"
@@ -310,7 +311,7 @@ export default function StaffPage() {
       </div>
 
       {/* Bulk CSV / Excel Import Panel */}
-      {bulkOpen && canEdit ? (
+      {bulkOpen && canCreate ? (
         <section className="surface space-y-4 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -464,7 +465,7 @@ export default function StaffPage() {
       ) : null}
 
       {/* Add / Edit Form */}
-      {formOpen && canEdit ? (
+      {formOpen && (canEdit || canCreate) ? (
         <form onSubmit={onSubmit} className="surface space-y-4 p-4 sm:p-5">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <Briefcase className="size-4 text-primary" aria-hidden />
