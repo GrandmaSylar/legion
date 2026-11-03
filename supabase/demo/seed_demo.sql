@@ -9,7 +9,7 @@
 -- Remove: supabase db query --linked -f supabase/demo/remove_demo.sql
 --
 -- Demo rows are recognisable by an @demo.invalid email (parents, staff) or by the
--- creation date 2026-01-01 (assessments, notices); nothing else is touched.
+-- creation date 2026-01-01 (assessments, notices, fee structures); nothing else is touched.
 
 do $$
 declare
@@ -160,12 +160,13 @@ begin
     and d.dt >= (select start_date from public.terms where id = trm);
 
   -- ── Fees for Term 1 ──────────────────────────────────────────────────────
-  insert into public.fee_structures (school_id, fee_category_id, level_id, term_id, amount)
+  insert into public.fee_structures (school_id, fee_category_id, level_id, term_id, amount, created_at)
   select sch, fc.id, l.id, case when fc.is_one_off then null else trm end,
          case fc.name
            when 'School fees' then (array[800,850,900,1000,1050,1200,1250,1300,1350,1400,1450,1700,1750,1900])[l.sort_order]
            when 'Books and stationery' then (array[150,150,180,220,250,300,300,320,320,350,350,420,420,480])[l.sort_order]
-           else case when l.sort_order <= 5 then 300 when l.sort_order <= 11 then 350 else 400 end end
+           else case when l.sort_order <= 5 then 300 when l.sort_order <= 11 then 350 else 400 end end,
+         timestamptz '2026-01-01 00:00+00'
   from public.levels l cross join public.fee_categories fc
   where l.school_id = sch and fc.school_id = sch;
 

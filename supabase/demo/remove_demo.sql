@@ -1,6 +1,6 @@
 -- Removes everything seed_demo.sql loaded, and nothing else: parents and staff with
 -- an @demo.invalid email, the students linked only to them, and rows created on
--- 2026-01-01 (demo assessments and notices). When no real students or invoices are
+-- 2026-01-01 (demo assessments, notices and fee structures). When no real students or invoices are
 -- left, the number counters restart so real numbering begins at the start.
 --
 -- Run: supabase db query --linked -f supabase/demo/remove_demo.sql
@@ -18,10 +18,7 @@ begin
   delete from public.installments where invoice_id in (select id from public.invoices where student_id = any (demo_students));
   delete from public.invoice_items where invoice_id in (select id from public.invoices where student_id = any (demo_students));
   delete from public.invoices where student_id = any (demo_students);
-  -- The demo fee structures are the only ones, unless the school has set its own since
-  if not exists (select 1 from public.fee_structures where created_at > timestamptz '2026-11-01') then
-    delete from public.fee_structures where school_id = sch;
-  end if;
+  delete from public.fee_structures where created_at = timestamptz '2026-01-01 00:00+00';
 
   delete from public.messages where guardian_id in (select id from public.guardians where email like '%@demo.invalid')
                                  or staff_id in (select id from public.staff where email like '%@demo.invalid');
