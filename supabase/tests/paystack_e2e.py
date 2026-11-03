@@ -124,21 +124,21 @@ def cleanup():
       delete from public.student_guardians where student_id in {s};
       delete from public.students where admission_no like 'ZZPAY-%';
       delete from public.guardians where full_name like 'ZZPay %';
-      delete from public.user_roles where profile_id in (select id from public.profiles where email like 'zz-pay-%@example.test');
-      delete from public.profiles where email like 'zz-pay-%@example.test';
-      delete from auth.identities where user_id in (select id from auth.users where email like 'zz-pay-%@example.test');
-      delete from auth.users where email like 'zz-pay-%@example.test'""")
+      delete from public.user_roles where profile_id in (select id from public.profiles where email like 'zz-pay-%@example.com');
+      delete from public.profiles where email like 'zz-pay-%@example.com';
+      delete from auth.identities where user_id in (select id from auth.users where email like 'zz-pay-%@example.com');
+      delete from auth.users where email like 'zz-pay-%@example.com'""")
 
 
 cleanup()
 try:
     pw = {k: secrets.token_urlsafe(14) for k in ("p1", "p2", "teacher")}
-    p1 = make_login("zz-pay-p1@example.test", pw["p1"], "parent")
-    p2 = make_login("zz-pay-p2@example.test", pw["p2"], "parent")
-    make_login("zz-pay-teacher@example.test", pw["teacher"], "teacher")
-    t1 = sign_in("zz-pay-p1@example.test", pw["p1"])
-    t2 = sign_in("zz-pay-p2@example.test", pw["p2"])
-    tt = sign_in("zz-pay-teacher@example.test", pw["teacher"])
+    p1 = make_login("zz-pay-p1@example.com", pw["p1"], "parent")
+    p2 = make_login("zz-pay-p2@example.com", pw["p2"], "parent")
+    make_login("zz-pay-teacher@example.com", pw["teacher"], "teacher")
+    t1 = sign_in("zz-pay-p1@example.com", pw["p1"])
+    t2 = sign_in("zz-pay-p2@example.com", pw["p2"])
+    tt = sign_in("zz-pay-teacher@example.com", pw["teacher"])
     check("test logins can sign in", t1 and t2 and tt)
 
     # two families, one invoice each (GHS 150, nothing paid)
@@ -179,6 +179,8 @@ try:
         # ── starting a payment ───────────────────────────────────────────────
         code, r = fn(t1, action="initialize", invoiceId=inv1, amount=60, returnUrl=RET)
         ref1 = r.get("reference")
+        if code != 200:
+            print("      reply:", code, json.dumps(r)[:300])
         check("a parent can start a payment for their child's invoice", code == 200 and "paystack" in str(r.get("authorizationUrl", "")) and ref1)
         check("a pending attempt was recorded for the right amount",
               one(f"select (status || ':' || amount) v from public.online_payments where reference = '{ref1}'") in ("pending:60.00", "pending:60"))
@@ -240,7 +242,7 @@ try:
               one(f"select count(*) v from public.payments where invoice_id = '{inv2}'") == "0")
 finally:
     cleanup()
-    left = sql("select count(*) n from auth.users where email like 'zz-pay-%@example.test'")
+    left = sql("select count(*) n from auth.users where email like 'zz-pay-%@example.com'")
     print("cleanup: leftover test logins =", 0 if '"n": 0' in left else "SOME")
 
 print(f"\n{sum(results)} of {len(results)} checks passed")
