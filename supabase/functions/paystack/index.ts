@@ -17,6 +17,7 @@
 // the app is served from (comma-separated for several). localhost is always allowed
 // so development works. Paystack redirects the parent back to <APP_URL>/fees.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { reconcile, type LegionAttempt, type PaystackTxn } from "./reconcile.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -144,7 +145,7 @@ Deno.serve(async (req) => {
     const { data: auth, error: authError } = await admin.auth.getUser(token);
     if (authError || !auth.user) throw new HttpError(401, "You are not signed in.");
     const me = auth.user;
-    const { data: profile } = await admin.from("profiles").select("is_active").eq("id", me.id).maybeSingle();
+    const { data: profile } = await admin.from("profiles").select("is_active, school_id").eq("id", me.id).maybeSingle();
     if (!profile?.is_active) throw new HttpError(403, "Your account is not active.");
 
     let body: Record<string, unknown> = {};
@@ -265,6 +266,55 @@ Deno.serve(async (req) => {
         return json({ status: "failed", message: str(data.gateway_response) || "The payment did not go through." });
       }
       return json({ status: "pending" }); // still ongoing, or the parent left without paying
+    }
+
+    // ── reconcile: Paystack's list of payments against Legion's receipts ─────
+    if (action === "reconcile") {
+      requireKey();
+      const { data: roleRows } = await admin.from("user_roles").select("role").eq("profile_id", me.id);
+      const roles = (roleRows ?? []).map((r) => r.role as string);
+      if (!roles.some((r) => ["developer", "school_admin", "accountant"].includes(r))) {
+        throw new HttpError(403, "Only an administrator or the accountant can check payments against Paystack.");
+      }
+      const from = str(body.from);
+      const to = str(body.to);
+      const isDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + "T00:00:00Z"));
+      if (!isDay(from) || !isDay(to)) throw new HttpError(400, "Choose a start and an end date.");
+      const start = Date.parse(from + "T00:00:00Z");
+      const end = Date.parse(to + "T23:59:59.999Z");
+      if (end < start) throw new HttpError(400, "The end date comes before the start date.");
+      if (end - start > 92 * 86_400_000) throw new HttpError(400, "Please check no more than three months at a time.");
+
+      // Paystack's successful payments in the period, a hundred at a time
+      const txns: PaystackTxn[] = [];
+      let complete = true;
+      for (let page = 1; ; page++) {
+        if (page > 20) { complete = false; break; } // 2,000 payments is the most we compare in one go
+        const r = await paystack(
+          `/transaction?status=success&perPage=100&page=${page}&from=${encodeURIComponent(from + "T00:00:00.000Z")}&to=${encodeURIComponent(to + "T23:59:59.999Z")}`,
+        );
+        if (!r.ok) throw new HttpError(502, `Paystack could not be reached${r.body.message ? `: ${r.body.message}` : "."}`);
+        for (const t of (r.body.data ?? []) as Record<string, any>[]) {
+          txns.push({ reference: String(t.reference), amount: Number(t.amount), fees: typeof t.fees === "number" ? t.fees : null, channel: t.channel ?? null, paid_at: t.paid_at ?? t.paidAt ?? null });
+        }
+        if (page >= Number(r.body.meta?.pageCount ?? 1)) break;
+      }
+
+      // Legion's attempts from a few days before (a payment is started, then paid) to the end
+      const since = new Date(start - 3 * 86_400_000).toISOString();
+      const until = new Date(end + 86_400_000).toISOString();
+      const { data: rows } = await admin.from("online_payments")
+        .select("reference, amount, status, paid_at, payment_id")
+        .eq("school_id", profile.school_id).gte("created_at", since).lte("created_at", until);
+      const ids = (rows ?? []).map((r) => r.payment_id).filter(Boolean) as string[];
+      const { data: pays } = ids.length ? await admin.from("payments").select("id, receipt_no").in("id", ids) : { data: [] };
+      const receipt = new Map((pays ?? []).map((p) => [p.id as string, p.receipt_no as string]));
+      const ours: LegionAttempt[] = (rows ?? []).map((r) => ({
+        reference: r.reference as string, amount: Number(r.amount), status: r.status as LegionAttempt["status"],
+        paid_at: (r.paid_at as string | null) ?? null, receipt_no: r.payment_id ? receipt.get(r.payment_id as string) ?? null : null,
+      }));
+      const inPeriod = (paidAt: string | null) => !!paidAt && Date.parse(paidAt) >= start && Date.parse(paidAt) <= end;
+      return json({ from, to, truncated: !complete, ...reconcile(txns, ours, inPeriod, complete) });
     }
 
     throw new HttpError(400, "Unknown action.");
