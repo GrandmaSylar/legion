@@ -9,6 +9,7 @@ import {
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useCapabilities } from "../../lib/access/useCapabilities";
 import { usePwaStatus } from "../../lib/pwa";
 import { useQueryClient } from "@tanstack/react-query";
 import { prefetchRouteAndData } from "../../lib/queryPersistence";
@@ -298,7 +299,8 @@ export function Shell() {
   const { isOnline, canInstall, draftCount, installApp } = usePwaStatus();
   const navigate = useNavigate();
   const location = useLocation();
-  const items = navFor(roles, profile?.modules ?? null);
+  const { caps } = useCapabilities();
+  const items = navFor(roles, profile?.modules ?? null, caps);
   const canSearch = items.some((i) => i.id === "students") && hasAnyRole(roles, ["school_admin", "principal", "teacher", "receptionist", "accountant"]);
   const [query, setQuery] = useState("");
   const [customizerOpen, setCustomizerOpen] = useState(false);

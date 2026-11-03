@@ -71,7 +71,7 @@ function Row({ t, canEdit }: { t: Template; canEdit: boolean }) {
 }
 
 export default function TemplatesTab() {
-  const { canSendAll } = useMessagingRights();
+  const { canManageTemplates } = useMessagingRights();
   const templates = useQuery({ queryKey: ["message-templates"], queryFn: listTemplates });
   const [adding, setAdding] = useState(false);
 
@@ -79,13 +79,13 @@ export default function TemplatesTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">Standard wording you can start a message from. Words in curly brackets are filled in for each person.</p>
-        {canSendAll && !adding ? <Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus className="size-4" aria-hidden /> New template</Button> : null}
+        {canManageTemplates && !adding ? <Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus className="size-4" aria-hidden /> New template</Button> : null}
       </div>
       {adding ? <div className="surface p-4"><TemplateForm onDone={() => setAdding(false)} onCancel={() => setAdding(false)} /></div> : null}
       {templates.isError ? <p role="alert" className="text-sm text-destructive">The templates could not be loaded.</p> : null}
       {templates.isLoading ? <Skeleton className="h-24 w-full" /> : null}
       <ul className="space-y-3">
-        {templates.data?.map((t) => <Row key={t.id} t={t} canEdit={canSendAll} />)}
+        {templates.data?.map((t) => <Row key={t.id} t={t} canEdit={canManageTemplates} />)}
       </ul>
     </div>
   );

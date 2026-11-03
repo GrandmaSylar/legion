@@ -43,7 +43,7 @@ function SenderForm({ serverSender }: { serverSender: string | null | undefined 
 }
 
 export default function SetupTab() {
-  const { canSendAll } = useMessagingRights();
+  const { canManageSetup } = useMessagingRights();
   const status = useQuery({ queryKey: ["sms-status"], queryFn: getSmsStatus, staleTime: 30_000, retry: false });
   const s = status.data;
 
@@ -94,10 +94,10 @@ export default function SetupTab() {
           </div>
         ) : null}
 
-        {s && canSendAll ? <SenderForm serverSender={s.serverSender} /> : null}
+        {s && canManageSetup ? <SenderForm serverSender={s.serverSender} /> : null}
       </section>
 
-      {canSendAll ? (
+      {canManageSetup ? (
         <form onSubmit={submit} className="surface space-y-4 p-4">
           <h2 className="text-base font-medium">Send a test message</h2>
           <p className="text-sm text-muted-foreground">One message to one number, showing exactly what Arkesel replies. Use a dry run first.</p>

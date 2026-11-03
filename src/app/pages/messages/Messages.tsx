@@ -6,7 +6,8 @@ import TemplatesTab from "./TemplatesTab";
 import { useMessagingRights } from "./useMessagingRights";
 
 export default function Messages() {
-  const { canSendAll } = useMessagingRights();
+  const { canSendAll, feeOnly, canManageSetup, canViewLog } = useMessagingRights();
+  const canCompose = canSendAll || feeOnly;
   return (
     <div className="w-full space-y-5">
       <div>
@@ -16,17 +17,17 @@ export default function Messages() {
         </p>
       </div>
 
-      <Tabs defaultValue="compose" className="space-y-4">
+      <Tabs defaultValue={canCompose ? "compose" : canViewLog ? "history" : "templates"} className="space-y-4">
         <TabsList className="h-auto w-full flex-wrap justify-start">
-          <TabsTrigger value="compose">Compose</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          {canCompose ? <TabsTrigger value="compose">Compose</TabsTrigger> : null}
+          {canViewLog ? <TabsTrigger value="history">History</TabsTrigger> : null}
           <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="setup">{canSendAll ? "Setup and test" : "Status"}</TabsTrigger>
+          {canCompose ? <TabsTrigger value="setup">{canManageSetup ? "Setup and test" : "Status"}</TabsTrigger> : null}
         </TabsList>
-        <TabsContent value="compose"><ComposeTab /></TabsContent>
-        <TabsContent value="history"><HistoryTab /></TabsContent>
+        {canCompose ? <TabsContent value="compose"><ComposeTab /></TabsContent> : null}
+        {canViewLog ? <TabsContent value="history"><HistoryTab /></TabsContent> : null}
         <TabsContent value="templates"><TemplatesTab /></TabsContent>
-        <TabsContent value="setup"><SetupTab /></TabsContent>
+        {canCompose ? <TabsContent value="setup"><SetupTab /></TabsContent> : null}
       </Tabs>
     </div>
   );

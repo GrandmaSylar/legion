@@ -1,8 +1,17 @@
-import { useAuth } from "../../../lib/auth/AuthProvider";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 
-/** An accountant may send fee reminders only; admins, principals and developers may send anything. */
+/**
+ * What this person may do in Messages, from the actions switched on for them (a developer holds
+ * every action). An accountant may send fee reminders only.
+ */
 export function useMessagingRights() {
-  const { roles } = useAuth();
-  const canSendAll = roles.some((r) => ["developer", "school_admin", "principal"].includes(r));
-  return { canSendAll, feeOnly: !canSendAll && roles.includes("accountant") };
+  const { can } = useCapabilities();
+  const canSendAll = can("messages.send_all");
+  return {
+    canSendAll,
+    feeOnly: !canSendAll && can("messages.send_fee_reminders"),
+    canManageSetup: can("messages.manage_setup"),
+    canManageTemplates: can("messages.manage_templates"),
+    canViewLog: can("messages.view_log"),
+  };
 }

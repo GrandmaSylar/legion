@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, type ReactElement } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "../lib/auth/AuthProvider";
+import { useCapabilities } from "../lib/access/useCapabilities";
 import { NAV, hasAnyRole } from "../lib/permissions";
 import { Button } from "./components/ui/button";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -73,10 +74,16 @@ function RequireAuth({ children }: { children: ReactElement }) {
 }
 
 // Role decides what the person may do; their switched-on sections can only narrow that.
-function RequireRole({ allowed, module, children }: { allowed: string[]; module?: string; children: ReactElement }) {
+function RequireRole({ allowed, module, anyAction, children }: { allowed: string[]; module?: string; anyAction?: string[]; children: ReactElement }) {
   const { roles, profile } = useAuth();
+  const { caps, isLoading } = useCapabilities();
   const modules = profile?.modules ?? null;
   const moduleOn = !module || module === "dashboard" || modules === null || modules.includes(module);
+  // A module decided by actions opens for anyone holding one of them; the rest still follow the role.
+  if (anyAction) {
+    if (isLoading) return <Splash />;
+    return moduleOn && !!caps && anyAction.some((a) => caps.includes(a)) ? children : <Navigate to="/" replace />;
+  }
   return hasAnyRole(roles, allowed as never) && moduleOn ? children : <Navigate to="/" replace />;
 }
 
@@ -120,7 +127,7 @@ export default function App() {
                       key={item.id}
                       path={item.path}
                       element={
-                        <RequireRole allowed={item.roles} module={item.id}>
+                        <RequireRole allowed={item.roles} module={item.id} anyAction={item.anyAction}>
                           {item.id === "dashboard" ? (
                             <Dashboard />
                           ) : item.id === "settings" ? (
