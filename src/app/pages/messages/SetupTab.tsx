@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, RefreshCw } from "lucide-react";
 import { countSegments, normalizePhone } from "../../../lib/sms";
-import { getSmsStatus, sendTest } from "../../../lib/data/messaging";
+import { getSenderSetting, getSmsStatus, saveSenderSetting, sendTest } from "../../../lib/data/messaging";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Field, FormMessage, controlClass } from "../../components/fields";
@@ -11,6 +11,35 @@ import { useMessagingRights } from "./useMessagingRights";
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong. Please try again.";
+}
+
+function SenderForm({ serverSender }: { serverSender: string | null | undefined }) {
+  const qc = useQueryClient();
+  const saved = useQuery({ queryKey: ["sender-setting"], queryFn: getSenderSetting });
+  const [value, setValue] = useState<string | null>(null);
+  const shown = value ?? saved.data ?? "";
+  const save = useMutation({
+    mutationFn: () => saveSenderSetting(shown),
+    onSuccess: () => {
+      setValue(null);
+      void qc.invalidateQueries({ queryKey: ["sender-setting"] });
+      void qc.invalidateQueries({ queryKey: ["sms-status"] });
+    },
+  });
+  const submit = (e: FormEvent) => { e.preventDefault(); save.mutate(); };
+  return (
+    <form onSubmit={submit} className="space-y-3 border-t border-border pt-3">
+      <Field label="Sender ID" htmlFor="sender-id">
+        <Input id="sender-id" value={shown} maxLength={11} autoComplete="off" placeholder={serverSender ?? "e.g. PinksAcad"} onChange={(e) => setValue(e.target.value.replace(/\s/g, ""))} />
+      </Field>
+      <p className="text-xs text-muted-foreground">
+        What parents see as the sender: 3 to 11 letters or numbers. Arkesel must approve it in their dashboard before it delivers.
+        {serverSender ? " Leave it empty to use the server default." : ""}
+      </p>
+      <FormMessage error={save.isError ? errorText(save.error) : null} ok={save.isSuccess && value === null ? "Saved." : null} />
+      <Button type="submit" size="sm" disabled={save.isPending || saved.isLoading || value === null}>{save.isPending ? "Saving" : "Save sender ID"}</Button>
+    </form>
+  );
 }
 
 export default function SetupTab() {
@@ -42,7 +71,7 @@ export default function SetupTab() {
         {s && s.configured ? (
           <ul className="space-y-2 text-sm">
             <li className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" aria-hidden /> Arkesel is connected.</li>
-            <li>Sender ID: <strong className="break-all">{s.sender}</strong></li>
+            <li>Sender ID in use: <strong className="break-all">{s.sender}</strong>{s.senderSource === "server" ? <span className="text-muted-foreground"> (server default)</span> : null}</li>
             <li>
               Balance:{" "}
               {s.balance != null ? <strong className="tabular-nums">{s.balance} SMS credits</strong> : <span className="text-muted-foreground">{s.balanceError ?? "not available"}</span>}
@@ -59,11 +88,13 @@ export default function SetupTab() {
           <div className="space-y-2 text-sm">
             <p className="flex items-start gap-2"><CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" aria-hidden /> SMS is not connected yet.</p>
             <p className="text-muted-foreground">
-              A developer connects it once by saving two secrets on the server: <code className="break-all">ARKESEL_API_KEY</code> and{" "}
-              <code className="break-all">ARKESEL_SENDER_ID</code> (up to 11 characters, approved by Arkesel). The key never reaches this browser.
+              {!s.keyPresent ? <>A developer saves the Arkesel key once on the server as <code className="break-all">ARKESEL_API_KEY</code>; it never reaches this browser. </> : null}
+              {!s.sender ? "Set the sender ID below." : null}
             </p>
           </div>
         ) : null}
+
+        {s && canSendAll ? <SenderForm serverSender={s.serverSender} /> : null}
       </section>
 
       {canSendAll ? (
