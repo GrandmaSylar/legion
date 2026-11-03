@@ -1,4 +1,5 @@
--- Removes everything seed_demo.sql loaded, and nothing else: parents and staff with
+-- Removes everything seed_demo.sql loaded, and nothing else: parents (and any login
+-- linked to one of them) and staff with
 -- an @demo.invalid email, the students linked only to them, and rows created on
 -- 2026-01-01 (demo assessments, notices and fee structures). When no real students or invoices are
 -- left, the number counters restart so real numbering begins at the start.
@@ -6,7 +7,7 @@
 -- Run: supabase db query --linked -f supabase/demo/remove_demo.sql
 
 do $$
-declare sch uuid; demo_students uuid[];
+declare sch uuid; demo_students uuid[]; demo_logins uuid[];
 begin
   select id into sch from public.schools where name = 'Pinks Academy';
 
@@ -14,6 +15,12 @@ begin
   from public.student_guardians sg join public.guardians g on g.id = sg.guardian_id
   where g.email like '%@demo.invalid';
 
+  -- Logins created for demo parents (a parent test account linked to a demo family)
+  select coalesce(array_agg(profile_id), '{}') into demo_logins
+    from public.guardians where email like '%@demo.invalid' and profile_id is not null;
+
+  -- Online payment attempts made against demo invoices, and the payments they produced
+  delete from public.online_payments where invoice_id in (select id from public.invoices where student_id = any (demo_students));
   delete from public.payments where invoice_id in (select id from public.invoices where student_id = any (demo_students));
   delete from public.installments where invoice_id in (select id from public.invoices where student_id = any (demo_students));
   delete from public.invoice_items where invoice_id in (select id from public.invoices where student_id = any (demo_students));
@@ -36,6 +43,10 @@ begin
   delete from public.student_guardians where student_id = any (demo_students);
   delete from public.students where id = any (demo_students);
   delete from public.guardians where email like '%@demo.invalid';
+  delete from public.user_roles where profile_id = any (demo_logins);
+  delete from public.profiles where id = any (demo_logins);
+  delete from auth.identities where user_id = any (demo_logins);
+  delete from auth.users where id = any (demo_logins);
 
   update public.classes set class_teacher_id = null where class_teacher_id in (select id from public.staff where email like '%@demo.invalid');
   update public.class_subjects set teacher_id = null where teacher_id in (select id from public.staff where email like '%@demo.invalid');
