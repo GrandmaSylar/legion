@@ -81,6 +81,8 @@ export interface PaymentSummaryRow {
   paidOn: string;
   receivedByName: string | null;
   voidedAt: string | null;
+  voidReason: string | null;
+  refundReference: string | null;
   createdAt: string;
   studentId: string;
   studentAdmissionNo: string;
@@ -119,6 +121,8 @@ export interface InvoiceRow {
     paidOn: string;
     receivedByName: string | null;
     voidedAt: string | null;
+    voidReason: string | null;
+    refundReference: string | null;
   }[];
   totalAmount: number;
   paidAmount: number;
@@ -425,7 +429,7 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
       terms(name),
       invoice_items!invoice_items_invoice_id_fkey(id, fee_category_id, kind, description, amount),
       installments(id, due_on, amount),
-      payments(id, receipt_no, amount, method, network, reference, paid_on, received_by_name, voided_at)
+      payments(id, receipt_no, amount, method, network, reference, paid_on, received_by_name, voided_at, void_reason, refund_reference)
     `,
     )
     .is("deleted_at", null)
@@ -458,6 +462,8 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
       paidOn: p.paid_on,
       receivedByName: p.received_by_name ?? null,
       voidedAt: p.voided_at ?? null,
+      voidReason: p.void_reason ?? null,
+      refundReference: p.refund_reference ?? null,
     }));
 
     const totalAmount = items.reduce((sum, it) => sum + it.amount, 0);
@@ -566,6 +572,20 @@ export async function recordPayment(input: {
   return { id: data.id, receiptNo: data.receipt_no };
 }
 
+/**
+ * Cancels a receipt. The receipt stays on record, marked with who cancelled it and why,
+ * and the invoice balance recovers. A receipt paid online needs the Paystack refund
+ * reference, because the money must be returned first.
+ */
+export async function voidPayment(input: { paymentId: string; reason: string; refundReference?: string }): Promise<void> {
+  const { error } = await supabase.rpc("void_payment", {
+    p_payment: input.paymentId,
+    p_reason: input.reason,
+    p_refund_reference: input.refundReference?.trim() || null,
+  });
+  if (error) throw error;
+}
+
 export function extractPaymentsFromInvoices(
   invoices: InvoiceRow[],
 ): PaymentSummaryRow[] {
@@ -584,6 +604,8 @@ export function extractPaymentsFromInvoices(
         paidOn: p.paidOn,
         receivedByName: p.receivedByName,
         voidedAt: p.voidedAt,
+        voidReason: p.voidReason,
+        refundReference: p.refundReference,
         createdAt: p.paidOn,
         studentId: inv.studentId,
         studentAdmissionNo: inv.studentAdmissionNo,

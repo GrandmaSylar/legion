@@ -59,6 +59,10 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { ReceiptView } from "./ReceiptView";
 import { PayOnlineDialog } from "./PayOnlineDialog";
+import { cn } from "../../components/ui/utils";
+import { CancelReceiptDialog } from "./CancelReceiptDialog";
+import { listOnlinePayments } from "../../../lib/data/onlinePayments";
+import { OnlinePaymentsTab } from "./OnlinePaymentsTab";
 import { checkOnlinePayment, getOnlinePaymentStatus, type OnlinePaymentResult } from "../../../lib/data/paystack";
 import { ExpensesTab } from "./ExpensesTab";
 
@@ -97,6 +101,9 @@ export default function Fees() {
 
   // Online payment: parents pay on Paystack's page and are sent back here with ?reference=…
   const onlineQ = useQuery({ queryKey: ["online-payment-status"], queryFn: getOnlinePaymentStatus, staleTime: 5 * 60_000, retry: false });
+  // Finance staff: how many online payments are waiting for someone to look at them
+  const onlineListQ = useQuery({ queryKey: ["online-payments"], queryFn: listOnlinePayments, enabled: canManage });
+  const needsReview = (onlineListQ.data ?? []).filter((p) => p.needsReview).length;
   const [searchParams, setSearchParams] = useSearchParams();
   const returnedRef = searchParams.get("reference") ?? searchParams.get("trxref");
   const [onlineResult, setOnlineResult] = useState<OnlinePaymentResult | null>(null);
@@ -551,6 +558,12 @@ export default function Fees() {
           <Button size="sm" variant="ghost" onClick={() => setOnlineResult(null)}>Dismiss</Button>
         </section>
       ) : null}
+      {canManage && needsReview > 0 ? (
+        <section role="alert" className="surface border-amber-500/50 p-4 text-sm">
+          <strong>{needsReview} online {needsReview === 1 ? "payment needs" : "payments need"} your attention.</strong>{" "}
+          Open the <em>Online payments</em> tab to see why.
+        </section>
+      ) : null}
       {canManage && onlineQ.data ? (
         <p className="text-xs text-muted-foreground">
           Online payments: {onlineQ.data.configured ? (onlineQ.data.mode === "live" ? "live, parents pay real money" : "test mode, no real money moves") : "not connected yet"}.
@@ -613,6 +626,12 @@ export default function Fees() {
           <TabsTrigger value="installments">
             Installment Plans ({allInstallments.length})
           </TabsTrigger>
+          {canManage ? (
+            <TabsTrigger value="online">
+              Online payments
+              {needsReview > 0 ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">{needsReview}</span> : null}
+            </TabsTrigger>
+          ) : null}
           {canManage ? (
             <TabsTrigger value="structure">Fee Structure</TabsTrigger>
           ) : null}
@@ -803,9 +822,14 @@ export default function Fees() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {allPayments.map((p) => (
-                      <tr key={p.id} className="hover:bg-foreground/[0.02]">
+                      <tr key={p.id} className={cn("hover:bg-foreground/[0.02]", p.voidedAt && "bg-destructive/5")}>
                         <td className="py-3 pl-4 pr-2 font-mono font-semibold tabular-nums">
-                          {p.receiptNo}
+                          <span className={p.voidedAt ? "line-through opacity-70" : undefined}>{p.receiptNo}</span>
+                          {p.voidedAt ? (
+                            <div className="mt-1 font-sans text-xs font-medium not-italic text-destructive no-underline">
+                              Cancelled{p.voidReason ? `: ${p.voidReason}` : ""}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="py-3 px-2 tabular-nums text-muted-foreground">
                           {p.paidOn}
@@ -823,19 +847,27 @@ export default function Fees() {
                           {p.method.replace("_", " ")}
                           {p.network ? ` (${p.network.toUpperCase()})` : ""}
                         </td>
-                        <td className="py-3 px-2 text-right font-mono font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                        <td className={cn("py-3 px-2 text-right font-mono font-semibold tabular-nums", p.voidedAt ? "text-muted-foreground line-through" : "text-emerald-700 dark:text-emerald-400")}>
                           {formatMoney(p.amount, currency)}
                         </td>
                         <td className="py-3 pl-2 pr-4 text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setSelectedReceiptId(p.id)}
-                          >
-                            <Printer className="size-3.5" aria-hidden />
-                            View / Print Receipt
-                          </Button>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSelectedReceiptId(p.id)}
+                            >
+                              <Printer className="size-3.5" aria-hidden />
+                              View / Print Receipt
+                            </Button>
+                            {canManage && !p.voidedAt ? (
+                              <CancelReceiptDialog
+                                paymentId={p.id} receiptNo={p.receiptNo} amountLabel={formatMoney(p.amount, currency)}
+                                paidOnline={p.receivedByName === "Paystack (online)"}
+                              />
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1879,6 +1911,12 @@ export default function Fees() {
                 </ul>
               </section>
             </div>
+          </TabsContent>
+        ) : null}
+
+        {canManage ? (
+          <TabsContent value="online">
+            <OnlinePaymentsTab currency={currency} />
           </TabsContent>
         ) : null}
 

@@ -74,6 +74,18 @@ export function ReceiptView({
           }}
         />
 
+        {/* A cancelled receipt must never pass for a valid one, on screen or on paper */}
+        {payment.voidedAt ? (
+          <div role="alert" className="mb-5 rounded-xl border-2 border-red-600 bg-red-50 p-4 text-red-800 print:border-red-600 print:bg-white print:text-red-700">
+            <p className="text-lg font-extrabold uppercase tracking-wide">Cancelled. Not a valid receipt.</p>
+            <p className="mt-1 break-words text-sm">
+              Cancelled on {new Date(payment.voidedAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+              {payment.voidReason ? `. Reason: ${payment.voidReason}` : ""}
+              {payment.refundReference ? `. Refund reference: ${payment.refundReference}` : ""}
+            </p>
+          </div>
+        ) : null}
+
         {/* Official School / Institution Header */}
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5 print:border-slate-300">
           <div className="flex items-start gap-4">
@@ -120,9 +132,15 @@ export function ReceiptView({
           </div>
 
           <div className="text-right">
-            <span className="inline-block rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 print:border print:border-emerald-700 print:text-emerald-800">
-              Official Payment Receipt
-            </span>
+            {payment.voidedAt ? (
+              <span className="inline-block rounded-lg bg-red-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-red-700 print:border print:border-red-700 print:text-red-800">
+                Cancelled receipt
+              </span>
+            ) : (
+              <span className="inline-block rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 print:border print:border-emerald-700 print:text-emerald-800">
+                Official Payment Receipt
+              </span>
+            )}
             <div className="mt-2 font-mono text-base font-bold tabular-nums">
               {payment.receiptNo}
             </div>
