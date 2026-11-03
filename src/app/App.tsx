@@ -29,6 +29,7 @@ const Notices = lazy(() => import("./pages/notices/Notices"));
 const Staff = lazy(() => import("./pages/staff/Staff"));
 const Fees = lazy(() => import("./pages/fees/Fees"));
 const Analytics = lazy(() => import("./pages/analytics/Analytics"));
+const Messages = lazy(() => import("./pages/messages/Messages"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -136,6 +137,8 @@ export default function App() {
                             <Staff />
                           ) : item.id === "fees" ? (
                             <Fees />
+                          ) : item.id === "messages" ? (
+                            <Messages />
                           ) : item.id === "analytics" ? (
                             <Analytics />
                           ) : item.id === "users" ? (
