@@ -178,7 +178,7 @@ export async function getSchoolAnalytics(options?: {
     supabase
       .from("invoices")
       .select(
-        "id, term_id, issued_on, status, invoice_items(amount), payments(amount, method, network, paid_on, voided_at)",
+        "id, term_id, issued_on, status, invoice_items!invoice_items_invoice_id_fkey(amount), payments(amount, method, network, paid_on, voided_at)",
       )
       .is("deleted_at", null),
     supabase.from("staff").select("id, type, status").is("deleted_at", null),
