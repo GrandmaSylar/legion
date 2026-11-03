@@ -81,7 +81,7 @@ declare
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
   u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();  u_off uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
-  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid;
+  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid; mb uuid; rm int; rb int; rt int;
   r record;
 begin
   select id into a from public.schools where name = 'Pinks Academy';
@@ -129,6 +129,11 @@ begin
   insert into public.enrollments (school_id,student_id,class_id,academic_year_id) values (a,s2,c2,yr) returning id into e2;
   insert into public.attendance (school_id,enrollment_id,date,status) values (a,e1,current_date,'present'),(a,e2,current_date,'absent');
   insert into public.bece_registrations (school_id,student_id,exam_year) values (a,s1,2027);
+  select count(*) into rm from public.messages where school_id = a;
+  select count(*) into rb from public.message_batches where school_id = a;
+  select count(*) into rt from public.message_templates where school_id = a;
+  insert into public.message_batches (school_id,title,kind,audience,body_template) values (a,'ZZ batch','custom','custom','x') returning id into mb;
+  insert into public.messages (school_id,batch_id,kind,recipient_phone,body) values (a,mb,'custom','233244000000','x');
   insert into public.expense_categories (school_id,name) values (a,'ZZ Category') returning id into ecat;
   -- the staff counter is about to issue S/9000, which is already taken: it must skip it
   update public.number_sequences set next_value = 9000 where school_id = a and kind = 'staff_no';
@@ -406,6 +411,57 @@ begin
        pg_temp.t_try(u_p1, format('select public.save_behavioral_assessment(%L, %L, 1::smallint, 1::smallint, 1::smallint, 1::smallint, 1::smallint, null, null, null)', e1, term)), 'denied'),
     ('parent1 reads own child''s behavioural assessment', pg_temp.t_count(u_p1,'student_behavioral_assessments')::text, '1'),
     ('parent2 does not see it', pg_temp.t_count(u_p2,'student_behavioral_assessments')::text, '0'),
+    -- messaging: templates are editable by admin and principal, readable by the accountant
+    ('principal reads templates', (pg_temp.t_count(u_prin,'message_templates') >= 1)::text, 'true'),
+    ('accountant reads templates', (pg_temp.t_count(u_acc,'message_templates') >= 1)::text, 'true'),
+    ('teacher1 reads no templates', pg_temp.t_count(u_t1,'message_templates')::text, '0'),
+    ('parent1 reads no templates', pg_temp.t_count(u_p1,'message_templates')::text, '0'),
+    ('other school admin reads no templates', pg_temp.t_count(u_adminb,'message_templates')::text, '0'),
+    ('principal edits a template',
+       pg_temp.t_try(u_prin, 'update public.message_templates set name = name where key = ''absence_alert'''), 'ok:1'),
+    ('accountant edits a template',
+       pg_temp.t_try(u_acc, 'update public.message_templates set name = name where key = ''absence_alert'''), 'ok:0'),
+    ('teacher1 edits a template',
+       pg_temp.t_try(u_t1, 'update public.message_templates set name = name where key = ''absence_alert'''), 'ok:0'),
+    ('admin adds a template',
+       pg_temp.t_try(u_admin, 'insert into public.message_templates (key,name,body) values (''zz_t'',''ZZ'',''Hello {parent}'')'), 'ok:1'),
+    ('teacher1 adds a template',
+       pg_temp.t_try(u_t1, 'insert into public.message_templates (key,name,body) values (''zz_t2'',''ZZ'',''Hello'')'), 'denied'),
+    -- the message log: read by admin, principal and accountant only; never written from the browser
+    ('admin reads the message log', pg_temp.t_count(u_admin,'messages')::text, (rm + 1)::text),
+    ('principal reads the message log', pg_temp.t_count(u_prin,'messages')::text, (rm + 1)::text),
+    ('accountant reads the message log', pg_temp.t_count(u_acc,'messages')::text, (rm + 1)::text),
+    ('teacher1 reads no messages', pg_temp.t_count(u_t1,'messages')::text, '0'),
+    ('parent1 reads no messages', pg_temp.t_count(u_p1,'messages')::text, '0'),
+    ('hr reads no messages', pg_temp.t_count(u_hr,'messages')::text, '0'),
+    ('other school admin reads no messages', pg_temp.t_count(u_adminb,'messages')::text, '0'),
+    ('anonymous reads no messages', pg_temp.t_count(null,'messages')::text, '0'),
+    ('admin reads the batches', pg_temp.t_count(u_admin,'message_batches')::text, (rb + 1)::text),
+    ('teacher1 reads no batches', pg_temp.t_count(u_t1,'message_batches')::text, '0'),
+    ('admin cannot insert a message',
+       pg_temp.t_try(u_admin, format('insert into public.messages (batch_id,kind,recipient_phone,body) values (%L,''x'',''233244000001'',''x'')', mb)), 'denied'),
+    ('admin cannot edit a message',
+       pg_temp.t_try(u_admin, 'update public.messages set body = ''changed'''), 'ok:0'),
+    ('admin cannot delete a message',
+       pg_temp.t_try(u_admin, 'delete from public.messages'), 'ok:0'),
+    ('admin cannot insert a batch',
+       pg_temp.t_try(u_admin, 'insert into public.message_batches (title,kind,audience,body_template) values (''x'',''x'',''custom'',''x'')'), 'denied'),
+    ('developer cannot insert a message either',
+       pg_temp.t_try(u_dev, format('insert into public.messages (batch_id,kind,recipient_phone,body) values (%L,''x'',''233244000001'',''x'')', mb)), 'denied'),
+    -- the internal functions cannot be reached from the browser
+    ('admin cannot call the audience function',
+       pg_temp.t_try(u_admin, format('select * from public.messaging_audience(%L, ''all_parents'')', a)), 'denied'),
+    ('admin cannot claim messages',
+       pg_temp.t_try(u_admin, format('select * from public.claim_messages(%L, 10)', mb)), 'denied'),
+    ('anon cannot call the audience function',
+       pg_temp.t_anon(format('select * from public.messaging_audience(%L, ''all_parents'')', a)), 'denied'),
+    ('admin can read batch summaries', pg_temp.t_try(u_admin, 'select * from public.message_batch_stats(10)'), 'ok:' || (rb + 1)),
+    ('teacher1 batch summaries are empty', pg_temp.t_try(u_t1, 'select * from public.message_batch_stats(10)'), 'ok:0'),
+    -- parents can be opted out by the office, not by a teacher
+    ('reception opts a parent out',
+       pg_temp.t_try(u_rec, format('update public.guardians set sms_opt_out = true where id = %L', g1)), 'ok:1'),
+    ('teacher1 opts a parent out',
+       pg_temp.t_try(u_t1, format('update public.guardians set sms_opt_out = true where id = %L', g2)), 'ok:0'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied'),
     ('reception changes a student''s class',
