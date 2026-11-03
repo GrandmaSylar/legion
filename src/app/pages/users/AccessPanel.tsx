@@ -17,7 +17,7 @@ const MODULE_NAME: Record<string, string> = {
 };
 
 /** Modules the database already decides by these actions. The rest still follow each person's role for now. */
-const DECIDED_BY_ACTIONS = new Set(["messages", "access", "students"]);
+const DECIDED_BY_ACTIONS = new Set(["messages", "access", "students", "attendance", "grades"]);
 
 const PRESET_ROLES: AppRole[] = ["school_admin", "principal", "accountant", "teacher", "hr_officer", "receptionist", "librarian"];
 
@@ -82,7 +82,7 @@ export function AccessPanel({ userId, userName, roles }: { userId: string; userN
           Switch on exactly what this person needs, module by module. Where you can only give something you hold yourself, other boxes are greyed out.
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Students, Messages and this screen already follow these settings. Other modules still follow the person's role for now and will move over one at a time.
+          Students, Attendance, Grades, Messages and this screen already follow these settings. Other modules still follow the person's role for now and will move over one at a time.
         </p>
       </div>
 

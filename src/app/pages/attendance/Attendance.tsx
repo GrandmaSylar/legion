@@ -19,7 +19,7 @@ import {
   Users,
 } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
-import { hasAnyRole } from "../../../lib/permissions";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import {
   ATTENDANCE_STATUSES,
@@ -92,13 +92,15 @@ function formatNiceDate(dateIso: string): string {
 type StatusFilter = "all" | "unmarked" | AttendanceStatus;
 
 export default function AttendancePage() {
-  const { profile, roles } = useAuth();
+  const { profile } = useAuth();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const isAdmin = hasAnyRole(roles, ["school_admin"]);
-  const isPrincipal = hasAnyRole(roles, ["principal"]);
-  const isTeacher = hasAnyRole(roles, ["teacher"]);
+  // What the person may do comes from their actions, not their role name.
+  const { can } = useCapabilities();
+  const isAdmin = can("attendance.take_any");                       // takes any class's register
+  const isPrincipal = can("attendance.view") && !isAdmin;           // sees every class, does not mark
+  const isTeacher = can("attendance.take_own_classes");             // marks the classes they teach
 
   const today = todayIso();
   const paramClass = searchParams.get("class") ?? "";
@@ -402,7 +404,7 @@ export default function AttendancePage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin || isPrincipal ? (
+          {can("messages.send_all") ? (
             <Button asChild variant="outline" size="sm">
               <Link to="/messages?audience=absent_today&template=absence_alert">
                 <MessageSquare className="size-4" aria-hidden />

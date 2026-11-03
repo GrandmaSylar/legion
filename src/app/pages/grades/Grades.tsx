@@ -18,7 +18,8 @@ import {
   Users,
 } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
-import { hasAnyRole } from "../../../lib/permissions";
+import { GRADES_ACTIONS } from "../../../lib/permissions";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { listAcademicYears, listClasses, listTerms } from "../../../lib/data/setup";
 import {
   ASSESSMENT_TYPES,
@@ -1224,19 +1225,26 @@ function BroadsheetSection({
 
 // ─── Main Grades Page ────────────────────────────────────────────────────────
 
+/**
+ * Staff see the gradebook, decided by their actions; parents and students see their own results.
+ * The choice is made here, before any other hook runs, so the number of hooks never changes between renders.
+ */
 export default function GradesPage() {
-  const { profile, roles } = useAuth();
+  const { isLoading, canAny } = useCapabilities();
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+  return canAny(GRADES_ACTIONS) ? <StaffGradesPage /> : <PortalGradesView />;
+}
+
+function StaffGradesPage() {
+  const { profile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const isStaff = hasAnyRole(roles, ["school_admin", "principal", "teacher", "receptionist"]);
-  const canEditBeceRegistration = hasAnyRole(roles, ["school_admin", "receptionist"]);
-  const isAdmin = hasAnyRole(roles, ["school_admin"]);
-  const isPrincipal = hasAnyRole(roles, ["principal"]);
-  const isTeacher = hasAnyRole(roles, ["teacher"]);
-
-  if (!isStaff) {
-    return <PortalGradesView />;
-  }
+  // What the person may do comes from their actions, not their role name.
+  const { can } = useCapabilities();
+  const canEditBeceRegistration = can("grades.manage_bece");
+  const isAdmin = can("grades.enter_any");                        // enters marks for any class
+  const isPrincipal = can("grades.view") && !isAdmin;             // sees every class, does not enter marks
+  const isTeacher = can("grades.enter_own_classes");              // enters marks for the classes they teach
 
   const paramClass = searchParams.get("class") ?? "";
   const paramTerm = searchParams.get("term") ?? "";

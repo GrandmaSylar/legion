@@ -613,7 +613,34 @@ begin
     ('so reception can no longer edit a student', pg_temp.t_try(u_rec, 'update public.students set first_name = first_name'), 'ok:0'),
     ('and can no longer move one to another class', pg_temp.t_try(u_rec, format('select public.change_student_class(%L, %L)', s2, c2)), 'denied'),
     ('but still sees students', (pg_temp.t_count(u_rec,'students') > 0)::text, 'true'),
-    ('and can still admit a new student', pg_temp.t_try(u_rec, format('select * from public.admit_student(''{"first_name":"Kofi","last_name":"Asare","gender":"male"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'ok:1')
+    ('and can still admit a new student', pg_temp.t_try(u_rec, format('select * from public.admit_student(''{"first_name":"Kofi","last_name":"Asare","gender":"male"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'ok:1'),
+    -- Attendance and Grades are decided by actions
+    ('the developer takes the attendance action from teacher1',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''teacher'' and capability <> ''attendance.take_own_classes''))', u_t1)), 'ok:1'),
+    ('so teacher1 can no longer mark their register',
+       pg_temp.t_try(u_t1, format('update public.attendance set status = ''present'' where enrollment_id = %L', e1)), 'ok:0'),
+    ('but teacher1 can still enter marks',
+       pg_temp.t_try(u_t1, format('update public.assessments set title = title where class_subject_id = %L', cs1)), 'ok:1'),
+    ('the developer takes the marks action from teacher1 and gives the attendance one back',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''teacher'' and capability <> ''grades.enter_own_classes''))', u_t1)), 'ok:1'),
+    ('so teacher1 can mark the register again',
+       pg_temp.t_try(u_t1, format('update public.attendance set status = ''present'' where enrollment_id = %L', e1)), 'ok:2'),
+    ('but can no longer change assessments',
+       pg_temp.t_try(u_t1, format('update public.assessments set title = title where class_subject_id = %L', cs1)), 'ok:0'),
+    ('and a teacher without the marks action cannot publish their class report cards',
+       pg_temp.t_try(u_t1, format('select public.set_term_report_publication(%L, %L, true)', c1, term)), 'denied'),
+    ('the developer lets the principal take attendance for any class',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, array[''attendance.view'',''attendance.take_any''])', u_prin)), 'ok:1'),
+    ('so the principal can now mark a register',
+       pg_temp.t_try(u_prin, format('update public.attendance set status = ''present'' where enrollment_id = %L', e1)), 'ok:2'),
+    ('the principal is put back to the principal preset',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''principal''))', u_prin)), 'ok:1'),
+    ('and cannot mark a register again',
+       pg_temp.t_try(u_prin, format('update public.attendance set status = ''present'' where enrollment_id = %L', e1)), 'ok:0'),
+    ('the principal cannot publish report cards, as before',
+       pg_temp.t_try(u_prin, format('select public.set_term_report_publication(%L, %L, true)', c1, term)), 'denied'),
+    ('the developer puts teacher1 back to the teacher preset',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''teacher''))', u_t1)), 'ok:1')
   ) as x(label, got, want)
   loop
     if r.got = r.want then passes := passes + 1;
