@@ -572,6 +572,8 @@ begin
     ('nobody deletes grants directly', pg_temp.t_try(u_prin, 'delete from public.user_capabilities'), 'ok:0'),
     ('an expired grant is set up', pg_temp.t_scalar(format('with x as (insert into public.user_capabilities (profile_id, capability, school_id, expires_at) values (%L, ''timetable.view'', %L, now() - interval ''1 hour'') returning 1) select count(*)::text from x', u_rec, a)), '1'),
     ('an expired grant does not count', pg_temp.t_try(u_rec, 'select 1 where public.has_capability(''timetable.view'')'), 'ok:0'),
+    ('the receptionist is put back to the receptionist preset for the tests below',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''receptionist''))', u_rec)), 'ok:1'),
     ('the teacher preset includes no fees', pg_temp.t_scalar('select count(*)::text from public.access_preset_capabilities where role = ''teacher'' and capability like ''fees.%'''), '0'),
     ('the accountant preset can record payments', pg_temp.t_scalar('select count(*)::text from public.access_preset_capabilities where role = ''accountant'' and capability = ''fees.record_payment'''), '1'),
     ('the principal preset cannot cancel receipts', pg_temp.t_scalar('select count(*)::text from public.access_preset_capabilities where role = ''principal'' and capability = ''fees.cancel_receipt'''), '0'),
@@ -598,7 +600,20 @@ begin
     ('teacher1 adds a guardian to a student',
        pg_temp.t_try(u_t1, format('select public.add_student_guardian(%L, ''{"full_name":"X"}''::jsonb)', s1)), 'denied'),
     ('reception removes a guardian from a student',
-       pg_temp.t_try(u_rec, format('select public.remove_student_guardian(%L, %L)', s1, g1)), 'ok:1')
+       pg_temp.t_try(u_rec, format('select public.remove_student_guardian(%L, %L)', s1, g1)), 'ok:1'),
+    -- Students are decided by actions
+    ('the developer gives teacher1 the see-all-students action',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, array[''students.view_own_classes'',''students.view''])', u_t1)), 'ok:1'),
+    ('so teacher1 now reads every student', (pg_temp.t_count(u_t1,'students') = pg_temp.t_count(u_admin,'students'))::text, 'true'),
+    ('the developer takes it back',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, array[''students.view_own_classes''])', u_t1)), 'ok:1'),
+    ('and teacher1 is limited to their own classes again', (pg_temp.t_count(u_t1,'students') < pg_temp.t_count(u_admin,'students'))::text, 'true'),
+    ('the developer takes the edit action from the receptionist',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''receptionist'' and capability <> ''students.edit''))', u_rec)), 'ok:1'),
+    ('so reception can no longer edit a student', pg_temp.t_try(u_rec, 'update public.students set first_name = first_name'), 'ok:0'),
+    ('and can no longer move one to another class', pg_temp.t_try(u_rec, format('select public.change_student_class(%L, %L)', s2, c2)), 'denied'),
+    ('but still sees students', (pg_temp.t_count(u_rec,'students') > 0)::text, 'true'),
+    ('and can still admit a new student', pg_temp.t_try(u_rec, format('select * from public.admit_student(''{"first_name":"Kofi","last_name":"Asare","gender":"male"}''::jsonb, %L, ''[]''::jsonb)', c1)), 'ok:1')
   ) as x(label, got, want)
   loop
     if r.got = r.want then passes := passes + 1;
