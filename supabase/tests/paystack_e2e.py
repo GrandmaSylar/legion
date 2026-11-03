@@ -282,6 +282,22 @@ try:
         check("cancelling twice is refused", rpc(tacc, p_payment=payC, p_reason="Trying again please", p_refund_reference="RF-E2E-1")[0] >= 400)
         check("a webhook repeated after a refund adds nothing", (webhook(charge(refC, 30)), one(f"select count(*) v from public.payments where reference = '{refC}'"))[1] == "1")
 
+        # ── checking against Paystack ────────────────────────────────────────
+        import datetime
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+        d0, d1 = (today - datetime.timedelta(days=1)).isoformat(), today.isoformat()
+        check("a parent cannot run the Paystack check", fn(t1, action="reconcile", **{"from": d0, "to": d1})[0] == 403)
+        check("a teacher cannot run the Paystack check", fn(tt, action="reconcile", **{"from": d0, "to": d1})[0] == 403)
+        check("missing dates are refused", fn(tacc, action="reconcile")[0] == 400)
+        check("an end before the start is refused", fn(tacc, action="reconcile", **{"from": d1, "to": d0})[0] == 400)
+        check("more than three months is refused", fn(tacc, action="reconcile", **{"from": "2026-01-01", "to": d1})[0] == 400)
+        code, rep = fn(tacc, action="reconcile", **{"from": d0, "to": d1})
+        check("the accountant gets a report", code == 200 and "paystack" in rep and "legion" in rep and rep.get("truncated") is False)
+        flagged = {x["reference"] for x in rep.get("recordedNotInPaystack", [])}
+        check("receipts Paystack has no record of are listed (our test payments were simulated)", {ref1, ref2, refA} <= flagged)
+        check("a refunded receipt is not accused", refC not in flagged)
+        check("Legion's total counts only live receipts", rep.get("legion", {}).get("count", 0) >= 3)
+
         # ── a paid-off invoice cannot be paid again ──────────────────────────
         check("the other family's invoice is untouched",
               one(f"select count(*) v from public.payments where invoice_id = '{inv2}'") == "0")
