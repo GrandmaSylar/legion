@@ -73,12 +73,15 @@ export const ATTENDANCE_ACTIONS = ["attendance.view", "attendance.take_own_class
 /** Grades: seeing every class, entering marks for your own or any class, or registering BECE candidates. */
 export const GRADES_ACTIONS = ["grades.view", "grades.enter_own_classes", "grades.enter_any", "grades.manage_bece"];
 
+/** Fees: seeing invoices and receipts, or the school's expenses. Parents reach their own fees as portal accounts. */
+export const FEES_ACTIONS = ["fees.view", "expenses.view"];
+
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
   { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true, anyAction: STUDENT_ACTIONS },
   { id: "attendance", label: "Attendance", path: "/attendance", roles: ["school_admin", "principal", "teacher"], built: true, anyAction: ATTENDANCE_ACTIONS },
   { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "receptionist", "parent", "student"], built: true, anyAction: GRADES_ACTIONS, portalRoles: ["parent", "student"] },
-  { id: "fees", label: "Fees & Finance", path: "/fees", roles: ["school_admin", "accountant", "principal", "parent"], built: true },
+  { id: "fees", label: "Fees & Finance", path: "/fees", roles: ["school_admin", "accountant", "principal", "parent"], built: true, anyAction: FEES_ACTIONS, portalRoles: ["parent"] },
   { id: "analytics", label: "Analytics", path: "/analytics", roles: ["school_admin", "principal", "accountant", "hr_officer"], built: true },
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true },
   { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS },

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { hasAnyRole } from "../../../lib/permissions";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import {
   assignStudentDiscount,
   batchGenerateTermInvoices,
@@ -91,18 +92,26 @@ function StatusBadge({ status }: { status: InvoiceRow["status"] }) {
 
 export default function Fees() {
   const { roles } = useAuth();
-  const canManage = hasAnyRole(roles, ["school_admin", "accountant"]);
-  const canAccessExpenses = hasAnyRole(roles, ["school_admin", "accountant", "principal"]);
-  const canApproveExpenses = hasAnyRole(roles, ["school_admin", "principal"]);
-  const canReadInvoices = hasAnyRole(roles, ["school_admin", "accountant", "parent"]);
-  const isAdmin = hasAnyRole(roles, ["school_admin"]);
+  // What the person may do comes from their actions, not their role name. Parents are portal accounts.
+  const { can, canAny } = useCapabilities();
+  const canView = can("fees.view");                   // sees invoices, receipts and instalments
+  const canRecord = can("fees.record_payment");       // takes a payment and issues a receipt
+  const canBill = can("fees.bill");                   // creates invoices and instalment plans
+  const canConfigure = can("fees.configure");         // fee amounts, discounts, scholarships
+  const canCancel = can("fees.cancel_receipt");       // cancels a receipt
+  const canReview = can("fees.review_online");        // online payments and the Paystack check
+  const canManage = canView;
+  const canAccessExpenses = can("expenses.view");
+  const canApproveExpenses = can("expenses.approve");
   const isParent = hasAnyRole(roles, ["parent"]);
+  const canReadInvoices = canView || isParent;
+  const isAdmin = can("settings.edit");
   const qc = useQueryClient();
 
   // Online payment: parents pay on Paystack's page and are sent back here with ?reference=…
   const onlineQ = useQuery({ queryKey: ["online-payment-status"], queryFn: getOnlinePaymentStatus, staleTime: 5 * 60_000, retry: false });
   // Finance staff: how many online payments are waiting for someone to look at them
-  const onlineListQ = useQuery({ queryKey: ["online-payments"], queryFn: listOnlinePayments, enabled: canManage });
+  const onlineListQ = useQuery({ queryKey: ["online-payments"], queryFn: listOnlinePayments, enabled: canReview });
   const needsReview = (onlineListQ.data ?? []).filter((p) => p.needsReview).length;
   const [searchParams, setSearchParams] = useSearchParams();
   const returnedRef = searchParams.get("reference") ?? searchParams.get("trxref");
@@ -212,7 +221,7 @@ export default function Fees() {
   const classesQ = useQuery({
     queryKey: ["classes", currentYear?.id],
     queryFn: () => listClasses(currentYear!.id),
-    enabled: Boolean(currentYear?.id) && canManage,
+    enabled: Boolean(currentYear?.id) && canView,
   });
 
   const studentsQ = useQuery({
@@ -225,37 +234,37 @@ export default function Fees() {
         yearId: currentYear?.id ?? null,
         page: 0,
       }),
-    enabled: canManage,
+    enabled: canView,
   });
 
   const categoriesQ = useQuery({
     queryKey: ["fee-categories"],
     queryFn: listFeeCategories,
-    enabled: canManage,
+    enabled: canView,
   });
 
   const structuresQ = useQuery({
     queryKey: ["fee-structures"],
     queryFn: listFeeStructures,
-    enabled: canManage,
+    enabled: canView,
   });
 
   const discountsQ = useQuery({
     queryKey: ["discounts"],
     queryFn: listDiscounts,
-    enabled: canManage,
+    enabled: canView,
   });
 
   const studentDiscountsQ = useQuery({
     queryKey: ["student-discounts", currentYear?.id],
     queryFn: () => listStudentDiscounts(currentYear?.id ?? null),
-    enabled: canManage,
+    enabled: canView,
   });
 
   const levelsQ = useQuery({
     queryKey: ["levels"],
     queryFn: listLevels,
-    enabled: canManage,
+    enabled: canView,
   });
 
   const allPayments = useMemo(
@@ -519,7 +528,7 @@ export default function Fees() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-        {hasAnyRole(roles, ["school_admin", "principal", "accountant"]) ? (
+        {canAny(["messages.send_all", "messages.send_fee_reminders"]) ? (
           <Button asChild variant="outline" size="sm">
             <Link to="/messages?audience=fee_balance&template=fee_reminder">
               <MessageSquare className="size-4" aria-hidden />
@@ -558,13 +567,13 @@ export default function Fees() {
           <Button size="sm" variant="ghost" onClick={() => setOnlineResult(null)}>Dismiss</Button>
         </section>
       ) : null}
-      {canManage && needsReview > 0 ? (
+      {canReview && needsReview > 0 ? (
         <section role="alert" className="surface border-amber-500/50 p-4 text-sm">
           <strong>{needsReview} online {needsReview === 1 ? "payment needs" : "payments need"} your attention.</strong>{" "}
           Open the <em>Online payments</em> tab to see why.
         </section>
       ) : null}
-      {canManage && onlineQ.data ? (
+      {canReview && onlineQ.data ? (
         <p className="text-xs text-muted-foreground">
           Online payments: {onlineQ.data.configured ? (onlineQ.data.mode === "live" ? "live, parents pay real money" : "test mode, no real money moves") : "not connected yet"}.
         </p>
@@ -618,7 +627,7 @@ export default function Fees() {
           <TabsTrigger value="invoices">
             Invoices &amp; Batch Billing ({(invoicesQ.data ?? []).length})
           </TabsTrigger>
-          {canManage ? (
+          {canConfigure ? (
             <TabsTrigger value="discounts">
               Scholarships &amp; Discounts ({(studentDiscountsQ.data ?? []).length})
             </TabsTrigger>
@@ -626,13 +635,13 @@ export default function Fees() {
           <TabsTrigger value="installments">
             Installment Plans ({allInstallments.length})
           </TabsTrigger>
-          {canManage ? (
+          {canReview ? (
             <TabsTrigger value="online">
               Online payments
               {needsReview > 0 ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">{needsReview}</span> : null}
             </TabsTrigger>
           ) : null}
-          {canManage ? (
+          {canConfigure ? (
             <TabsTrigger value="structure">Fee Structure</TabsTrigger>
           ) : null}
           {canAccessExpenses ? (
@@ -642,7 +651,7 @@ export default function Fees() {
 
         {/* ─── TAB 1: RECEIPTS & PAYMENTS ─────────────────────────────────── */}
         <TabsContent value="receipts" className="space-y-5">
-          {canManage ? (
+          {canRecord ? (
             <section className="surface space-y-4 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -861,7 +870,7 @@ export default function Fees() {
                               <Printer className="size-3.5" aria-hidden />
                               View / Print Receipt
                             </Button>
-                            {canManage && !p.voidedAt ? (
+                            {canCancel && !p.voidedAt ? (
                               <CancelReceiptDialog
                                 paymentId={p.id} receiptNo={p.receiptNo} amountLabel={formatMoney(p.amount, currency)}
                                 paidOnline={p.receivedByName === "Paystack (online)"}
@@ -880,7 +889,7 @@ export default function Fees() {
 
         {/* ─── TAB 2: INVOICES & BATCH BILLING ────────────────────────────── */}
         <TabsContent value="invoices" className="space-y-5">
-          {canManage ? (
+          {canBill ? (
             <>
               {/* One-Click Batch Class / Term Billing */}
               <section className="surface space-y-4 p-5">
@@ -1234,7 +1243,7 @@ export default function Fees() {
         </TabsContent>
 
         {/* ─── TAB 3: SCHOLARSHIPS & DISCOUNTS ────────────────────────────── */}
-        {canManage ? (
+        {canConfigure ? (
           <TabsContent value="discounts" className="space-y-5">
             <div className="grid gap-5 lg:grid-cols-2">
               {/* Define Scholarship / Discount Schemes */}
@@ -1494,7 +1503,7 @@ export default function Fees() {
 
         {/* ─── TAB 4: INSTALLMENT PLANS ───────────────────────────────────── */}
         <TabsContent value="installments" className="space-y-5">
-          {canManage ? (
+          {canBill ? (
             <section className="surface space-y-4 p-5">
               <div>
                 <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -1695,7 +1704,7 @@ export default function Fees() {
                           <td className="py-3 pl-2 pr-4 text-right">
                             <div className="inline-flex items-center gap-2">
                               <StatusBadge status={inst.invoiceStatus} />
-                              {canManage ? (
+                              {canBill ? (
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1722,7 +1731,7 @@ export default function Fees() {
         </TabsContent>
 
         {/* ─── TAB 5: FEE STRUCTURE (Admin/Accountant) ────────────────────── */}
-        {canManage ? (
+        {canConfigure ? (
           <TabsContent value="structure" className="space-y-5">
             <div className="grid gap-5 lg:grid-cols-2">
               <section className="surface space-y-4 p-5">
@@ -1914,7 +1923,7 @@ export default function Fees() {
           </TabsContent>
         ) : null}
 
-        {canManage ? (
+        {canReview ? (
           <TabsContent value="online">
             <OnlinePaymentsTab currency={currency} />
           </TabsContent>
@@ -1925,7 +1934,9 @@ export default function Fees() {
             <ExpensesTab
               currency={currency}
               terms={currentYearTerms}
-              canManageFinance={canManage}
+              canPayExpenses={can("expenses.pay")}
+              canDeleteExpenses={can("expenses.delete")}
+              canManageCategories={canConfigure}
               canApproveExpenses={canApproveExpenses}
             />
           </TabsContent>

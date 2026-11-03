@@ -88,12 +88,16 @@ function ExpenseStatusBadge({ status }: { status: ExpenseStatus }) {
 export function ExpensesTab({
   currency,
   terms,
-  canManageFinance,
+  canPayExpenses,
+  canDeleteExpenses,
+  canManageCategories,
   canApproveExpenses,
 }: {
   currency: string;
   terms: Term[];
-  canManageFinance: boolean;
+  canPayExpenses: boolean;
+  canDeleteExpenses: boolean;
+  canManageCategories: boolean;
   canApproveExpenses: boolean;
 }) {
   const qc = useQueryClient();
@@ -812,7 +816,7 @@ export function ExpensesTab({
                             </>
                           ) : null}
 
-                          {exp.status === "approved" && canManageFinance ? (
+                          {exp.status === "approved" && canPayExpenses ? (
                             <Button
                               type="button"
                               size="sm"
@@ -832,7 +836,7 @@ export function ExpensesTab({
 
                           {(exp.status === "pending" ||
                             exp.status === "rejected") &&
-                          canManageFinance ? (
+                          canDeleteExpenses ? (
                             <Button
                               type="button"
                               size="sm"
@@ -886,7 +890,7 @@ export function ExpensesTab({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="font-medium text-sm">{cat.name}</div>
-                  {canManageFinance && spent === 0 ? (
+                  {canManageCategories && spent === 0 ? (
                     <button
                       type="button"
                       onClick={() => deleteCatMut.mutate(cat.id)}
@@ -937,7 +941,7 @@ export function ExpensesTab({
           })}
         </div>
 
-        {canManageFinance ? (
+        {canManageCategories ? (
           <div className="border-t border-border pt-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
               <Field label="New Expense Category Name" htmlFor="new-exp-cat">

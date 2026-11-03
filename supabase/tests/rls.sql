@@ -485,7 +485,7 @@ begin
     -- online payments: finance staff and the parent who started it can read; nobody writes from the browser
     ('admin reads online payments', pg_temp.t_count(u_admin,'online_payments')::text, (rop + 2)::text),
     ('accountant reads online payments', pg_temp.t_count(u_acc,'online_payments')::text, (rop + 2)::text),
-    ('principal reads online payments', pg_temp.t_count(u_prin,'online_payments')::text, (rop + 2)::text),
+    ('principal no longer reads online payments (no screen ever used it)', pg_temp.t_count(u_prin,'online_payments')::text, '0'),
     ('parent1 reads their own online payment', pg_temp.t_count(u_p1,'online_payments')::text, '1'),
     ('teacher1 reads no online payments', pg_temp.t_count(u_t1,'online_payments')::text, '0'),
     ('reception reads no online payments', pg_temp.t_count(u_rec,'online_payments')::text, '0'),
@@ -640,7 +640,33 @@ begin
     ('the principal cannot publish report cards, as before',
        pg_temp.t_try(u_prin, format('select public.set_term_report_publication(%L, %L, true)', c1, term)), 'denied'),
     ('the developer puts teacher1 back to the teacher preset',
-       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''teacher''))', u_t1)), 'ok:1')
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''teacher''))', u_t1)), 'ok:1'),
+    -- Fees and Expenses are decided by actions
+    ('the developer lets the receptionist record payments but nothing else in fees',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, array[''fees.view'',''fees.record_payment''])', u_rec)), 'ok:1'),
+    ('so the receptionist can record a payment',
+       pg_temp.t_try(u_rec, format('insert into public.payments (school_id,invoice_id,amount,method) values (%L,%L,5,''cash'')', a, i1)), 'ok:1'),
+    ('but cannot cancel a receipt',
+       pg_temp.t_try(u_rec, format('select public.void_payment((select id from public.payments where invoice_id = %L limit 1), ''Entered twice by mistake'')', i1)), 'denied'),
+    ('and cannot bill a student',
+       pg_temp.t_try(u_rec, format('insert into public.invoices (school_id,student_id,term_id) values (%L,%L,%L)', a, s2, term)), 'denied'),
+    ('and cannot change fee amounts', pg_temp.t_try(u_rec, 'update public.fee_structures set amount = amount'), 'ok:0'),
+    ('the developer takes recording away and gives billing instead',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, array[''fees.view'',''fees.bill''])', u_rec)), 'ok:1'),
+    ('so the receptionist can no longer record a payment',
+       pg_temp.t_try(u_rec, format('insert into public.payments (school_id,invoice_id,amount,method) values (%L,%L,5,''cash'')', a, i1)), 'denied'),
+    ('and can bill a student',
+       pg_temp.t_try(u_rec, format('insert into public.invoices (school_id,student_id,term_id) values (%L,%L,%L)', a, s2, term)), 'ok:1'),
+    ('the receptionist is put back to the receptionist preset',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''receptionist''))', u_rec)), 'ok:1'),
+    ('and sees no invoices again', pg_temp.t_count(u_rec,'invoices')::text, '0'),
+    ('the developer lets the principal read the online payments and review them',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, array[''fees.view'',''fees.review_online''])', u_prin)), 'ok:1'),
+    ('so the principal reads them again', (pg_temp.t_count(u_prin,'online_payments') >= rop + 2)::text, 'true'),
+    ('the principal is put back to the principal preset',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''principal''))', u_prin)), 'ok:1'),
+    ('the accountant cannot approve an expense, as before',
+       pg_temp.t_try(u_acc, 'select public.review_expense((select id from public.expenses limit 1), ''approved'', ''ok'')'), 'denied')
   ) as x(label, got, want)
   loop
     if r.got = r.want then passes := passes + 1;
