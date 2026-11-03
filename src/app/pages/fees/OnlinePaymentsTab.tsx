@@ -9,6 +9,7 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { Field, FormMessage } from "../../components/fields";
 import { cn } from "../../components/ui/utils";
 import { CancelReceiptDialog } from "./CancelReceiptDialog";
+import { PaystackCheck } from "./PaystackCheck";
 
 type Filter = "review" | "all" | OnlinePaymentStatus;
 
@@ -108,6 +109,7 @@ export function OnlinePaymentsTab({ currency }: { currency: string }) {
   const q = useQuery({ queryKey: ["online-payments"], queryFn: listOnlinePayments });
   const [filter, setFilter] = useState<Filter>("review");
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<"list" | "check">("list");
 
   const all = q.data ?? [];
   const counts = useMemo(() => {
@@ -135,6 +137,23 @@ export function OnlinePaymentsTab({ currency }: { currency: string }) {
   ];
 
   return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Online payments view">
+        {([["list", "Payments"], ["check", "Check against Paystack"]] as const).map(([id, label]) => (
+          <button
+            key={id} type="button" onClick={() => setView(id)} aria-pressed={view === id}
+            className={cn(
+              "rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[var(--ring)]",
+              view === id ? "border-foreground/30 bg-foreground/10" : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "check" ? <PaystackCheck currency={currency} /> : null}
+      {view === "list" ? (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Every payment a parent started online. Anything odd is put under <strong>Needs review</strong>, such as a wrong amount, an invoice paid twice, or an invoice cancelled before the payment arrived. Paystack's own list is the final record of what happened to the money.
@@ -170,6 +189,8 @@ export function OnlinePaymentsTab({ currency }: { currency: string }) {
         </section>
       ) : null}
       <ul className="space-y-3">{shown.map((p) => <Row key={p.id} p={p} currency={currency} />)}</ul>
+    </div>
+      ) : null}
     </div>
   );
 }

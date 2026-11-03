@@ -28,3 +28,23 @@ export const startOnlinePayment = (invoiceId: string, amount: number) =>
 /** Asks Paystack what became of a payment; records it if it succeeded. */
 export const checkOnlinePayment = (reference: string) =>
   invokeFunction<OnlinePaymentResult>("paystack", { action: "verify", reference });
+
+export interface PaymentLine { reference: string; amount: number; paidAt: string | null; channel: string | null }
+
+export interface ReconcileReport {
+  from: string;
+  to: string;
+  /** True when Paystack's list was too long to read in full, so "missing" results cannot be trusted. */
+  truncated: boolean;
+  paystack: { count: number; total: number; fees: number | null; net: number | null };
+  legion: { count: number; total: number };
+  matched: number;
+  paidNotRecorded: PaymentLine[];
+  notFromLegion: PaymentLine[];
+  recordedNotInPaystack: { reference: string; amount: number; paidAt: string | null; receiptNo: string | null }[];
+  amountMismatch: { reference: string; paystackAmount: number; legionAmount: number }[];
+}
+
+/** Compares Paystack's successful payments with Legion's online receipts for a period (admin or accountant). */
+export const reconcileWithPaystack = (from: string, to: string) =>
+  invokeFunction<ReconcileReport>("paystack", { action: "reconcile", from, to });
