@@ -11,6 +11,7 @@ import {
   Clock,
   CloudOff,
   FileText,
+  MessageSquare,
   RotateCcw,
   Search,
   ShieldAlert,
@@ -401,6 +402,14 @@ export default function AttendancePage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {isAdmin || isPrincipal ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/messages?audience=absent_today&template=absence_alert">
+                <MessageSquare className="size-4" aria-hidden />
+                Message parents of absentees
+              </Link>
+            </Button>
+          ) : null}
           {!isOnline ? (
             <span
               role="status"

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { countSegments, PLACEHOLDERS } from "../../../lib/sms";
@@ -30,16 +31,28 @@ export default function ComposeTab() {
   const year = years.data?.find((y) => y.isCurrent) ?? null;
   const classes = useQuery({ queryKey: ["classes", year?.id], queryFn: () => listClasses(year!.id), enabled: !!year });
 
-  const [audience, setAudience] = useState<Audience>(audiences[0]);
+  // Quick actions elsewhere link here with ?audience=…&template=… already chosen.
+  const [params] = useSearchParams();
+  const wanted = params.get("audience") as Audience | null;
+  const [audience, setAudience] = useState<Audience>(wanted && audiences.includes(wanted) ? wanted : audiences[0]);
   const [classId, setClassId] = useState("");
   const [customNumbers, setCustomNumbers] = useState("");
-  const [templateKey, setTemplateKey] = useState("");
+  const wantedTemplate = params.get("template") ?? "";
+  const [templateKey, setTemplateKey] = useState(wantedTemplate);
   const [body, setBody] = useState("");
+  const [seeded, setSeeded] = useState(false);
   const [sandbox, setSandbox] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+
+  // Fill the wording once the templates have loaded.
+  if (!seeded && wantedTemplate && templates.data) {
+    const t = templates.data.find((x) => x.key === wantedTemplate && x.isActive);
+    setSeeded(true);
+    if (t) setBody(t.body); else setTemplateKey("");
+  }
 
   const draft: Draft = {
     audience, body, templateKey: templateKey || undefined,

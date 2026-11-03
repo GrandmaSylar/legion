@@ -8,7 +8,7 @@ import { useDebounced } from "../../../lib/useDebounced";
 import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import {
   RELATIONSHIPS, addStudentGuardian, changeStudentClass, deleteStudent, emptyGuardian, findGuardiansByPhone,
-  removeStudentGuardian, updateStudentGuardian, type GuardianEntry, type StudentDetail,
+  removeStudentGuardian, setGuardianSmsOptOut, updateStudentGuardian, type GuardianEntry, type StudentDetail,
 } from "../../../lib/data/students";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
@@ -160,6 +160,7 @@ function GuardianRow({ s, g, canEdit }: { s: StudentDetail; g: Guardian; canEdit
   const [editing, setEditing] = useState(false);
   const save = useMutation({ mutationFn: (e: GuardianEntry) => updateStudentGuardian(s.id, g.id, e), onSuccess: () => { setEditing(false); refresh(); } });
   const remove = useMutation({ mutationFn: () => removeStudentGuardian(s.id, g.id), onSuccess: refresh });
+  const optOut = useMutation({ mutationFn: () => setGuardianSmsOptOut(g.id, !g.smsOptOut), onSuccess: refresh });
 
   return (
     <li className="space-y-2 py-2">
@@ -181,6 +182,17 @@ function GuardianRow({ s, g, canEdit }: { s: StudentDetail; g: Guardian; canEdit
       <div className="text-xs text-muted-foreground">
         {[g.isPrimary && "Main contact", g.isFeePayer && "Pays fees", g.isEmergencyContact && "Emergency contact", !g.canPickup && "May not collect", g.occupation].filter(Boolean).join(" · ")}
       </div>
+      {g.smsOptOut || canEdit ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {g.smsOptOut ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">SMS stopped</span> : null}
+          {canEdit ? (
+            <Button type="button" size="sm" variant="ghost" disabled={optOut.isPending} onClick={() => optOut.mutate()}>
+              {g.smsOptOut ? "Resume SMS" : "Stop SMS to this parent"}
+            </Button>
+          ) : null}
+          {optOut.isError ? <span role="alert" className="text-destructive">{friendlyError(optOut.error)}</span> : null}
+        </div>
+      ) : null}
       {editing ? (
         <GuardianForm
           idPrefix={`g-${g.id}`} initial={toEntry(g)} editingExisting pending={save.isPending}
