@@ -9,6 +9,7 @@ import {
   CreditCard,
   FileText,
   Layers,
+  MessageSquare,
   Plus,
   Printer,
   Receipt,
@@ -483,6 +484,15 @@ export default function Fees() {
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+        {hasAnyRole(roles, ["school_admin", "principal", "accountant"]) ? (
+          <Button asChild variant="outline" size="sm">
+            <Link to="/messages?audience=fee_balance&template=fee_reminder">
+              <MessageSquare className="size-4" aria-hidden />
+              Remind parents who owe
+            </Link>
+          </Button>
+        ) : null}
         {isAdmin ? (
           <Button asChild variant="outline" size="sm">
             <Link to="/settings">
@@ -491,6 +501,7 @@ export default function Fees() {
             </Link>
           </Button>
         ) : null}
+        </div>
       </div>
 
       {/* Summary KPI cards */}
