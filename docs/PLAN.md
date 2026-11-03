@@ -19,7 +19,7 @@ Phases 0 to 3 are done, and most of Phase 4 is built. The system runs against th
 | HR, payroll, library, at-risk analytics, report builder | Not started |
 | Audit log screen, two-step sign-in, restorable backups, monitoring | Not started |
 
-**What comes next, and how specific people get specific access, is in [`ACCESS_AND_FEATURE_PLAN.md`](ACCESS_AND_FEATURE_PLAN.md).** The phases below are the original plan, kept for context.
+**The current roadmap, with the founder's decisions and the build order, is in [`ROADMAP_V2.md`](ROADMAP_V2.md).** It replaces the access design in [`ACCESS_AND_FEATURE_PLAN.md`](ACCESS_AND_FEATURE_PLAN.md), which is kept for the audit of who can see what today. The phases below are the original plan, kept for context.
 
 ## Planning principles
 
