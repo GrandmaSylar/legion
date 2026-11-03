@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FormMessage } from "../../components/fields";
 
 export function PayOnlineDialog({
-  invoiceId, invoiceNumber, studentName, balance, currency, testMode,
+  invoiceId, invoiceNumber, studentName, balance, currency, testMode, label = "Pay online",
 }: {
-  invoiceId: string; invoiceNumber: string; studentName: string; balance: number; currency: string; testMode: boolean;
+  label?: string; invoiceId: string; invoiceNumber: string; studentName: string; balance: number; currency: string; testMode: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(balance.toFixed(2));
@@ -27,7 +27,7 @@ export function PayOnlineDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button size="sm" onClick={() => { setAmount(balance.toFixed(2)); pay.reset(); setOpen(true); }}>
-        <CreditCard className="size-4" aria-hidden /> Pay online
+        <CreditCard className="size-4" aria-hidden /> {label}
       </Button>
       <DialogContent>
         <form onSubmit={submit} className="space-y-4">

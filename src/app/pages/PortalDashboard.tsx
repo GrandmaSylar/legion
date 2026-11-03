@@ -24,6 +24,7 @@ import {
 import { listNotices } from "../../lib/data/notices";
 import { WEEKDAYS, listClassTimetable } from "../../lib/data/timetable";
 import { StudentAvatar, usePhotoUrls } from "../components/StudentAvatar";
+import { FeesSummaryCard } from "./FeesSummaryCard";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../components/ui/utils";
@@ -310,6 +311,9 @@ export function PortalDashboard() {
               </div>
             </section>
           </div>
+
+          {/* Fees: what is owed for this child, with a way to pay it now */}
+          {isParent ? <FeesSummaryCard studentId={activeStudent.id} studentName={activeStudent.fullName} /> : null}
 
           {/* 3 Main Content Panels */}
           <div className="grid gap-4 lg:grid-cols-3">
