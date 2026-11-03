@@ -666,7 +666,36 @@ begin
     ('the principal is put back to the principal preset',
        pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''principal''))', u_prin)), 'ok:1'),
     ('the accountant cannot approve an expense, as before',
-       pg_temp.t_try(u_acc, 'select public.review_expense((select id from public.expenses limit 1), ''approved'', ''ok'')'), 'denied')
+       pg_temp.t_try(u_acc, 'select public.review_expense((select id from public.expenses limit 1), ''approved'', ''ok'')'), 'denied'),
+    -- Notices and Staff are decided by actions
+    ('a teacher can read staff names without having the Staff screen', (pg_temp.t_count(u_t1,'staff') > 0)::text, 'true'),
+    ('but does not hold the staff-directory action', pg_temp.t_try(u_t1, 'select 1 where public.has_capability(''staff.view'')'), 'ok:0'),
+    ('the developer takes the class-notice action from teacher1',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''teacher'' and capability <> ''notices.post_class''))', u_t1)), 'ok:1'),
+    ('so teacher1 cannot post a class notice',
+       pg_temp.t_try(u_t1, format('insert into public.announcements (school_id,title,body,audience,class_id,posted_by) values (%L,''T'',''B'',''class'',%L,%L)', a, c1, u_t1)), 'denied'),
+    ('the developer gives teacher1 the class-notice action back',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''teacher''))', u_t1)), 'ok:1'),
+    ('and teacher1 can post a class notice again',
+       pg_temp.t_try(u_t1, format('insert into public.announcements (school_id,title,body,audience,class_id,posted_by) values (%L,''T'',''B'',''class'',%L,%L)', a, c1, u_t1)), 'ok:1'),
+    ('teacher1 still cannot post to everyone',
+       pg_temp.t_try(u_t1, format('insert into public.announcements (school_id,title,body,audience,posted_by) values (%L,''T'',''B'',''all'',%L)', a, u_t1)), 'denied'),
+    ('the developer lets the receptionist post to everyone',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, array[''notices.post''])', u_rec)), 'ok:1'),
+    ('so the receptionist can post to everyone',
+       pg_temp.t_try(u_rec, format('insert into public.announcements (school_id,title,body,audience,posted_by) values (%L,''T'',''B'',''all'',%L)', a, u_rec)), 'ok:1'),
+    ('but cannot edit a notice someone else posted',
+       pg_temp.t_try(u_rec, format('update public.announcements set title = ''Changed'' where posted_by = %L', u_t1)), 'ok:0'),
+    ('the receptionist is put back to the receptionist preset',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''receptionist''))', u_rec)), 'ok:1'),
+    ('and can no longer post to everyone',
+       pg_temp.t_try(u_rec, format('insert into public.announcements (school_id,title,body,audience,posted_by) values (%L,''T'',''B'',''all'',%L)', a, u_rec)), 'denied'),
+    ('the developer takes the edit action from the HR officer',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''hr_officer'' and capability <> ''staff.edit''))', u_hr)), 'ok:1'),
+    ('so the HR officer can no longer edit a staff record', pg_temp.t_try(u_hr, 'update public.staff set phone = phone'), 'ok:0'),
+    ('but still sees the staff directory', (pg_temp.t_count(u_hr,'staff') > 0)::text, 'true'),
+    ('the HR officer is put back to the HR preset',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''hr_officer''))', u_hr)), 'ok:1')
   ) as x(label, got, want)
   loop
     if r.got = r.want then passes := passes + 1;

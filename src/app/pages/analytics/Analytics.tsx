@@ -1,3 +1,4 @@
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -53,6 +54,10 @@ function formatMoney(amount: number, currency = "GHS"): string {
 }
 
 export default function Analytics() {
+  // What each section shows comes from the kind of report the person may see.
+  const { can } = useCapabilities();
+  const canFinance = can("analytics.view_finance");
+  const canAcademic = can("analytics.view_academic");
   const previewRef = useRef<HTMLDivElement>(null);
   const [selectedYearId, setSelectedYearId] = useState<string>("");
   const [selectedTermId, setSelectedTermId] = useState<string>("");
@@ -182,6 +187,7 @@ export default function Analytics() {
             </p>
           </div>
 
+          {can("analytics.download") ? (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -242,6 +248,7 @@ export default function Analytics() {
               Print
             </Button>
           </div>
+          ) : null}
         </div>
 
         {/* Filters & Export Status */}
@@ -493,6 +500,7 @@ export default function Analytics() {
           </section>
 
           {/* ─── SECTION 2: ENROLLMENT & DEMOGRAPHICS CHARTS ─────────────────── */}
+          {canAcademic ? (
           <section className="space-y-3">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               <Users className="size-4 text-primary" aria-hidden />
@@ -576,8 +584,10 @@ export default function Analytics() {
               </div>
             </div>
           </section>
+          ) : null}
 
           {/* ─── SECTION 3: ATTENDANCE SPECTRUM ─────────────────────────────── */}
+          {canAcademic ? (
           <section className="space-y-3">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               <CalendarCheck className="size-4 text-primary" aria-hidden />
@@ -672,8 +682,10 @@ export default function Analytics() {
               </div>
             </div>
           </section>
+          ) : null}
 
           {/* ─── SECTION 4: ACADEMIC PERFORMANCE & SUBJECT ANALYTICS ────────── */}
+          {canAcademic ? (
           <section className="space-y-3">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               <BookOpen className="size-4 text-primary" aria-hidden />
@@ -759,8 +771,10 @@ export default function Analytics() {
               </div>
             </div>
           </section>
+          ) : null}
 
           {/* ─── SECTION 5: FINANCIAL & REVENUE ANALYTICS ───────────────────── */}
+          {canFinance ? (
           <section className="space-y-3">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               <Wallet className="size-4 text-primary" aria-hidden />
@@ -848,8 +862,10 @@ export default function Analytics() {
               </div>
             </div>
           </section>
+          ) : null}
 
           {/* ─── SECTION 6: DETAILED TABULAR BREAKDOWNS ─────────────────────── */}
+          {canAcademic ? (
           <section className="space-y-4">
             <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
               <TableIcon className="size-4 text-primary" aria-hidden />
@@ -901,6 +917,7 @@ export default function Analytics() {
               </table>
             </div>
           </section>
+          ) : null}
 
           <footer className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
             {institution?.receiptFooter ||

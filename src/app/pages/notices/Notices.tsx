@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import { useAuth } from "../../../lib/auth/AuthProvider";
-import { hasAnyRole } from "../../../lib/permissions";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import { getMyTeachableClassIds } from "../../../lib/data/attendance";
 import {
@@ -78,11 +78,13 @@ function formatDateTime(iso: string): string {
 type AudienceFilter = "all_notices" | AnnouncementAudience | "drafts";
 
 export default function NoticesPage() {
-  const { profile, roles } = useAuth();
+  const { profile } = useAuth();
   const qc = useQueryClient();
 
-  const isLeader = hasAnyRole(roles, ["school_admin", "principal"]);
-  const isTeacher = hasAnyRole(roles, ["teacher"]);
+  // What the person may post comes from their actions, not their role name.
+  const { can } = useCapabilities();
+  const isLeader = can("notices.post") || can("notices.manage");   // posts to anyone, pins
+  const isTeacher = can("notices.post_class");                      // posts to the classes they teach
   const canCompose = isLeader || isTeacher;
 
   const [filter, setFilter] = useState<AudienceFilter>("all_notices");
