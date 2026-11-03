@@ -176,7 +176,7 @@ export default function App() {
                   <Route
                     path="/students/new"
                     element={
-                      <RequireRole allowed={["school_admin", "receptionist"]}>
+                      <RequireRole allowed={["school_admin", "receptionist"]} anyAction={["students.create"]}>
                         <AddStudent />
                       </RequireRole>
                     }

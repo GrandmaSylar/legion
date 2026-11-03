@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { FileSpreadsheet, GraduationCap, Plus, Search } from "lucide-react";
-import { useAuth } from "../../../lib/auth/AuthProvider";
-import { hasAnyRole } from "../../../lib/permissions";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { useDebounced } from "../../../lib/useDebounced";
 import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import { PAGE_SIZE, listStudents, type StudentStatus } from "../../../lib/data/students";
@@ -33,8 +32,9 @@ export function StatusPill({ status }: { status: StudentStatus }) {
 }
 
 export default function StudentsList() {
-  const { roles } = useAuth();
-  const canAdd = hasAnyRole(roles, ["school_admin", "receptionist"]);
+  const { can } = useCapabilities();
+  const canAdd = can("students.create");
+  const canPromote = can("students.edit");
   const [activeTool, setActiveTool] = useState<"import" | "promote" | null>(null);
 
   const years = useQuery({ queryKey: ["academic-years"], queryFn: listAcademicYears });
@@ -80,9 +80,9 @@ export default function StudentsList() {
           </p>
         </div>
 
-        {canAdd ? (
+        {canAdd || canPromote ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button
+            {canAdd ? <Button
               type="button"
               variant={activeTool === "import" ? "default" : "outline"}
               size="sm"
@@ -92,8 +92,8 @@ export default function StudentsList() {
             >
               <FileSpreadsheet className="size-4" aria-hidden />
               Bulk CSV / Excel Import
-            </Button>
-            <Button
+            </Button> : null}
+            {canPromote ? <Button
               type="button"
               variant={activeTool === "promote" ? "default" : "outline"}
               size="sm"
@@ -103,12 +103,12 @@ export default function StudentsList() {
             >
               <GraduationCap className="size-4" aria-hidden />
               Promote / Graduate Class
-            </Button>
-            <Button asChild className="sm:hidden">
+            </Button> : null}
+            {canAdd ? <Button asChild className="sm:hidden">
               <Link to="/students/new">
                 <Plus className="size-4" aria-hidden /> Add student
               </Link>
-            </Button>
+            </Button> : null}
           </div>
         ) : null}
       </div>
@@ -117,7 +117,7 @@ export default function StudentsList() {
         <BulkStudentImportPanel onClose={() => setActiveTool(null)} />
       ) : null}
 
-      {canAdd && activeTool === "promote" ? (
+      {canPromote && activeTool === "promote" ? (
         <ClassPromotionWizardPanel onClose={() => setActiveTool(null)} />
       ) : null}
 

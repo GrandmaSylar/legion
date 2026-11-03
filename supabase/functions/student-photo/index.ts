@@ -30,7 +30,6 @@ class HttpError extends Error {
   }
 }
 
-const EDITORS = ["school_admin", "receptionist", "developer"];
 const LINK_SECONDS = 3600;
 const MAX_IDS = 100;
 
@@ -81,7 +80,10 @@ Deno.serve(async (req) => {
     const schoolId = profile.school_id as string;
     const { data: roleRows } = await admin.from("user_roles").select("role").eq("profile_id", me.id);
     const roles = (roleRows ?? []).map((r) => r.role as string);
-    const canEdit = roles.some((r) => EDITORS.includes(r));
+    // Allowed to change students? Decided by the actions switched on for the person (a developer holds all).
+    const { data: held } = await admin.from("user_capabilities").select("capability, expires_at").eq("profile_id", me.id);
+    const holdsEdit = (held ?? []).some((r) => r.capability === "students.edit" && (!r.expires_at || Date.parse(r.expires_at as string) > Date.now()));
+    const canEdit = roles.includes("developer") || holdsEdit;
 
     // Reads go through the caller's own token so row level security decides.
     const asCaller = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {

@@ -62,9 +62,12 @@ const STAFF: AppRole[] = [
 /** Messages is decided by these actions. Holding any one opens the module; each screen inside checks its own. */
 export const MESSAGE_ACTIONS = ["messages.view_log", "messages.send_all", "messages.send_fee_reminders", "messages.manage_templates", "messages.manage_setup"];
 
+/** Students is decided by these actions. Seeing students, in all classes or only your own, opens the module. */
+export const STUDENT_ACTIONS = ["students.view", "students.view_own_classes"];
+
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
-  { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true },
+  { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true, anyAction: STUDENT_ACTIONS },
   { id: "attendance", label: "Attendance", path: "/attendance", roles: ["school_admin", "principal", "teacher"], built: true },
   { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "receptionist", "parent", "student"], built: true },
   { id: "fees", label: "Fees & Finance", path: "/fees", roles: ["school_admin", "accountant", "principal", "parent"], built: true },
