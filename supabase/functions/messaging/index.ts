@@ -8,9 +8,11 @@
 //     overlapping calls never send the same message twice,
 //   - and keeps the raw provider reply on each message to diagnose problems.
 //
-// Secrets (supabase secrets set): ARKESEL_API_KEY, ARKESEL_SENDER_ID (max 11
-// characters, approved by Arkesel). Optional ARKESEL_SANDBOX=true makes every
-// send a dry run: accepted by Arkesel but neither delivered nor billed.
+// Secret (supabase secrets set): ARKESEL_API_KEY. The sender ID (3 to 11 letters
+// or digits, approved by Arkesel) is set per school in the app (message_settings);
+// ARKESEL_SENDER_ID is only a server-wide fallback for a school that has not set
+// one. Optional ARKESEL_SANDBOX=true makes every send a dry run: accepted by
+// Arkesel but neither delivered nor billed.
 //
 // Provider details below follow Arkesel's public SDKs (POST /api/v2/sms/send,
 // GET /api/v2/clients/balance-details, GET /api/v2/sms/{id}); replies are parsed
@@ -46,18 +48,35 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
-function provider() {
+function apiConfig() {
   const key = Deno.env.get("ARKESEL_API_KEY")?.trim();
-  const sender = Deno.env.get("ARKESEL_SENDER_ID")?.trim();
-  if (!key || !sender) return null;
-  if (sender.length > 11) throw new HttpError(503, "The SMS sender ID must be 11 characters or fewer.");
-  return { key, sender, forceSandbox: Deno.env.get("ARKESEL_SANDBOX")?.trim().toLowerCase() === "true" };
+  if (!key) return null;
+  return { key, forceSandbox: Deno.env.get("ARKESEL_SANDBOX")?.trim().toLowerCase() === "true" };
 }
 
-function requireProvider() {
-  const p = provider();
-  if (!p) throw new HttpError(503, "SMS is not set up yet. Add the Arkesel API key and sender ID.");
-  return p;
+function requireKey() {
+  const c = apiConfig();
+  if (!c) throw new HttpError(503, "SMS is not set up yet. The Arkesel API key has not been added to the server.");
+  return c;
+}
+
+/** The sender ID in force for a school: its own setting, else the server-wide fallback. */
+async function senderFor(schoolId: string): Promise<{ sender: string; source: "school" | "server" } | null> {
+  const { data } = await admin.from("message_settings").select("sender_id").eq("school_id", schoolId).maybeSingle();
+  const own = (data?.sender_id as string | null | undefined)?.trim();
+  if (own) return { sender: own, source: "school" };
+  const fallback = Deno.env.get("ARKESEL_SENDER_ID")?.trim();
+  if (fallback) {
+    if (fallback.length > 11) throw new HttpError(503, "The server's SMS sender ID must be 11 characters or fewer.");
+    return { sender: fallback, source: "server" };
+  }
+  return null;
+}
+
+async function requireSender(schoolId: string): Promise<string> {
+  const found = await senderFor(schoolId);
+  if (!found) throw new HttpError(503, "No SMS sender ID is set. Add one under Messages, Setup.");
+  return found.sender;
 }
 
 async function pool<T>(items: T[], size: number, fn: (item: T) => Promise<void>) {
@@ -82,7 +101,7 @@ function friendlyProviderError(raw: string): string {
 }
 
 async function arkesel(path: string, init: RequestInit = {}) {
-  const p = requireProvider();
+  const p = requireKey();
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: { "api-key": p.key, "Content-Type": "application/json", Accept: "application/json", ...(init.headers ?? {}) },
@@ -106,9 +125,8 @@ function parseSendReply(status: number, body: Record<string, any>) {
   return { ok, id: id ? String(id) : null, error: ok ? null : friendlyProviderError(complaint) };
 }
 
-async function sendOne(m: Record<string, any>, sandbox: boolean) {
-  const p = requireProvider();
-  const payload = { sender: p.sender, message: m.body, recipients: [m.recipient_phone], sandbox };
+async function sendOne(m: Record<string, any>, sandbox: boolean, sender: string) {
+  const payload = { sender, message: m.body, recipients: [m.recipient_phone], sandbox };
   let last = { status: 0, body: {} as Record<string, any> };
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -132,8 +150,10 @@ async function sendOne(m: Record<string, any>, sandbox: boolean) {
 
 /** Send what is queued for one batch until the time budget runs out. */
 async function processBatch(batchId: string) {
-  const { data: batch } = await admin.from("message_batches").select("sandbox").eq("id", batchId).maybeSingle();
-  const sandbox = !!batch?.sandbox || provider()?.forceSandbox === true;
+  const { data: batch } = await admin.from("message_batches").select("sandbox, school_id").eq("id", batchId).maybeSingle();
+  if (!batch) throw new HttpError(404, "Batch not found.");
+  const sender = await requireSender(batch.school_id as string);
+  const sandbox = !!batch.sandbox || apiConfig()?.forceSandbox === true;
   const started = Date.now();
   let sent = 0;
   let failed = 0;
@@ -141,7 +161,7 @@ async function processBatch(batchId: string) {
     const { data: claimed } = await admin.rpc("claim_messages", { p_batch: batchId, p_limit: CLAIM_SIZE });
     if (!claimed || claimed.length === 0) break;
     await pool(claimed as Record<string, any>[], CONCURRENCY, async (m) => {
-      if (await sendOne(m, sandbox)) sent++;
+      if (await sendOne(m, sandbox, sender)) sent++;
       else failed++;
     });
   }
@@ -257,8 +277,15 @@ Deno.serve(async (req) => {
 
     // ── status: is SMS set up, and what is left on the account ───────────────
     if (action === "status") {
-      const p = provider();
-      if (!p) return json({ configured: false });
+      const found = await senderFor(schoolId);
+      const info = {
+        keyPresent: apiConfig() !== null,
+        sender: found?.sender ?? null,
+        senderSource: found?.source ?? null,
+        serverSender: Deno.env.get("ARKESEL_SENDER_ID")?.trim() || null,
+        sandboxForced: apiConfig()?.forceSandbox === true,
+      };
+      if (!info.keyPresent || !found) return json({ configured: false, ...info });
       let balance: number | null = null;
       let balanceError: string | null = null;
       try {
@@ -271,7 +298,7 @@ Deno.serve(async (req) => {
       } catch {
         balanceError = "Arkesel could not be reached.";
       }
-      return json({ configured: true, sender: p.sender, sandboxForced: p.forceSandbox, balance, balanceError });
+      return json({ configured: true, ...info, balance, balanceError });
     }
 
     // ── preview: who would get it, and exactly what they would read ──────────
@@ -291,7 +318,8 @@ Deno.serve(async (req) => {
     // ── send ──────────────────────────────────────────────────────────────────
     if (action === "send") {
       assertMayUse(str(body.audience));
-      requireProvider();
+      requireKey();
+      await requireSender(schoolId);
       const a = await loadAudience(schoolId, body);
       const msg = await loadBody(schoolId, body);
       if (a.recipients.length === 0) throw new HttpError(400, "There is nobody to send this to.");
@@ -327,13 +355,13 @@ Deno.serve(async (req) => {
       const { data: b } = await admin.from("message_batches").select("school_id, audience").eq("id", batchId).maybeSingle();
       if (!b || b.school_id !== schoolId) throw new HttpError(404, "Batch not found.");
       assertMayUse(b.audience as string);
-      requireProvider();
+      requireKey();
       return json({ batchId, ...(await processBatch(batchId)) });
     }
 
     // ── refresh: ask Arkesel what became of the messages already sent ────────
     if (action === "refresh") {
-      requireProvider();
+      requireKey();
       const batchId = str(body.batchId);
       let q = admin.from("messages").select("id, provider_message_id, provider_response, batch_id")
         .eq("school_id", schoolId).eq("status", "sent").not("provider_message_id", "is", null)
@@ -378,7 +406,8 @@ Deno.serve(async (req) => {
     // ── test: one message to one number, showing what Arkesel answered ───────
     if (action === "test") {
       if (!canSend) throw new HttpError(403, "Only an administrator or principal can send a test.");
-      requireProvider();
+      requireKey();
+      await requireSender(schoolId);
       const phone = normalizePhone(str(body.to));
       if (!phone) throw new HttpError(400, "That phone number does not look right.");
       const text = str(body.body) || `${schoolName}: this is a test message.`;
@@ -395,7 +424,7 @@ Deno.serve(async (req) => {
       await processBatch(batch!.id);
       const { data: result } = await admin.from("messages").select("status, error, provider_message_id, provider_response")
         .eq("id", row!.id).maybeSingle();
-      return json({ sandbox: sandbox || provider()?.forceSandbox === true, ...result });
+      return json({ sandbox: sandbox || apiConfig()?.forceSandbox === true, ...result });
     }
 
     throw new HttpError(400, "Unknown action.");
