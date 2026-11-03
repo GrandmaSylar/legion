@@ -32,3 +32,6 @@ coverage/
 # supabase CLI
 supabase/.temp/
 .playwright-mcp/
+
+# local data backups (never committed)
+.backups/

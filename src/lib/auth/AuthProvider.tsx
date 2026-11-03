@@ -1,9 +1,11 @@
 // Auth module. The rest of the app uses `useAuth()` and never touches the
 // Supabase auth client directly, so the provider can be swapped later.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
 import type { AppRole } from "../permissions";
+import { clearPersistedQueryCaches } from "../queryPersistence";
 
 export interface UserThemeConfig {
   mode?: "dark" | "light";
@@ -112,14 +114,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState<{ profile: Profile; roles: AppRole[] } | null>(() => readCachedProfile());
   const [profileReady, setProfileReady] = useState<boolean>(() => readCachedProfile() !== null);
 
+  // Nothing one person looked at may be visible to the next person on the same
+  // computer: drop the in-memory query cache and the stored copy when a session ends.
+  const queryClient = useQueryClient();
+  const forgetUserData = useCallback(() => {
+    queryClient.clear();
+    clearPersistedQueryCaches();
+    writeCachedProfile(null);
+  }, [queryClient]);
+
+  const lastUserId = useRef<string | null>(null);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setSessionReady(true);
     });
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      const incoming = next?.user.id ?? null;
+      // Signed out, or a different person is now signed in on this browser.
+      if (event === "SIGNED_OUT" || (lastUserId.current && incoming && incoming !== lastUserId.current)) {
+        forgetUserData();
+      }
+      if (incoming) lastUserId.current = incoming;
+      if (event === "SIGNED_OUT") lastUserId.current = null;
+      setSession(next);
+    });
     return () => data.subscription.unsubscribe();
-  }, []);
+  }, [forgetUserData]);
 
   // Load the profile in a separate effect, not inside the auth callback, which
   // can deadlock if it awaits another Supabase call.
@@ -164,9 +186,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    writeCachedProfile(null);
+    forgetUserData();
     await supabase.auth.signOut();
-  }, []);
+  }, [forgetUserData]);
 
   const changePassword = useCallback(async (newPassword: string) => {
     const { error } = await supabase.auth.updateUser({ password: newPassword });

@@ -41,6 +41,21 @@ interface PersistedEntry {
   dataUpdatedAt: number;
 }
 
+/** Remove every stored query cache (all users) from this browser. Used on sign-out. */
+export function clearPersistedQueryCaches(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(CACHE_KEY_PREFIX)) doomed.push(key);
+    }
+    doomed.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // Storage can be blocked; nothing to clear then.
+  }
+}
+
 export function hydratePersistedQueryCache(
   queryClient: QueryClient,
   userId: string | undefined,
