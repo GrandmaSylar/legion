@@ -271,10 +271,13 @@ Deno.serve(async (req) => {
     // ── reconcile: Paystack's list of payments against Legion's receipts ─────
     if (action === "reconcile") {
       requireKey();
+      // Allowed to review online payments? Decided by the actions switched on for the person (a developer holds all).
       const { data: roleRows } = await admin.from("user_roles").select("role").eq("profile_id", me.id);
-      const roles = (roleRows ?? []).map((r) => r.role as string);
-      if (!roles.some((r) => ["developer", "school_admin", "accountant"].includes(r))) {
-        throw new HttpError(403, "Only an administrator or the accountant can check payments against Paystack.");
+      const { data: held } = await admin.from("user_capabilities").select("capability, expires_at").eq("profile_id", me.id);
+      const mayReview = (roleRows ?? []).some((r) => r.role === "developer") ||
+        (held ?? []).some((r) => r.capability === "fees.review_online" && (!r.expires_at || Date.parse(r.expires_at as string) > Date.now()));
+      if (!mayReview) {
+        throw new HttpError(403, "You do not have permission to check payments against Paystack.");
       }
       const from = str(body.from);
       const to = str(body.to);
