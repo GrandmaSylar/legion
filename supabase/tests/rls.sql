@@ -45,6 +45,31 @@ exception when others then
   return 'denied';
 end $$;
 
+-- Evaluate a query at the moment this call runs and return its single value as text.
+create function pg_temp.t_scalar(q text) returns text
+language plpgsql as $$
+declare v text;
+begin
+  execute q into v;
+  return coalesce(v, 'null');
+end $$;
+
+-- Run a statement without signing in. Returns 'ok:<rows>' or 'denied'.
+create function pg_temp.t_anon(stmt text) returns text
+language plpgsql as $$
+declare n int;
+begin
+  perform set_config('request.jwt.claims', '', true);
+  set local role anon;
+  execute stmt;
+  get diagnostics n = row_count;
+  reset role;
+  return 'ok:' || n;
+exception when others then
+  reset role;
+  return 'denied';
+end $$;
+
 do $$
 declare
   a uuid; b uuid; yr uuid; term uuid; lvl uuid; c1 uuid; c2 uuid; subj uuid; cs1 uuid; asm uuid;
@@ -56,7 +81,7 @@ declare
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
   u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();  u_off uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
-  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid;
+  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid;
   r record;
 begin
   select id into a from public.schools where name = 'Pinks Academy';
@@ -104,6 +129,10 @@ begin
   insert into public.enrollments (school_id,student_id,class_id,academic_year_id) values (a,s2,c2,yr) returning id into e2;
   insert into public.attendance (school_id,enrollment_id,date,status) values (a,e1,current_date,'present'),(a,e2,current_date,'absent');
   insert into public.bece_registrations (school_id,student_id,exam_year) values (a,s1,2027);
+  insert into public.expense_categories (school_id,name) values (a,'ZZ Category') returning id into ecat;
+  -- the staff counter is about to issue S/9000, which is already taken: it must skip it
+  update public.number_sequences set next_value = 9000 where school_id = a and kind = 'staff_no';
+  insert into public.staff (school_id,full_name,type,staff_no) values (a,'ZZ Taken Number','teaching','S/9000');
   insert into public.academic_years (school_id,name,start_date,end_date) values (a,'DEL','2040-09-01','2041-07-31') returning id into yr_del;
   insert into public.terms (school_id,academic_year_id,name,start_date,end_date) values (a,yr_del,'DelTerm','2040-09-01','2040-12-15');
   insert into public.classes (school_id,level_id,academic_year_id,section) values (a,lvl,yr_del,'DEL') returning id into cls_del;
@@ -152,8 +181,8 @@ begin
     ('payments parent1',    pg_temp.t_count(u_p1,'payments')::text,'1'),
     ('payments other school admin', pg_temp.t_count(u_adminb,'payments')::text,'0'),
     -- staff, guardians, people
-    ('staff admin',         pg_temp.t_count(u_admin,'staff')::text,(rst + 2)::text),
-    ('staff hr',            pg_temp.t_count(u_hr,'staff')::text,(rst + 2)::text),
+    ('staff admin',         pg_temp.t_count(u_admin,'staff')::text,(rst + 3)::text),
+    ('staff hr',            pg_temp.t_count(u_hr,'staff')::text,(rst + 3)::text),
     ('staff parent1',       pg_temp.t_count(u_p1,'staff')::text,'0'),
     ('guardians admin',     pg_temp.t_count(u_admin,'guardians')::text,(rg + 3)::text),
     ('guardians teacher1',  pg_temp.t_count(u_t1,'guardians')::text,'0'),
@@ -172,12 +201,13 @@ begin
     ('audit other school admin sees only own school', pg_temp.t_count(u_adminb,'audit_log')::text,'3'),
     -- BECE index numbers
     ('bece admin',          pg_temp.t_count(u_admin,'bece_registrations')::text,'1'),
-    ('bece teacher1',       pg_temp.t_count(u_t1,'bece_registrations')::text,'0'),
+    ('bece teacher1 sees only own class',       pg_temp.t_count(u_t1,'bece_registrations')::text,'1'),
+    ('bece teacher2 sees none',       pg_temp.t_count(u_t2,'bece_registrations')::text,'0'),
     -- developer sees at least everything an admin sees
     ('students developer',  pg_temp.t_count(u_dev,'students')::text,(rs + 3)::text),
     ('attendance developer',pg_temp.t_count(u_dev,'attendance')::text,'2'),
     ('invoices developer',  pg_temp.t_count(u_dev,'invoices')::text,'2'),
-    ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,'2'),
+    ('staff developer',     pg_temp.t_count(u_dev,'staff')::text,(rst + 3)::text),
     ('profiles developer',  pg_temp.t_count(u_dev,'profiles')::text,(select count(*) from public.profiles where school_id = a)::text),
     ('developer is scoped to own school', pg_temp.t_count(u_dev,'classes')::text,(select count(*) from public.classes where school_id = a)::text),
     ('students other school admin sees not developer school', pg_temp.t_count(u_adminb,'profiles')::text,'1'),
@@ -302,6 +332,80 @@ begin
        pg_temp.t_try(u_dev, format('select public.delete_student_if_unused(%L)', s2)), 'denied'),
     ('developer deletes an unused student',
        pg_temp.t_try(u_dev, format('select public.delete_student_if_unused(%L)', su)), 'ok:1'),
+    -- numbering: a taken number is skipped instead of colliding
+    ('staff number skips a taken one',
+       pg_temp.t_try(u_admin, 'insert into public.staff (full_name,type) values (''ZZ Skip'',''teaching'')'), 'ok:1'),
+    ('...and it is not the taken number',
+       pg_temp.t_scalar('select (staff_no <> ''S/9000'')::text from public.staff where full_name = ''ZZ Skip'''), 'true'),
+    -- no internal function can be called without signing in
+    ('anon cannot issue a number',
+       pg_temp.t_anon(format('select public.issue_number(%L, ''staff_no'')', a)), 'denied'),
+    ('anon cannot publish a report',
+       pg_temp.t_anon(format('select public.set_term_report_publication(%L, %L, true, null, null, null)', c1, term)), 'denied'),
+    ('anon cannot save a behavioural assessment',
+       pg_temp.t_anon(format('select public.save_behavioral_assessment(%L, %L, 3::smallint, 3::smallint, 3::smallint, 3::smallint, 3::smallint, null, null, null)', e1, term)), 'denied'),
+    ('anon cannot call a role helper',
+       pg_temp.t_anon('select public.has_role(''school_admin'')'), 'denied'),
+    ('anon cannot set a theme',
+       pg_temp.t_anon('select public.set_my_theme(''{}''::jsonb)'), 'denied'),
+    -- expenses
+    ('accountant records an expense',
+       pg_temp.t_try(u_acc, format('insert into public.expenses (expense_category_id,voucher_no,title,amount) values (%L,''ZZV-1'',''Chalk'',50)', ecat)), 'ok:1'),
+    ('principal records an expense',
+       pg_temp.t_try(u_prin, format('insert into public.expenses (expense_category_id,voucher_no,title,amount) values (%L,''ZZV-2'',''Paper'',20)', ecat)), 'ok:1'),
+    ('teacher1 records an expense',
+       pg_temp.t_try(u_t1, format('insert into public.expenses (expense_category_id,voucher_no,title,amount) values (%L,''ZZV-3'',''Pens'',5)', ecat)), 'denied'),
+    ('teacher1 reads expenses', pg_temp.t_count(u_t1,'expenses')::text, '0'),
+    ('parent1 reads expenses', pg_temp.t_count(u_p1,'expenses')::text, '0'),
+    ('accountant edits a category',
+       pg_temp.t_try(u_acc, format('update public.expense_categories set budget_limit = 100 where id = %L', ecat)), 'ok:1'),
+    ('principal edits a category',
+       pg_temp.t_try(u_prin, format('update public.expense_categories set budget_limit = 999 where id = %L', ecat)), 'ok:0'),
+    -- notices
+    ('admin posts a notice',
+       pg_temp.t_try(u_admin, 'insert into public.announcements (title,body,audience,published_at) values (''T'',''B'',''all'',now())'), 'ok:1'),
+    ('teacher1 posts a school-wide notice',
+       pg_temp.t_try(u_t1, 'insert into public.announcements (title,body,audience,published_at) values (''T'',''B'',''all'',now())'), 'denied'),
+    ('teacher1 posts to their own class',
+       pg_temp.t_try(u_t1, format('insert into public.announcements (title,body,audience,class_id,published_at) values (''T'',''B'',''class'',%L,now())', c1)), 'ok:1'),
+    ('teacher1 posts to another class',
+       pg_temp.t_try(u_t1, format('insert into public.announcements (title,body,audience,class_id,published_at) values (''T'',''B'',''class'',%L,now())', c2)), 'denied'),
+    ('parent1 posts a notice',
+       pg_temp.t_try(u_p1, 'insert into public.announcements (title,body,audience,published_at) values (''T'',''B'',''all'',now())'), 'denied'),
+    -- timetable
+    ('admin adds a timetable slot',
+       pg_temp.t_try(u_admin, format('insert into public.timetable_slots (class_id,day_of_week,start_time,end_time) values (%L,1,''08:00'',''08:40'')', c2)), 'ok:1'),
+    ('teacher1 adds a slot for their own class',
+       pg_temp.t_try(u_t1, format('insert into public.timetable_slots (class_id,day_of_week,start_time,end_time) values (%L,2,''08:00'',''08:40'')', c1)), 'ok:1'),
+    ('teacher1 adds a slot for another class',
+       pg_temp.t_try(u_t1, format('insert into public.timetable_slots (class_id,day_of_week,start_time,end_time) values (%L,3,''08:00'',''08:40'')', c2)), 'denied'),
+    ('parent1 adds a slot',
+       pg_temp.t_try(u_p1, format('insert into public.timetable_slots (class_id,day_of_week,start_time,end_time) values (%L,4,''08:00'',''08:40'')', c1)), 'denied'),
+    ('parent1 reads the timetable', (pg_temp.t_count(u_p1,'timetable_slots') >= 2)::text, 'true'),
+    ('other school admin reads no timetable', pg_temp.t_count(u_adminb,'timetable_slots')::text, '0'),
+    -- fee configuration
+    ('accountant adds a discount',
+       pg_temp.t_try(u_acc, 'insert into public.discounts (name,type,value) values (''ZZ Sibling'',''percent'',10)'), 'ok:1'),
+    ('teacher1 adds a discount',
+       pg_temp.t_try(u_t1, 'insert into public.discounts (name,type,value) values (''ZZ Teacher'',''percent'',10)'), 'denied'),
+    ('parent1 reads discounts', pg_temp.t_count(u_p1,'discounts')::text, '0'),
+    -- report publication and behavioural assessments
+    ('admin publishes a class report',
+       pg_temp.t_try(u_admin, format('select public.set_term_report_publication(%L, %L, true, null, null, null)', c1, term)), 'ok:1'),
+    ('class teacher publishes their own class report',
+       pg_temp.t_try(u_t1, format('select public.set_term_report_publication(%L, %L, false, null, null, null)', c1, term)), 'ok:1'),
+    ('teacher1 publishes another class report',
+       pg_temp.t_try(u_t1, format('select public.set_term_report_publication(%L, %L, true, null, null, null)', c2, term)), 'denied'),
+    ('parent1 publishes a report',
+       pg_temp.t_try(u_p1, format('select public.set_term_report_publication(%L, %L, true, null, null, null)', c1, term)), 'denied'),
+    ('teacher1 saves a behavioural assessment for their pupil',
+       pg_temp.t_try(u_t1, format('select public.save_behavioral_assessment(%L, %L, 4::smallint, 4::smallint, 4::smallint, 4::smallint, 4::smallint, null, null, null)', e1, term)), 'ok:1'),
+    ('teacher1 assesses a pupil in another class',
+       pg_temp.t_try(u_t1, format('select public.save_behavioral_assessment(%L, %L, 1::smallint, 1::smallint, 1::smallint, 1::smallint, 1::smallint, null, null, null)', e2, term)), 'denied'),
+    ('parent1 assesses a pupil',
+       pg_temp.t_try(u_p1, format('select public.save_behavioral_assessment(%L, %L, 1::smallint, 1::smallint, 1::smallint, 1::smallint, 1::smallint, null, null, null)', e1, term)), 'denied'),
+    ('parent1 reads own child''s behavioural assessment', pg_temp.t_count(u_p1,'student_behavioral_assessments')::text, '1'),
+    ('parent2 does not see it', pg_temp.t_count(u_p2,'student_behavioral_assessments')::text, '0'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied'),
     ('reception changes a student''s class',
