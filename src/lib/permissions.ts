@@ -48,11 +48,19 @@ export interface NavItem {
   roles: AppRole[];
   /** False until the screen exists; the route renders a "coming soon" page. */
   built: boolean;
+  /**
+   * Set once the module is decided by actions instead of roles: the item shows for anyone
+   * who holds at least one of these actions, whatever their role.
+   */
+  anyAction?: string[];
 }
 
 const STAFF: AppRole[] = [
   "school_admin", "principal", "teacher", "hr_officer", "accountant", "librarian", "receptionist",
 ];
+
+/** Messages is decided by these actions. Holding any one opens the module; each screen inside checks its own. */
+export const MESSAGE_ACTIONS = ["messages.view_log", "messages.send_all", "messages.send_fee_reminders", "messages.manage_templates", "messages.manage_setup"];
 
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
@@ -62,7 +70,7 @@ export const NAV: NavItem[] = [
   { id: "fees", label: "Fees & Finance", path: "/fees", roles: ["school_admin", "accountant", "principal", "parent"], built: true },
   { id: "analytics", label: "Analytics", path: "/analytics", roles: ["school_admin", "principal", "accountant", "hr_officer"], built: true },
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true },
-  { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true },
+  { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true },
   { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true },
   { id: "settings", label: "Settings", path: "/settings", roles: ["school_admin"], built: true },
@@ -72,13 +80,16 @@ export const NAV: NavItem[] = [
  * A user's own switches (profile.modules) can only narrow what their role
  * allows. null means "everything the role allows"; Overview is always on.
  */
-export function canSee(item: NavItem, roles: AppRole[], modules: string[] | null): boolean {
-  if (!hasAnyRole(roles, item.roles)) return false;
+export function canSee(item: NavItem, roles: AppRole[], modules: string[] | null, caps: string[] | null = null): boolean {
+  // A module decided by actions shows for anyone holding one of them, whatever their role.
+  // Until the actions have loaded it stays hidden.
+  const allowed = item.anyAction ? !!caps && item.anyAction.some((a) => caps.includes(a)) : hasAnyRole(roles, item.roles);
+  if (!allowed) return false;
   return modules === null || item.id === "dashboard" || modules.includes(item.id);
 }
 
-export function navFor(roles: AppRole[], modules: string[] | null = null): NavItem[] {
-  return NAV.filter((item) => canSee(item, roles, modules));
+export function navFor(roles: AppRole[], modules: string[] | null = null, caps: string[] | null = null): NavItem[] {
+  return NAV.filter((item) => canSee(item, roles, modules, caps));
 }
 
 /** Sections a person with these roles could be given. Overview is always included. */

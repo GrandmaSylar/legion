@@ -1,4 +1,6 @@
 // Create a user, or edit one: details, roles, and which sections are switched on.
+import { AccessPanel } from "./AccessPanel";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -232,6 +234,7 @@ function CreateUser() {
 
 function EditUser({ user }: { user: UserRow }) {
   const qc = useQueryClient();
+  const { can } = useCapabilities();
   const navigate = useNavigate();
   const { roles: myRoles, profile } = useAuth();
   const iAmDev = myRoles.includes("developer");
@@ -277,6 +280,11 @@ function EditUser({ user }: { user: UserRow }) {
         <FormMessage error={save.isError ? message(save.error) : null} ok={save.isSuccess ? "Saved" : null} />
         {!readOnly ? <Button type="submit" disabled={save.isPending || !fullName.trim() || roles.length === 0}>{save.isPending ? "Saving" : "Save changes"}</Button> : null}
       </form>
+
+      {/* Staff only: parents and students are portal accounts, and a developer holds everything. */}
+      {!readOnly && !isSelf && !targetPrivileged && can("access.manage") && user.roles.some((r) => r !== "parent" && r !== "student") ? (
+        <AccessPanel userId={user.id} userName={user.fullName} roles={user.roles} />
+      ) : null}
 
       {!readOnly && !isSelf ? (
         <section className="surface space-y-4 p-4">
