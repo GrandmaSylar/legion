@@ -25,7 +25,7 @@ class HttpError extends Error {
 const STAFF_ROLES = ["school_admin", "principal", "teacher", "hr_officer", "accountant", "librarian", "receptionist"];
 const ADMIN_ASSIGNABLE = [...STAFF_ROLES, "parent", "student"];
 const PRIVILEGED = ["developer", "super_admin"];
-const MODULES = ["students", "attendance", "grades", "fees", "staff", "notices", "settings", "users"];
+const MODULES = ["students", "attendance", "grades", "fees", "analytics", "staff", "notices", "messages", "settings", "users"];
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
   auth: { persistSession: false },
