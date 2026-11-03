@@ -46,8 +46,8 @@ function topRole(roles: AppRole[]): string {
 }
 
 /** The one main action for a screen, shown as the top bar's button. */
-const PRIMARY_ACTIONS: { path: string; label: string; to: string; roles: AppRole[] }[] = [
-  { path: "/students", label: "Add student", to: "/students/new", roles: ["school_admin", "receptionist"] },
+const PRIMARY_ACTIONS: { path: string; label: string; to: string; roles: AppRole[]; action?: string }[] = [
+  { path: "/students", label: "Add student", to: "/students/new", roles: ["school_admin", "receptionist"], action: "students.create" },
   { path: "/users", label: "Add user", to: "/users/new", roles: ["school_admin"] },
 ];
 
@@ -301,12 +301,14 @@ export function Shell() {
   const location = useLocation();
   const { caps } = useCapabilities();
   const items = navFor(roles, profile?.modules ?? null, caps);
-  const canSearch = items.some((i) => i.id === "students") && hasAnyRole(roles, ["school_admin", "principal", "teacher", "receptionist", "accountant"]);
+  // Searching students follows seeing them (all classes, or only your own).
+  const canSearch = items.some((i) => i.id === "students");
   const [query, setQuery] = useState("");
   const [customizerOpen, setCustomizerOpen] = useState(false);
 
   const current = items.find((i) => (i.path === "/" ? location.pathname === "/" : location.pathname.startsWith(i.path)));
-  const action = PRIMARY_ACTIONS.find((a) => location.pathname === a.path && hasAnyRole(roles, a.roles));
+  // A button decided by an action shows for anyone holding it; the rest still follow the role.
+  const action = PRIMARY_ACTIONS.find((a) => location.pathname === a.path && (a.action ? !!caps?.includes(a.action) : hasAnyRole(roles, a.roles)));
   const CurrentIcon = current ? (ICONS[current.id] ?? LayoutDashboard) : LayoutDashboard;
 
   const search = (e: FormEvent) => {

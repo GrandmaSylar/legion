@@ -1,3 +1,4 @@
+import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -374,7 +375,8 @@ export default function StudentDetailPage() {
   const { id = "" } = useParams();
   const location = useLocation();
   const { roles } = useAuth();
-  const canEdit = hasAnyRole(roles, ["school_admin", "receptionist"]);
+  const { can } = useCapabilities();
+  const canEdit = can("students.edit");
   const isDev = roles.includes("developer");
   const flash = location.state as { admitted?: string; photoFailed?: boolean } | null;
 
