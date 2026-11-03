@@ -463,7 +463,7 @@ begin
     ('teacher1 opts a parent out',
        pg_temp.t_try(u_t1, format('update public.guardians set sms_opt_out = true where id = %L', g2)), 'ok:0'),
     ('principal sets the sender id',
-       pg_temp.t_try(u_prin, 'insert into public.message_settings (sender_id) values (''ZZSender'')'), 'ok:1'),
+       pg_temp.t_try(u_prin, 'insert into public.message_settings (sender_id) values (''ZZSender'') on conflict (school_id) do update set sender_id = excluded.sender_id'), 'ok:1'),
     ('accountant reads the sender id', pg_temp.t_count(u_acc,'message_settings')::text, '1'),
     ('accountant cannot change the sender id',
        pg_temp.t_try(u_acc, 'update public.message_settings set sender_id = ''Hacked'''), 'ok:0'),
