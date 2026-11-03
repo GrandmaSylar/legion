@@ -24,6 +24,7 @@ import {
 import { listNotices } from "../../lib/data/notices";
 import { WEEKDAYS, listClassTimetable } from "../../lib/data/timetable";
 import { StudentAvatar, usePhotoUrls } from "../components/StudentAvatar";
+import { FeesSummaryCard } from "./FeesSummaryCard";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../components/ui/utils";
@@ -84,6 +85,16 @@ export function PortalDashboard() {
     enabled: !!activeStudent?.id,
   });
 
+  // Every hook must run before the loading early-return below, or React sees a
+  // different number of hooks between renders and the page goes blank.
+  const currentEnrol = activeStudent?.enrollments[0] ?? null;
+  const timetableQuery = useQuery({
+    queryKey: ["timetable", currentEnrol?.classId],
+    queryFn: () => listClassTimetable(currentEnrol!.classId),
+    enabled: !!currentEnrol?.classId,
+  });
+  const timetableSlots = timetableQuery.data ?? [];
+
   const firstName = profile?.fullName.split(" ")[0] ?? "";
   const dateLabel = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -118,14 +129,6 @@ export function PortalDashboard() {
       : null;
 
   const notices = noticesQuery.data ?? [];
-  const currentEnrol = activeStudent?.enrollments[0] ?? null;
-
-  const timetableQuery = useQuery({
-    queryKey: ["timetable", currentEnrol?.classId],
-    queryFn: () => listClassTimetable(currentEnrol!.classId),
-    enabled: !!currentEnrol?.classId,
-  });
-  const timetableSlots = timetableQuery.data ?? [];
 
   return (
     <div className="w-full space-y-4 sm:space-y-6">
@@ -308,6 +311,9 @@ export function PortalDashboard() {
               </div>
             </section>
           </div>
+
+          {/* Fees: what is owed for this child, with a way to pay it now */}
+          {isParent ? <FeesSummaryCard studentId={activeStudent.id} studentName={activeStudent.fullName} /> : null}
 
           {/* 3 Main Content Panels */}
           <div className="grid gap-4 lg:grid-cols-3">
