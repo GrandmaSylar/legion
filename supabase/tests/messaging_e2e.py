@@ -102,6 +102,12 @@ def cleanup():
 
 
 cleanup()
+# The school may hold other parents (demo data). Leave them out of the run so the made-up family is the only audience,
+# and put them back as they were afterwards.
+OPTED = re.findall(r'"id":\s*"([0-9a-f-]{36})"', sql("select id from public.guardians where not sms_opt_out and full_name not like 'ZZMsg %'"))
+IDS = ",".join("'" + i + "'" for i in OPTED)
+if OPTED:
+    sql("update public.guardians set sms_opt_out = true where id in (" + IDS + ")")
 try:
     pw = {k: secrets.token_urlsafe(14) for k in ("admin", "acc", "teacher")}
     make_login("zz-msg-admin@example.test", pw["admin"], "school_admin")
@@ -203,6 +209,8 @@ try:
                    {"apikey": KEY, "Authorization": "Bearer " + admin_t, "Content-Type": "application/json"})
     check("the audience function cannot be called from the browser", code >= 400)
 finally:
+    if OPTED:
+        sql("update public.guardians set sms_opt_out = false where id in (" + IDS + ")")
     cleanup()
     left = sql("select (select count(*) from auth.users where email like 'zz-msg-%@example.test') u, (select count(*) from public.students where admission_no like 'ZZMSG-%') s, (select count(*) from public.messages where recipient_phone = '233244000111') m")
     print("cleanup: leftover test rows =", 0 if '"u": 0' in left and '"s": 0' in left and '"m": 0' in left else "SOME")
