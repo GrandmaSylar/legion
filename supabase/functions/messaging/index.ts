@@ -262,10 +262,16 @@ Deno.serve(async (req) => {
     const { data: profile } = await admin.from("profiles").select("school_id, is_active").eq("id", me.id).maybeSingle();
     if (!profile?.is_active) throw new HttpError(403, "Your account is not active.");
     const schoolId = profile.school_id as string;
+    // What this person is allowed to do comes from the actions switched on for them (a developer
+    // holds every action), not from a role name.
     const { data: roleRows } = await admin.from("user_roles").select("role").eq("profile_id", me.id);
-    const roles = (roleRows ?? []).map((r) => r.role as string);
-    const canSend = roles.some((r) => ["developer", "school_admin", "principal"].includes(r));
-    const feeOnly = !canSend && roles.includes("accountant"); // may send fee reminders and nothing else
+    const isDeveloper = (roleRows ?? []).some((r) => r.role === "developer");
+    const { data: held } = await admin.from("user_capabilities").select("capability, expires_at").eq("profile_id", me.id);
+    const holds = new Set((held ?? []).filter((r) => !r.expires_at || Date.parse(r.expires_at as string) > Date.now()).map((r) => r.capability as string));
+    const can = (action: string) => isDeveloper || holds.has(action);
+    const canSend = can("messages.send_all");
+    const feeOnly = !canSend && can("messages.send_fee_reminders"); // may send fee reminders and nothing else
+    const canManage = can("messages.manage_setup");
     if (!canSend && !feeOnly) throw new HttpError(403, "You do not have permission to send messages.");
 
     const { data: school } = await admin.from("schools").select("name").eq("id", schoolId).maybeSingle();
@@ -405,7 +411,7 @@ Deno.serve(async (req) => {
 
     // ── test: one message to one number, showing what Arkesel answered ───────
     if (action === "test") {
-      if (!canSend) throw new HttpError(403, "Only an administrator or principal can send a test.");
+      if (!canManage) throw new HttpError(403, "You do not have permission to send a test message.");
       requireKey();
       await requireSender(schoolId);
       const phone = normalizePhone(str(body.to));
