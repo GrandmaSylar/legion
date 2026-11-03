@@ -81,7 +81,7 @@ declare
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
   u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();  u_off uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
-  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid; mb uuid; rm int; rb int; rt int; ra int; ri int; rpay int;
+  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid; mb uuid; rm int; rb int; rt int; ra int; ri int; rpay int; rop int;
   r record;
 begin
   select id into a from public.schools where name = 'Pinks Academy';
@@ -132,6 +132,7 @@ begin
   select count(*) into ra from public.attendance where school_id = a;
   select count(*) into ri from public.invoices where school_id = a;
   select count(*) into rpay from public.payments where school_id = a;
+  select count(*) into rop from public.online_payments where school_id = a;
   select count(*) into rm from public.messages where school_id = a;
   select count(*) into rb from public.message_batches where school_id = a;
   select count(*) into rt from public.message_templates where school_id = a;
@@ -154,6 +155,7 @@ begin
   insert into public.invoices (school_id,student_id,term_id) values (a,s2,term) returning id into i2;
   insert into public.invoice_items (school_id,invoice_id,description,amount) values (a,i1,'Fees',500),(a,i2,'Fees',500);
   insert into public.payments (school_id,invoice_id,amount,method) values (a,i1,100,'cash'),(a,i2,100,'cash');
+  insert into public.online_payments (school_id, invoice_id, initiated_by, reference, amount) values (a, i1, u_p1, 'ZZREF1', 10);
 
   -- expectation helper: (label, actual, expected)
   for r in select * from (values
@@ -476,6 +478,29 @@ begin
     ('admin rejects a sender id over 11 characters',
        pg_temp.t_try(u_admin, 'update public.message_settings set sender_id = ''ABCDEFGHIJKL'''), 'denied'),
     ('other school admin reads no settings', pg_temp.t_count(u_adminb,'message_settings')::text, '0'),
+    -- online payments: finance staff and the parent who started it can read; nobody writes from the browser
+    ('admin reads online payments', pg_temp.t_count(u_admin,'online_payments')::text, (rop + 1)::text),
+    ('accountant reads online payments', pg_temp.t_count(u_acc,'online_payments')::text, (rop + 1)::text),
+    ('principal reads online payments', pg_temp.t_count(u_prin,'online_payments')::text, (rop + 1)::text),
+    ('parent1 reads their own online payment', pg_temp.t_count(u_p1,'online_payments')::text, '1'),
+    ('teacher1 reads no online payments', pg_temp.t_count(u_t1,'online_payments')::text, '0'),
+    ('reception reads no online payments', pg_temp.t_count(u_rec,'online_payments')::text, '0'),
+    ('other school admin reads no online payments', pg_temp.t_count(u_adminb,'online_payments')::text, '0'),
+    ('anonymous reads no online payments', pg_temp.t_count(null,'online_payments')::text, '0'),
+    ('parent1 cannot insert an online payment',
+       pg_temp.t_try(u_p1, format('insert into public.online_payments (invoice_id, reference, amount) values (%L,''ZZREF2'',5)', i1)), 'denied'),
+    ('admin cannot insert an online payment',
+       pg_temp.t_try(u_admin, format('insert into public.online_payments (invoice_id, reference, amount) values (%L,''ZZREF3'',5)', i1)), 'denied'),
+    ('parent1 cannot mark their payment successful',
+       pg_temp.t_try(u_p1, 'update public.online_payments set status = ''success'''), 'ok:0'),
+    ('admin cannot delete an online payment',
+       pg_temp.t_try(u_admin, 'delete from public.online_payments'), 'ok:0'),
+    ('parent1 cannot record an online payment',
+       pg_temp.t_try(u_p1, 'select public.record_online_payment(''ZZREF1'', 10, ''card'', null, ''{}''::jsonb)'), 'denied'),
+    ('admin cannot record an online payment',
+       pg_temp.t_try(u_admin, 'select public.record_online_payment(''ZZREF1'', 10, ''card'', null, ''{}''::jsonb)'), 'denied'),
+    ('anon cannot record an online payment',
+       pg_temp.t_anon('select public.record_online_payment(''ZZREF1'', 10, ''card'', null, ''{}''::jsonb)'), 'denied'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied'),
     ('reception changes a student''s class',
