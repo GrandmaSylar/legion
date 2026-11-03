@@ -132,12 +132,16 @@ def cleanup():
 
 cleanup()
 try:
-    pw = {k: secrets.token_urlsafe(14) for k in ("p1", "p2", "teacher")}
+    pw = {k: secrets.token_urlsafe(14) for k in ("p1", "p2", "p3", "acc", "teacher")}
     p1 = make_login("zz-pay-p1@example.com", pw["p1"], "parent")
     p2 = make_login("zz-pay-p2@example.com", pw["p2"], "parent")
+    p3 = make_login("zz-pay-p3@example.com", pw["p3"], "parent")
+    make_login("zz-pay-acc@example.com", pw["acc"], "accountant")
     make_login("zz-pay-teacher@example.com", pw["teacher"], "teacher")
     t1 = sign_in("zz-pay-p1@example.com", pw["p1"])
     t2 = sign_in("zz-pay-p2@example.com", pw["p2"])
+    t3 = sign_in("zz-pay-p3@example.com", pw["p3"])
+    tacc = sign_in("zz-pay-acc@example.com", pw["acc"])
     tt = sign_in("zz-pay-teacher@example.com", pw["teacher"])
     check("test logins can sign in", t1 and t2 and tt)
 
@@ -147,10 +151,12 @@ try:
       c as (select id, academic_year_id from public.classes where academic_year_id = (select id from public.academic_years where is_current limit 1) limit 1),
       g1 as (insert into public.guardians (school_id, full_name, phone, profile_id) select id, 'ZZPay One', '0248594482', '{p1}' from sc returning id),
       g2 as (insert into public.guardians (school_id, full_name, phone, profile_id) select id, 'ZZPay Two', '0204906780', '{p2}' from sc returning id),
+      g3 as (insert into public.guardians (school_id, full_name, phone, profile_id) select id, 'ZZPay Three', '0248594482', '{p3}' from sc returning id),
       s1 as (insert into public.students (school_id, first_name, last_name, admission_no) select id, 'Ama', 'ZZPay', 'ZZPAY-1' from sc returning id),
       s2 as (insert into public.students (school_id, first_name, last_name, admission_no) select id, 'Kofi', 'ZZPay', 'ZZPAY-2' from sc returning id),
       sg1 as (insert into public.student_guardians (school_id, student_id, guardian_id, is_primary) select sc.id, s1.id, g1.id, true from sc, s1, g1),
       sg2 as (insert into public.student_guardians (school_id, student_id, guardian_id, is_primary) select sc.id, s2.id, g2.id, true from sc, s2, g2),
+      sg3 as (insert into public.student_guardians (school_id, student_id, guardian_id, is_primary) select sc.id, s1.id, g3.id, false from sc, s1, g3),
       e1 as (insert into public.enrollments (school_id, student_id, class_id, academic_year_id) select sc.id, s1.id, c.id, c.academic_year_id from sc, s1, c),
       e2 as (insert into public.enrollments (school_id, student_id, class_id, academic_year_id) select sc.id, s2.id, c.id, c.academic_year_id from sc, s2, c),
       i1 as (insert into public.invoices (school_id, student_id) select sc.id, s1.id from sc, s1 returning id),
@@ -236,6 +242,45 @@ try:
         check("an unknown reference is acknowledged and ignored", webhook(charge("NOSUCHREF", 10))[0] == 200)
         check("the balance is 40 after the two real payments",
               one(f"select (sum(amount) - (select coalesce(sum(amount),0) from public.payments where invoice_id = '{inv1}' and voided_at is null)) v from public.invoice_items where invoice_id = '{inv1}'") in ("40", "40.00"))
+
+        # ── two family members paying at once ────────────────────────────────
+        # The invoice has GHS 40 left. Parent one starts 30; parent three (the other guardian) may not start 20.
+        code, r = fn(t1, action="initialize", invoiceId=inv1, amount=30, returnUrl=RET)
+        refA = r.get("reference")
+        check("the first parent starts a 30 payment", code == 200 and refA)
+        code, r = fn(t3, action="initialize", invoiceId=inv1, amount=20, returnUrl=RET)
+        check("the other guardian cannot start a payment that overshoots", code == 409 and "up to GHS 10.00" in str(r.get("error", "")))
+        code, r = fn(t3, action="initialize", invoiceId=inv1, amount=10, returnUrl=RET)
+        check("but can pay what is left", code == 200 and r.get("reference"))
+        code, r = fn(t1, action="initialize", invoiceId=inv1, amount=30, returnUrl=RET)
+        refC = r.get("reference")
+        check("a parent can retry their own payment", code == 200 and refC)
+
+        # Both of parent one's attempts get paid: the second overpays and is flagged, not lost.
+        webhook(charge(refA, 30))
+        webhook(charge(refC, 30))
+        check("both payments are recorded (the money is real)", one(f"select count(*) v from public.payments where reference in ('{refA}', '{refC}')") == "2")
+        check("the one that overpaid is flagged for review",
+              one(f"select (needs_review || ':' || (note like 'Overpaid by 20%')) v from public.online_payments where reference = '{refC}'") == "true:true")
+        check("the first one is not flagged", one(f"select needs_review v from public.online_payments where reference = '{refA}'") == "false")
+
+        # ── cancelling a receipt ─────────────────────────────────────────────
+        payC = one(f"select id v from public.payments where reference = '{refC}'")
+        def rpc(token, **body):
+            return post_json("/rest/v1/rpc/void_payment", body, token)
+        check("a parent cannot cancel a receipt", rpc(t1, p_payment=payC, p_reason="I would like this undone")[0] >= 400)
+        check("a teacher cannot cancel a receipt", rpc(tt, p_payment=payC, p_reason="I would like this undone")[0] >= 400)
+        check("an online receipt needs the refund reference", rpc(tacc, p_payment=payC, p_reason="Paid twice by mistake")[0] >= 400)
+        check("still not cancelled", one(f"select (voided_at is null) v from public.payments where id = '{payC}'") == "true")
+        before = one(f"select (sum(amount) - (select coalesce(sum(amount),0) from public.payments where invoice_id = '{inv1}' and voided_at is null)) v from public.invoice_items where invoice_id = '{inv1}'")
+        check("the accountant cancels it with a reason and the refund reference", rpc(tacc, p_payment=payC, p_reason="Paid twice by mistake", p_refund_reference="RF-E2E-1")[0] in (200, 204))
+        check("the receipt records who, why and the refund reference",
+              one(f"select (voided_at is not null and void_reason = 'Paid twice by mistake' and refund_reference = 'RF-E2E-1' and voided_by is not null) v from public.payments where id = '{payC}'") == "true")
+        check("the attempt shows as refunded", one(f"select status v from public.online_payments where reference = '{refC}'") == "refunded")
+        after = one(f"select (sum(amount) - (select coalesce(sum(amount),0) from public.payments where invoice_id = '{inv1}' and voided_at is null)) v from public.invoice_items where invoice_id = '{inv1}'")
+        check("the balance recovers by the cancelled amount", float(after) - float(before) == 30)
+        check("cancelling twice is refused", rpc(tacc, p_payment=payC, p_reason="Trying again please", p_refund_reference="RF-E2E-1")[0] >= 400)
+        check("a webhook repeated after a refund adds nothing", (webhook(charge(refC, 30)), one(f"select count(*) v from public.payments where reference = '{refC}'"))[1] == "1")
 
         # ── a paid-off invoice cannot be paid again ──────────────────────────
         check("the other family's invoice is untouched",
