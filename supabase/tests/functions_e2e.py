@@ -136,6 +136,7 @@ try:
     out = sql("select (select count(*) from public.user_roles where profile_id='%s') roles, (select full_name from public.profiles where id='%s') name, "
               "(select modules is null from public.profiles where id='%s') nomods" % (teacher_id, teacher_id, teacher_id))
     check("roles and name updated", '"roles": 2' in out and "ZZ Teacher Two" in out and '"nomods": true' in out, True)
+    check("admin can switch on the analytics and messages sections", fn(admin_t, action="update", userId=teacher_id, modules=["analytics", "messages"])[0], 200)
     check("unknown module refused", fn(admin_t, action="update", userId=teacher_id, modules=["nope"])[0], 400)
 
     # deactivate blocks sign-in and data; reactivate restores

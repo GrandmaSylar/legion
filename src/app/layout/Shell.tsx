@@ -5,8 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
   Bell, BarChart3, CalendarCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, MoreHorizontal, Moon, Palette, Plus, Search, Settings,
-  Layers, Square, Sun, UserCog, UserRoundCog, Users, Wallet, WifiOff, Download, type LucideIcon,
-} from "lucide-react";
+  Layers, Square, Sun, UserCog, UserRoundCog, Users, Wallet, WifiOff, Download, MessageSquare, type LucideIcon } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import { ROLE_LABELS, hasAnyRole, navFor, type AppRole, type NavItem } from "../../lib/permissions";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -29,6 +28,7 @@ const ICONS: Record<string, LucideIcon> = {
   analytics: BarChart3,
   staff: UserCog,
   notices: Bell,
+  messages: MessageSquare,
   settings: Settings,
   users: UserRoundCog,
 };

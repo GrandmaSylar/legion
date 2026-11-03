@@ -219,7 +219,7 @@ async function loadBody(schoolId: string, body: Record<string, unknown>) {
 
 function messageFor(template: string, r: Recipient, school: string, date: string) {
   return render(template, {
-    parent: r.name, student: r.studentNames, class: r.className, school,
+    parent: r.name || "Parent", student: r.studentNames, class: r.className, school,
     balance: r.balance > 0 ? formatMoney(r.balance) : "", date,
   });
 }
