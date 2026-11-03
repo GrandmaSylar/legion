@@ -189,6 +189,24 @@ Deno.serve(async (req) => {
       if (!Number.isFinite(amount) || amount < 1) throw new HttpError(400, "The smallest payment is GHS 1.00.");
       if (amount > balance) throw new HttpError(400, `That is more than the balance of GHS ${balance.toFixed(2)}.`);
 
+      // Two family members can open the payment page for the same invoice at once. Count what
+      // someone ELSE has started in the last half hour as already on its way, so a second
+      // person cannot start a payment that would overshoot. (Your own earlier attempts do not
+      // count, so you can retry. The recorder still flags a true overpayment.)
+      const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: others } = await admin.from("online_payments").select("amount")
+        .eq("invoice_id", invoiceId).eq("status", "pending").gt("created_at", since).neq("initiated_by", me.id);
+      const inFlight = money((others ?? []).reduce((sum, r) => sum + Number(r.amount), 0));
+      const available = money(balance - inFlight);
+      if (amount > available) {
+        throw new HttpError(
+          409,
+          available < 1
+            ? "Someone else is already paying this invoice. Please wait a few minutes, then check the balance again."
+            : `Someone else is already paying GHS ${inFlight.toFixed(2)} of this invoice. You can pay up to GHS ${available.toFixed(2)} now.`,
+        );
+      }
+
       const reference = `PA${Date.now().toString(36)}${crypto.randomUUID().replaceAll("-", "").slice(0, 10)}`.toUpperCase();
       const { error: insertError } = await admin.from("online_payments").insert({
         school_id: inv.school_id,
