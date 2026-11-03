@@ -81,7 +81,7 @@ declare
   u_p2 uuid := gen_random_uuid();     u_s1 uuid := gen_random_uuid();
   u_adminb uuid := gen_random_uuid();  u_dev uuid := gen_random_uuid();  u_off uuid := gen_random_uuid();
   fails text := ''; passes int := 0; got text;
-  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid; mb uuid; rm int; rb int; rt int; ra int; ri int; rpay int; rop int;
+  rs int; rg int; rst int; yr_del uuid; cls_del uuid; su uuid; eu uuid; gu uuid; ecat uuid; mb uuid; rm int; rb int; rt int; ra int; ri int; rpay int; rop int; pon uuid; pcash uuid;
   r record;
 begin
   select id into a from public.schools where name = 'Pinks Academy';
@@ -156,6 +156,10 @@ begin
   insert into public.invoice_items (school_id,invoice_id,description,amount) values (a,i1,'Fees',500),(a,i2,'Fees',500);
   insert into public.payments (school_id,invoice_id,amount,method) values (a,i1,100,'cash'),(a,i2,100,'cash');
   insert into public.online_payments (school_id, invoice_id, initiated_by, reference, amount) values (a, i1, u_p1, 'ZZREF1', 10);
+  update public.online_payments set needs_review = true, note = 'Overpaid' where reference = 'ZZREF1';
+  insert into public.payments (school_id,invoice_id,amount,method,reference) values (a,i2,10,'card','ZZREF4') returning id into pon;
+  insert into public.online_payments (school_id, invoice_id, initiated_by, reference, amount, status, payment_id) values (a, i2, u_p2, 'ZZREF4', 10, 'success', pon);
+  select id into pcash from public.payments where invoice_id = i2 and method = 'cash' limit 1;
 
   -- expectation helper: (label, actual, expected)
   for r in select * from (values
@@ -186,7 +190,7 @@ begin
     ('invoices teacher1',   pg_temp.t_count(u_t1,'invoices')::text,'0'),
     ('invoices reception',  pg_temp.t_count(u_rec,'invoices')::text,'0'),
     ('invoices parent1',    pg_temp.t_count(u_p1,'invoices')::text,'1'),
-    ('payments accountant', pg_temp.t_count(u_acc,'payments')::text,(rpay + 2)::text),
+    ('payments accountant', pg_temp.t_count(u_acc,'payments')::text,(rpay + 3)::text),
     ('payments principal',  pg_temp.t_count(u_prin,'payments')::text,'0'),
     ('payments parent1',    pg_temp.t_count(u_p1,'payments')::text,'1'),
     ('payments other school admin', pg_temp.t_count(u_adminb,'payments')::text,'0'),
@@ -479,9 +483,9 @@ begin
        pg_temp.t_try(u_admin, 'update public.message_settings set sender_id = ''ABCDEFGHIJKL'''), 'denied'),
     ('other school admin reads no settings', pg_temp.t_count(u_adminb,'message_settings')::text, '0'),
     -- online payments: finance staff and the parent who started it can read; nobody writes from the browser
-    ('admin reads online payments', pg_temp.t_count(u_admin,'online_payments')::text, (rop + 1)::text),
-    ('accountant reads online payments', pg_temp.t_count(u_acc,'online_payments')::text, (rop + 1)::text),
-    ('principal reads online payments', pg_temp.t_count(u_prin,'online_payments')::text, (rop + 1)::text),
+    ('admin reads online payments', pg_temp.t_count(u_admin,'online_payments')::text, (rop + 2)::text),
+    ('accountant reads online payments', pg_temp.t_count(u_acc,'online_payments')::text, (rop + 2)::text),
+    ('principal reads online payments', pg_temp.t_count(u_prin,'online_payments')::text, (rop + 2)::text),
     ('parent1 reads their own online payment', pg_temp.t_count(u_p1,'online_payments')::text, '1'),
     ('teacher1 reads no online payments', pg_temp.t_count(u_t1,'online_payments')::text, '0'),
     ('reception reads no online payments', pg_temp.t_count(u_rec,'online_payments')::text, '0'),
@@ -501,6 +505,42 @@ begin
        pg_temp.t_try(u_admin, 'select public.record_online_payment(''ZZREF1'', 10, ''card'', null, ''{}''::jsonb)'), 'denied'),
     ('anon cannot record an online payment',
        pg_temp.t_anon('select public.record_online_payment(''ZZREF1'', 10, ''card'', null, ''{}''::jsonb)'), 'denied'),
+    -- receipts cannot be edited or erased, only cancelled with a reason
+    ('accountant cannot edit a payment', pg_temp.t_try(u_acc, 'update public.payments set amount = 1'), 'ok:0'),
+    ('admin cannot edit a payment', pg_temp.t_try(u_admin, 'update public.payments set amount = 1'), 'ok:0'),
+    ('developer cannot edit a payment', pg_temp.t_try(u_dev, 'update public.payments set amount = 1'), 'ok:0'),
+    ('accountant cannot delete a payment', pg_temp.t_try(u_acc, 'delete from public.payments'), 'ok:0'),
+    ('admin cannot delete a payment', pg_temp.t_try(u_admin, 'delete from public.payments'), 'ok:0'),
+    ('accountant cannot record an already-cancelled payment',
+       pg_temp.t_try(u_acc, format('insert into public.payments (school_id,invoice_id,amount,method,voided_at,void_reason) values (%L,%L,10,''cash'',now(),''because'')', a, i1)), 'denied'),
+    ('teacher1 cannot cancel a receipt', pg_temp.t_try(u_t1, format('select public.void_payment(%L, ''Entered twice by mistake'')', pcash)), 'denied'),
+    ('principal cannot cancel a receipt', pg_temp.t_try(u_prin, format('select public.void_payment(%L, ''Entered twice by mistake'')', pcash)), 'denied'),
+    ('parent2 cannot cancel a receipt', pg_temp.t_try(u_p2, format('select public.void_payment(%L, ''Entered twice by mistake'')', pcash)), 'denied'),
+    ('other school admin cannot cancel a receipt', pg_temp.t_try(u_adminb, format('select public.void_payment(%L, ''Entered twice by mistake'')', pcash)), 'denied'),
+    ('anon cannot cancel a receipt', pg_temp.t_anon(format('select public.void_payment(%L, ''Entered twice by mistake'')', pcash)), 'denied'),
+    ('cancelling needs a reason', pg_temp.t_try(u_acc, format('select public.void_payment(%L, ''no'')', pcash)), 'denied'),
+    ('an online payment cannot be cancelled without the refund reference',
+       pg_temp.t_try(u_acc, format('select public.void_payment(%L, ''Parent paid twice'')', pon)), 'denied'),
+    ('accountant cancels a cash receipt with a reason',
+       pg_temp.t_try(u_acc, format('select public.void_payment(%L, ''Entered twice by mistake'')', pcash)), 'ok:1'),
+    ('the cancelled receipt records who, when and why',
+       pg_temp.t_scalar(format('select (voided_by = %L and void_reason = ''Entered twice by mistake'' and voided_at is not null)::text from public.payments where id = %L', u_acc, pcash)), 'true'),
+    ('a receipt cannot be cancelled twice', pg_temp.t_try(u_admin, format('select public.void_payment(%L, ''Trying again please'')', pcash)), 'denied'),
+    ('admin cancels an online receipt with the refund reference',
+       pg_temp.t_try(u_admin, format('select public.void_payment(%L, ''Parent paid twice'', ''RF-1234'')', pon)), 'ok:1'),
+    ('the online attempt becomes refunded', pg_temp.t_scalar(format('select status from public.online_payments where payment_id = %L', pon)), 'refunded'),
+    ('the refund reference is kept', pg_temp.t_scalar(format('select refund_reference from public.payments where id = %L', pon)), 'RF-1234'),
+    -- online payments that need review
+    ('parent1 cannot mark a payment reviewed',
+       pg_temp.t_try(u_p1, 'select public.resolve_online_payment((select id from public.online_payments where reference = ''ZZREF1''), ''Looked at it, fine'')'), 'denied'),
+    ('teacher1 cannot mark a payment reviewed',
+       pg_temp.t_try(u_t1, 'select public.resolve_online_payment((select id from public.online_payments where reference = ''ZZREF1''), ''Looked at it, fine'')'), 'denied'),
+    ('reviewing needs a note',
+       pg_temp.t_try(u_acc, 'select public.resolve_online_payment((select id from public.online_payments where reference = ''ZZREF1''), ''ok'')'), 'denied'),
+    ('accountant marks a payment reviewed with a note',
+       pg_temp.t_try(u_acc, 'select public.resolve_online_payment((select id from public.online_payments where reference = ''ZZREF1''), ''Refunded the extra in Paystack'')'), 'ok:1'),
+    ('and it records who and why',
+       pg_temp.t_scalar(format('select (needs_review = false and reviewed_by = %L and review_note like ''Refunded%%'')::text from public.online_payments where reference = ''ZZREF1''', u_acc)), 'true'),
     ('teacher1 grants themself admin',
        pg_temp.t_try(u_t1, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_t1, a)), 'denied'),
     ('reception changes a student''s class',
