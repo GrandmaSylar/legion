@@ -122,6 +122,21 @@ try:
     check("admin cannot deactivate a developer", fn(admin_t, action="set_active", userId=dev_id, active=False)[0], 403)
     check("admin cannot reset a developer's password", fn(admin_t, action="reset_password", userId=dev_id, tempPassword=pw_new)[0], 403)
     check("admin cannot delete users", fn(admin_t, action="delete", userId=teacher_id)[0], 403)
+
+    # Handing out a role hands out its actions, so a person may only give a role they hold in full themselves.
+    make_login("zz-principal@example.test", pw_new, "principal")
+    _, prin_t = sign_in("zz-principal@example.test", pw_new)
+    check("a principal without the create-logins action cannot create a login",
+          fn(prin_t, action="create", email="zz-p1@example.test", fullName="P1", tempPassword=pw_new, roles=["parent"])[0], 403)
+    sql("insert into public.user_capabilities (profile_id, capability, school_id) select id, 'users.create', school_id from public.profiles where email = 'zz-principal@example.test'")
+    check("a principal given the create-logins action cannot create an admin",
+          fn(prin_t, action="create", email="zz-p2@example.test", fullName="P2", tempPassword=pw_new, roles=["school_admin"])[0], 403)
+    check("nor a teacher, whose role carries actions the principal lacks",
+          fn(prin_t, action="create", email="zz-p3@example.test", fullName="P3", tempPassword=pw_new, roles=["teacher"])[0], 403)
+    check("but can create a login whose role carries nothing extra",
+          fn(prin_t, action="create", email="zz-p4@example.test", fullName="P4", tempPassword=pw_new, roles=["parent"])[0], 200)
+    check("and cannot reset a password without that action",
+          fn(prin_t, action="reset_password", userId=teacher_id, tempPassword=pw_new)[0], 403)
     check("admin cannot deactivate self", fn(admin_t, action="set_active", userId=admin_id, active=False)[0], 400)
 
     # the new teacher signs in and cannot manage users

@@ -82,7 +82,8 @@ try:
     check("presets read", c == 200 and any(r["role"] == "accountant" for r in pre))
     teacher_preset = sorted(r["capability"] for r in pre if r["role"] == "teacher")
     c, caps = call("/rest/v1/rpc/my_capabilities", ta, {})
-    check("an admin holds every action in the catalogue", c == 200 and len(caps) == len(cat))
+    check("an admin holds every action except deleting logins, which only a developer does by default",
+          c == 200 and len(caps) == len(cat) - 1 and "users.delete" not in caps)
     c, caps_t = call("/rest/v1/rpc/my_capabilities", tt, {})
     check("a teacher starts with exactly the teacher preset", c == 200 and sorted(caps_t) == teacher_preset and "students.view_own_classes" in caps_t)
     c, mine = call(f"/rest/v1/user_capabilities?select=capability&profile_id=eq.{tid}", ta, method="GET")
