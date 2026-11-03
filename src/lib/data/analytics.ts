@@ -518,7 +518,9 @@ export async function getSchoolAnalytics(options?: {
           ? `Mobile Money (${(p.network ?? "momo").toUpperCase()})`
           : p.method === "bank_transfer"
             ? "Bank Transfer"
-            : "Cash";
+            : p.method === "card"
+              ? "Card"
+              : "Cash";
       const mEntry = methodMap.get(label) ?? { count: 0, amount: 0 };
       mEntry.count++;
       mEntry.amount += Number(p.amount);

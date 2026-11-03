@@ -2,7 +2,7 @@ import { supabase } from "../supabase";
 
 export type InvoiceStatus = "unpaid" | "partial" | "paid" | "void";
 export type InvoiceItemKind = "fee" | "discount" | "arrears";
-export type PaymentMethod = "cash" | "mobile_money" | "bank_transfer";
+export type PaymentMethod = "cash" | "mobile_money" | "bank_transfer" | "card";
 export type MomoNetwork = "mtn" | "telecel" | "airteltigo";
 export type DiscountType = "percent" | "fixed";
 

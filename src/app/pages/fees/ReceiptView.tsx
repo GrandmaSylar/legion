@@ -24,6 +24,7 @@ function methodLabel(method: PaymentSummaryRow["method"], network: PaymentSummar
     return `Mobile Money (${net})`;
   }
   if (method === "bank_transfer") return "Bank Transfer / Deposit";
+  if (method === "card") return "Card";
   return "Cash";
 }
 
