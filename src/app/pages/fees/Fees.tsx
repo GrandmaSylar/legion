@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Award,
@@ -58,6 +58,8 @@ import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { ReceiptView } from "./ReceiptView";
+import { PayOnlineDialog } from "./PayOnlineDialog";
+import { checkOnlinePayment, getOnlinePaymentStatus, type OnlinePaymentResult } from "../../../lib/data/paystack";
 import { ExpensesTab } from "./ExpensesTab";
 
 function formatMoney(amount: number, currency = "GHS"): string {
@@ -90,7 +92,32 @@ export default function Fees() {
   const canApproveExpenses = hasAnyRole(roles, ["school_admin", "principal"]);
   const canReadInvoices = hasAnyRole(roles, ["school_admin", "accountant", "parent"]);
   const isAdmin = hasAnyRole(roles, ["school_admin"]);
+  const isParent = hasAnyRole(roles, ["parent"]);
   const qc = useQueryClient();
+
+  // Online payment: parents pay on Paystack's page and are sent back here with ?reference=…
+  const onlineQ = useQuery({ queryKey: ["online-payment-status"], queryFn: getOnlinePaymentStatus, staleTime: 5 * 60_000, retry: false });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const returnedRef = searchParams.get("reference") ?? searchParams.get("trxref");
+  const [onlineResult, setOnlineResult] = useState<OnlinePaymentResult | null>(null);
+  const [checkingOnline, setCheckingOnline] = useState(false);
+  const checkReturned = async (reference: string) => {
+    setCheckingOnline(true);
+    try {
+      setOnlineResult(await checkOnlinePayment(reference));
+      void qc.invalidateQueries({ queryKey: ["invoices"] });
+    } catch (e) {
+      setOnlineResult({ status: "failed", message: e instanceof Error ? e.message : undefined });
+    } finally {
+      setCheckingOnline(false);
+    }
+  };
+  useEffect(() => {
+    if (!returnedRef) return;
+    void checkReturned(returnedRef);
+    setSearchParams({}, { replace: true }); // keep the address clean; the result stays on screen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnedRef]);
 
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
   const [payInvoiceId, setPayInvoiceId] = useState<string>("");
@@ -503,6 +530,32 @@ export default function Fees() {
         ) : null}
         </div>
       </div>
+
+      {/* Result of an online payment, shown when Paystack sends the parent back */}
+      {checkingOnline ? (
+        <section role="status" className="surface p-4 text-sm text-muted-foreground">Checking your payment with Paystack…</section>
+      ) : onlineResult ? (
+        <section
+          role={onlineResult.status === "success" ? "status" : "alert"}
+          className="surface flex flex-wrap items-start justify-between gap-3 p-4 text-sm"
+        >
+          <span className="min-w-0 break-words">
+            {onlineResult.status === "success"
+              ? `Payment received. Thank you!${onlineResult.receiptNo ? ` Your receipt number is ${onlineResult.receiptNo}.` : ""}`
+              : onlineResult.status === "pending"
+                ? "Your payment has not been confirmed yet. If you completed it, it can take a minute to arrive."
+                : onlineResult.status === "review"
+                  ? `Your payment went through but the school needs to look at it. ${onlineResult.message ?? ""}`
+                  : `The payment did not go through${onlineResult.message ? `: ${onlineResult.message}` : "."} You have not been charged.`}
+          </span>
+          <Button size="sm" variant="ghost" onClick={() => setOnlineResult(null)}>Dismiss</Button>
+        </section>
+      ) : null}
+      {canManage && onlineQ.data ? (
+        <p className="text-xs text-muted-foreground">
+          Online payments: {onlineQ.data.configured ? (onlineQ.data.mode === "live" ? "live, parents pay real money" : "test mode, no real money moves") : "not connected yet"}.
+        </p>
+      ) : null}
 
       {/* Summary KPI cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1099,6 +1152,7 @@ export default function Fees() {
                       <th className="py-3 px-2 text-right">Billed</th>
                       <th className="py-3 px-2 text-right">Paid</th>
                       <th className="py-3 pl-2 pr-4 text-right">Balance</th>
+                      {isParent && onlineQ.data?.configured ? <th className="relative py-3 pr-4"><span className="sr-only">Pay</span></th> : null}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1128,6 +1182,16 @@ export default function Fees() {
                         <td className="py-3 pl-2 pr-4 text-right font-mono font-semibold tabular-nums">
                           {formatMoney(inv.balance, currency)}
                         </td>
+                        {isParent && onlineQ.data?.configured ? (
+                          <td className="py-3 pr-4 text-right">
+                            {inv.balance > 0 && inv.status !== "void" ? (
+                              <PayOnlineDialog
+                                invoiceId={inv.id} invoiceNumber={inv.number} studentName={inv.studentName}
+                                balance={inv.balance} currency={currency} testMode={onlineQ.data.mode === "test"}
+                              />
+                            ) : null}
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>

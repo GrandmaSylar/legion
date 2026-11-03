@@ -178,7 +178,7 @@ export async function getSchoolAnalytics(options?: {
     supabase
       .from("invoices")
       .select(
-        "id, term_id, issued_on, status, invoice_items(amount), payments(amount, method, network, paid_on, voided_at)",
+        "id, term_id, issued_on, status, invoice_items!invoice_items_invoice_id_fkey(amount), payments(amount, method, network, paid_on, voided_at)",
       )
       .is("deleted_at", null),
     supabase.from("staff").select("id, type, status").is("deleted_at", null),
@@ -518,7 +518,9 @@ export async function getSchoolAnalytics(options?: {
           ? `Mobile Money (${(p.network ?? "momo").toUpperCase()})`
           : p.method === "bank_transfer"
             ? "Bank Transfer"
-            : "Cash";
+            : p.method === "card"
+              ? "Card"
+              : "Cash";
       const mEntry = methodMap.get(label) ?? { count: 0, amount: 0 };
       mEntry.count++;
       mEntry.amount += Number(p.amount);

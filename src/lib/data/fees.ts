@@ -2,7 +2,7 @@ import { supabase } from "../supabase";
 
 export type InvoiceStatus = "unpaid" | "partial" | "paid" | "void";
 export type InvoiceItemKind = "fee" | "discount" | "arrears";
-export type PaymentMethod = "cash" | "mobile_money" | "bank_transfer";
+export type PaymentMethod = "cash" | "mobile_money" | "bank_transfer" | "card";
 export type MomoNetwork = "mtn" | "telecel" | "airteltigo";
 export type DiscountType = "percent" | "fixed";
 
@@ -423,7 +423,7 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
       status,
       students(id, admission_no, first_name, middle_name, last_name),
       terms(name),
-      invoice_items(id, fee_category_id, kind, description, amount),
+      invoice_items!invoice_items_invoice_id_fkey(id, fee_category_id, kind, description, amount),
       installments(id, due_on, amount),
       payments(id, receipt_no, amount, method, network, reference, paid_on, received_by_name, voided_at)
     `,
