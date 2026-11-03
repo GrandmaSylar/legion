@@ -440,7 +440,7 @@ export default function StudentDetailPage() {
           </section>
 
           {canEdit && s.status === "active" ? <ChangeClassCard s={s} /> : null}
-          {s.enrollments[0]?.sitsBece ? <BeceCard s={s} canEdit={canEdit} /> : null}
+          {s.enrollments[0]?.sitsBece ? <BeceCard s={s} canEdit={can("grades.manage_bece")} /> : null}
           {canEdit ? <StatusCard s={s} /> : null}
           {isDev ? <DeleteStudentCard s={s} /> : null}
         </>

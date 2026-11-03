@@ -74,13 +74,15 @@ function RequireAuth({ children }: { children: ReactElement }) {
 }
 
 // Role decides what the person may do; their switched-on sections can only narrow that.
-function RequireRole({ allowed, module, anyAction, children }: { allowed: string[]; module?: string; anyAction?: string[]; children: ReactElement }) {
+function RequireRole({ allowed, module, anyAction, portalRoles, children }: { allowed: string[]; module?: string; anyAction?: string[]; portalRoles?: string[]; children: ReactElement }) {
   const { roles, profile } = useAuth();
   const { caps, isLoading } = useCapabilities();
   const modules = profile?.modules ?? null;
   const moduleOn = !module || module === "dashboard" || modules === null || modules.includes(module);
   // A module decided by actions opens for anyone holding one of them; the rest still follow the role.
   if (anyAction) {
+    // Parents and students are portal accounts: they get in by role, staff by action.
+    if (portalRoles && hasAnyRole(roles, portalRoles as never) && moduleOn) return children;
     if (isLoading) return <Splash />;
     return moduleOn && !!caps && anyAction.some((a) => caps.includes(a)) ? children : <Navigate to="/" replace />;
   }
@@ -127,7 +129,7 @@ export default function App() {
                       key={item.id}
                       path={item.path}
                       element={
-                        <RequireRole allowed={item.roles} module={item.id} anyAction={item.anyAction}>
+                        <RequireRole allowed={item.roles} module={item.id} anyAction={item.anyAction} portalRoles={item.portalRoles}>
                           {item.id === "dashboard" ? (
                             <Dashboard />
                           ) : item.id === "settings" ? (
