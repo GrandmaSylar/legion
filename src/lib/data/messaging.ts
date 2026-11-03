@@ -23,13 +23,33 @@ export type MessageStatus = "queued" | "sending" | "sent" | "delivered" | "faile
 
 export interface SmsStatus {
   configured: boolean;
-  sender?: string;
+  keyPresent?: boolean;
+  sender?: string | null;
+  senderSource?: "school" | "server" | null;
+  serverSender?: string | null;
   sandboxForced?: boolean;
   balance?: number | null;
   balanceError?: string | null;
 }
 
 export const getSmsStatus = () => invokeFunction<SmsStatus>("messaging", { action: "status" });
+
+/** The school's own sender ID, or null when it relies on the server-wide one. */
+export async function getSenderSetting(): Promise<string | null> {
+  const { data, error } = await supabase.from("message_settings").select("sender_id").maybeSingle();
+  if (error) throw error;
+  return (data?.sender_id as string | null) ?? null;
+}
+
+/** Saves the sender ID (3 to 11 letters or digits); an empty value goes back to the server default. */
+export async function saveSenderSetting(senderId: string): Promise<void> {
+  const value = senderId.trim();
+  if (value && !/^[A-Za-z0-9]{3,11}$/.test(value)) {
+    throw new Error("A sender ID is 3 to 11 letters or numbers, with no spaces or symbols.");
+  }
+  const { error } = await supabase.from("message_settings").upsert({ sender_id: value || null }, { onConflict: "school_id" });
+  if (error) throw error;
+}
 
 // ─── Preview and send ────────────────────────────────────────────────────────
 
