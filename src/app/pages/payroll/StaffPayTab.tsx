@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import {
-  addStaffComponent, getPayHistory, getStaffAccount, listComponents, listExemptions, listPayStaff, listRules, listStaffComponents, removeStaffComponent, saveStaffAccount, saveStaffPay, setExemption,
+  addStaffComponent, getPayHistory, getStaffAccount, listComponents, listExemptions, listPayStaff, listRules, listStaffComponents, removeStaffComponent, saveStaffAccount, saveStaffPay, setExemption, setStaffPayDates,
   type PayStaff,
 } from "../../../lib/data/payroll";
 import { parseAmount } from "../../../lib/payroll";
@@ -97,6 +97,27 @@ function Allowances({ person, canEdit }: { person: PayStaff; canEdit: boolean })
   );
 }
 
+/** When the person started and, if they have, left. Used when a school pays part-months. */
+function Employment({ person, canEdit }: { person: PayStaff; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const [hired, setHired] = useState(person.hiredOn ?? "");
+  const [left, setLeft] = useState(person.leftOn ?? "");
+  const save = useMutation({ mutationFn: () => setStaffPayDates(person.staffId, hired, left), onSuccess: () => void qc.invalidateQueries({ queryKey: ["payroll-staff"] }) });
+  const dirty = hired !== (person.hiredOn ?? "") || left !== (person.leftOn ?? "");
+  return (
+    <section aria-label="Employment dates" className="space-y-2">
+      <h3 className="text-sm font-semibold">Employment dates</h3>
+      <p className="text-xs text-muted-foreground">If your school pays part-months (Set up, Part-months), someone is paid only for the days between these dates.</p>
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <Field label="First day" htmlFor="em-from"><Input id="em-from" type="date" value={hired} disabled={!canEdit} onChange={(e) => setHired(e.target.value)} /></Field>
+        <Field label="Last day (if they have left)" htmlFor="em-to"><Input id="em-to" type="date" value={left} min={hired || undefined} disabled={!canEdit} onChange={(e) => setLeft(e.target.value)} /></Field>
+        {canEdit ? <Button type="button" disabled={save.isPending || !dirty} onClick={() => save.mutate()}>{save.isPending ? "Saving" : "Save dates"}</Button> : null}
+      </div>
+      <FormMessage error={save.isError ? friendlyError(save.error) : null} ok={save.isSuccess && !dirty ? "Saved." : null} />
+    </section>
+  );
+}
+
 /** Statutory rules this person is left out of (for example someone who does not take part in a scheme). */
 function Exemptions({ person, canEdit }: { person: PayStaff; canEdit: boolean }) {
   const qc = useQueryClient();
@@ -185,7 +206,7 @@ export function StaffPayTab() {
             <button type="button" onClick={() => setOpen(s)} className="surface flex min-h-14 w-full items-center justify-between gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
               <span className="min-w-0">
                 <span className="block break-words text-sm font-medium">{s.name}</span>
-                <span className="block break-words text-xs text-muted-foreground">{s.job ?? ""}{s.status !== "active" ? ` · ${s.status.replace("_", " ")}` : ""}{s.hasAccount ? "" : " · no bank details"}</span>
+                <span className="block break-words text-xs text-muted-foreground">{s.job ?? ""}{s.status !== "active" ? ` · ${s.status === "left" && s.leftOn ? `left ${s.leftOn}` : s.status.replace("_", " ")}` : ""}{s.hasAccount ? "" : " · no bank details"}</span>
               </span>
               <span className="shrink-0 text-sm tabular-nums">{s.basic === null ? <span className="text-muted-foreground">No pay set</span> : fmt(s.basic)}</span>
             </button>
@@ -198,6 +219,7 @@ export function StaffPayTab() {
             <div className="space-y-5" key={open.staffId}>
               <DialogHeader><DialogTitle className="break-words">{open.name}</DialogTitle><DialogDescription>{open.job ?? "Staff"}{open.staffNo ? ` · ${open.staffNo}` : ""}</DialogDescription></DialogHeader>
               <PayForm person={open} canEdit={canEdit} />
+              <Employment person={open} canEdit={canEdit} />
               <Allowances person={open} canEdit={canEdit} />
               <Exemptions person={open} canEdit={canEdit} />
               <Account person={open} canEdit={canEdit} />

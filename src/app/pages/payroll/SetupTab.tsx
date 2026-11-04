@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import {
-  deleteComponent, deleteStep, getPayrollConfig, listApproverChoices, listComponents, listSteps, saveComponent, savePayrollSettings, saveStep, type Component,
+  deleteComponent, deleteStep, getPayrollConfig, listApproverChoices, listComponents, listSteps, saveComponent, savePayrollProration, savePayrollSettings, saveStep, type Component, type ProrateMethod,
 } from "../../../lib/data/payroll";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
@@ -103,6 +103,34 @@ function Steps() {
   );
 }
 
+const PRORATE: { value: ProrateMethod; label: string; help: string }[] = [
+  { value: "none", label: "Pay the whole month", help: "Everyone paid in this pay run gets a full month at the pay in force on its last day. Someone who left part-way through is not paid, and a raise counts for the whole month." },
+  { value: "calendar_days", label: "Share pay by calendar days", help: "Someone who started or left part-way through the month is paid for the days they were employed, every day counted. A raise pays each rate for the days it was in force." },
+  { value: "working_days", label: "Share pay by working days", help: "The same, but counting only Monday to Friday. Public holidays are not taken out." },
+];
+
+function Proration() {
+  const qc = useQueryClient();
+  const config = useQuery({ queryKey: ["payroll-config"], queryFn: getPayrollConfig });
+  const save = useMutation({ mutationFn: (m: ProrateMethod) => savePayrollProration(m), onSuccess: () => void qc.invalidateQueries({ queryKey: ["payroll-config"] }) });
+  if (config.isLoading || !config.data) return <Skeleton className="h-20 w-full" />;
+  const current = config.data.prorateMethod;
+  return (
+    <section className="surface space-y-3 p-4">
+      <div><h2 className="text-base font-medium">Part-months</h2><p className="text-sm text-muted-foreground">How to pay someone who started or left part-way through a month, or whose pay changed part-way through. Set each person&apos;s start and leaving dates on their Staff pay screen. A pay run that is still being prepared uses the choice when you calculate it again; one that has been approved is never changed.</p></div>
+      <div role="radiogroup" aria-label="Part-months" className="grid gap-2">
+        {PRORATE.map((m) => (
+          <button key={m.value} type="button" role="radio" aria-checked={current === m.value} disabled={save.isPending} onClick={() => save.mutate(m.value)}
+            className={`rounded-xl border p-3 text-left focus-visible:outline-2 focus-visible:outline-[var(--ring)] ${current === m.value ? "border-primary bg-primary/10" : "border-border hover:bg-foreground/5"}`}>
+            <span className="block text-sm font-medium">{m.label}</span><span className="block text-xs text-muted-foreground">{m.help}</span>
+          </button>
+        ))}
+      </div>
+      <FormMessage error={save.isError ? friendlyError(save.error) : null} />
+    </section>
+  );
+}
+
 function Settings() {
   const qc = useQueryClient();
   const config = useQuery({ queryKey: ["payroll-config"], queryFn: getPayrollConfig });
@@ -128,5 +156,5 @@ function Settings() {
 }
 
 export function SetupTab() {
-  return <div className="space-y-4"><Components /><RulesTab /><Steps /><Settings /></div>;
+  return <div className="space-y-4"><Components /><RulesTab /><Proration /><Steps /><Settings /></div>;
 }
