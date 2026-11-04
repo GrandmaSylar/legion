@@ -45,6 +45,20 @@ exception when others then
   return 'denied';
 end $$;
 
+-- Run a write as a user and say why it failed: 'ok', or '<sqlstate>: <message>'.
+create function pg_temp.t_err(u uuid, stmt text) returns text
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  execute stmt;
+  reset role;
+  return 'ok';
+exception when others then
+  reset role;
+  return sqlstate || ': ' || sqlerrm;
+end $$;
+
 -- Evaluate a query at the moment this call runs and return its single value as text.
 create function pg_temp.t_scalar(q text) returns text
 language plpgsql as $$
@@ -889,6 +903,58 @@ begin
     ('the person who published is not told', pg_temp.t_try(u_admin, 'select 1 from public.notifications where event = ''calendar_published'''), 'ok:0'),
     ('publishing again publishes nothing', pg_temp.t_try(u_admin, 'select 1 where public.publish_calendar_events(current_date + 100, current_date + 130) = 0'), 'ok:1'),
     ('and tells nobody again', pg_temp.t_try(u_p1, 'select 1 from public.notifications where event = ''calendar_published'''), 'ok:1'),
+    -- Exam periods
+    ('a teacher cannot create an exam period', pg_temp.t_try(u_t1, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Teacher'',''mock'',current_date + 3,current_date + 5,true,current_date + 3,current_date + 8)', term)), 'denied'),
+    ('a parent cannot', pg_temp.t_try(u_p1, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Parent'',''mock'',current_date + 3,current_date + 5,true,current_date + 3,current_date + 8)', term)), 'denied'),
+    ('HR cannot', pg_temp.t_try(u_hr, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP HR'',''mock'',current_date + 3,current_date + 5,true,current_date + 3,current_date + 8)', term)), 'denied'),
+    ('the principal creates a mock exam period with a window', pg_temp.t_try(u_prin, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Mock'',''mock'',current_date + 3,current_date + 5,true,current_date + 3,current_date + 8)', term)), 'ok:1'),
+    ('it cannot end before it starts', pg_temp.t_try(u_prin, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Back'',''mock'',current_date + 5,current_date + 2,true,current_date,current_date + 9)', term)), 'denied'),
+    ('it cannot last months', pg_temp.t_try(u_prin, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Long'',''mock'',current_date,current_date + 90,true,current_date + 3,current_date + 8)', term)), 'denied'),
+    ('a window needs both dates', pg_temp.t_try(u_prin, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Half'',''mock'',current_date + 3,current_date + 5,true,current_date + 3,null)', term)), 'denied'),
+    ('a window cannot close before it opens', pg_temp.t_try(u_prin, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Flip'',''mock'',current_date + 3,current_date + 5,true,current_date + 8,current_date + 3)', term)), 'denied'),
+    ('two periods in a term cannot share a name', pg_temp.t_try(u_prin, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Mock'',''mock'',current_date + 3,current_date + 5,true,current_date + 3,current_date + 8)', term)), 'denied'),
+    ('the admin sees it', pg_temp.t_try(u_admin, 'select 1 from public.exam_periods where name like ''ZZ EP%'''), 'ok:1'),
+    ('a teacher can read the periods', pg_temp.t_try(u_t1, 'select 1 from public.exam_periods where name like ''ZZ EP%'''), 'ok:1'),
+    ('a parent cannot read them', pg_temp.t_try(u_p1, 'select 1 from public.exam_periods where name like ''ZZ EP%'''), 'ok:0'),
+    ('HR cannot read them', pg_temp.t_try(u_hr, 'select 1 from public.exam_periods where name like ''ZZ EP%'''), 'ok:0'),
+    ('another school cannot read them', pg_temp.t_try(u_adminb, 'select 1 from public.exam_periods where name like ''ZZ EP%'''), 'ok:0'),
+    ('it appears on the calendar as a draft exam', pg_temp.t_try(u_admin, 'select 1 from public.calendar_events where title = ''ZZ EP Mock'' and kind = ''exam'' and not published'), 'ok:1'),
+    ('a teacher does not see the draft', pg_temp.t_try(u_t1, 'select 1 from public.calendar_events where title = ''ZZ EP Mock'''), 'ok:0'),
+    ('changing the dates moves the calendar entry', pg_temp.t_try(u_prin, 'update public.exam_periods set ends_on = current_date + 6 where name = ''ZZ EP Mock'''), 'ok:1'),
+    ('and it follows', pg_temp.t_try(u_admin, 'select 1 from public.calendar_events where title = ''ZZ EP Mock'' and ends_on = current_date + 6'), 'ok:1'),
+    ('renaming keeps one entry', pg_temp.t_try(u_prin, 'update public.exam_periods set name = ''ZZ EP Mock A'' where name = ''ZZ EP Mock'''), 'ok:1'),
+    ('so there is still just one', pg_temp.t_try(u_admin, 'select 1 from public.calendar_events where kind = ''exam'' and title like ''ZZ EP%'''), 'ok:1'),
+    ('switching the calendar off removes it', pg_temp.t_try(u_prin, 'update public.exam_periods set show_on_calendar = false where name = ''ZZ EP Mock A'''), 'ok:1'),
+    ('it is gone from the calendar', pg_temp.t_try(u_admin, 'select 1 from public.calendar_events where title like ''ZZ EP%'''), 'ok:0'),
+    ('switching it on again brings it back', pg_temp.t_try(u_prin, 'update public.exam_periods set show_on_calendar = true where name = ''ZZ EP Mock A'''), 'ok:1'),
+    ('as one draft', pg_temp.t_try(u_admin, 'select 1 from public.calendar_events where title = ''ZZ EP Mock A'' and not published'), 'ok:1'),
+    ('an exam assessment is linked to the period', pg_temp.t_scalar(format('with x as (insert into public.assessments (school_id,class_subject_id,term_id,type,title,max_score,weight,exam_period_id) select %L,%L,%L,''exam'',''ZZ EP Exam'',70,70,id from public.exam_periods where name = ''ZZ EP Mock A'' returning id) select set_config(''zz.exam'', (select id::text from x), true) is not null', a, cs1, term)), 'true'),
+    ('a class that is not in the period cannot be linked', pg_temp.t_try(u_prin, 'insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,all_classes) select term_id,''ZZ EP Only Two'',''mock'',current_date,current_date + 1,false from public.exam_periods where name = ''ZZ EP Mock A'''), 'ok:1'),
+    ('(that period names no classes yet, so nothing is linked to it)', (pg_temp.t_err(u_admin, 'update public.assessments set exam_period_id = (select id from public.exam_periods where name = ''ZZ EP Only Two'') where id = current_setting(''zz.exam'')::uuid') like 'EXW01: ZZ EP Only Two does not include that class.%')::text, 'true'),
+    ('the first child is back in the teacher''s class', pg_temp.t_scalar(format('with x as (update public.enrollments set class_id = %L where id = %L returning 1) select count(*)::text from x', c1, e1)), '1'),
+    ('the window has not opened: a teacher cannot enter a mark', (pg_temp.t_err(u_t1, format('insert into public.scores (school_id,assessment_id,enrollment_id,score) values (%L, current_setting(''zz.exam'')::uuid, %L, 40)', a, e1)) like 'EXW01: Marks for ZZ EP Mock A can be entered from %')::text, 'true'),
+    ('but the admin, who may enter any marks, can', pg_temp.t_try(u_admin, format('insert into public.scores (school_id,assessment_id,enrollment_id,score) values (%L, current_setting(''zz.exam'')::uuid, %L, 41)', a, e2)), 'ok:1'),
+    ('the window opens', pg_temp.t_try(u_prin, 'update public.exam_periods set entry_opens_on = current_date - 1, entry_closes_on = current_date + 1 where name = ''ZZ EP Mock A'''), 'ok:1'),
+    ('now the teacher can enter a mark', pg_temp.t_try(u_t1, format('insert into public.scores (school_id,assessment_id,enrollment_id,score) values (%L, current_setting(''zz.exam'')::uuid, %L, 40)', a, e1)), 'ok:1'),
+    ('and change it', pg_temp.t_try(u_t1, 'update public.scores set score = 42 where assessment_id = current_setting(''zz.exam'')::uuid and score = 40'), 'ok:1'),
+    ('the window closes', pg_temp.t_try(u_prin, 'update public.exam_periods set entry_opens_on = current_date - 10, entry_closes_on = current_date - 2 where name = ''ZZ EP Mock A'''), 'ok:1'),
+    ('the teacher can no longer change it', (pg_temp.t_err(u_t1, 'update public.scores set score = 43 where assessment_id = current_setting(''zz.exam'')::uuid and score = 42') like 'EXW01: Mark entry for ZZ EP Mock A closed on %')::text, 'true'),
+    ('or remove it', (pg_temp.t_err(u_t1, 'delete from public.scores where assessment_id = current_setting(''zz.exam'')::uuid and score = 42') like 'EXW01: Mark entry for ZZ EP Mock A closed on %')::text, 'true'),
+    ('the admin can still correct a mark', pg_temp.t_try(u_admin, 'update public.scores set score = 44 where assessment_id = current_setting(''zz.exam'')::uuid and score = 42'), 'ok:1'),
+    ('a teacher cannot delete the assessment and its marks', (pg_temp.t_err(u_t1, 'delete from public.assessments where id = current_setting(''zz.exam'')::uuid') like 'EXW01:%' or pg_temp.t_try(u_t1, 'delete from public.assessments where id = current_setting(''zz.exam'')::uuid') = 'ok:0')::text, 'true'),
+    ('so the assessment and its marks are still there', pg_temp.t_scalar('select count(*)::text from public.scores where assessment_id = current_setting(''zz.exam'')::uuid'), '2'),
+    ('switching the restriction off lets the teacher in', pg_temp.t_try(u_prin, 'update public.exam_periods set restrict_entry = false where name = ''ZZ EP Mock A'''), 'ok:1'),
+    ('the teacher changes a mark again', pg_temp.t_try(u_t1, 'update public.scores set score = 45 where assessment_id = current_setting(''zz.exam'')::uuid and score = 44'), 'ok:1'),
+    ('the admin switches grades off', pg_temp.t_try(u_admin, 'select public.set_school_features((select array_agg(key) from public.app_features where key <> ''grades''))'), 'ok:1'),
+    ('exam periods disappear for everyone', pg_temp.t_try(u_admin, 'select 1 from public.exam_periods where name like ''ZZ EP%'''), 'ok:0'),
+    ('and none can be made', pg_temp.t_try(u_prin, format('insert into public.exam_periods (term_id,name,kind,starts_on,ends_on,restrict_entry,entry_opens_on,entry_closes_on) values (%L,''ZZ EP Off'',''mock'',current_date + 3,current_date + 5,true,current_date + 3,current_date + 8)', term)), 'denied'),
+    ('the admin switches everything back on', pg_temp.t_try(u_admin, format('select public.set_school_features(%s)', '(select array_agg(key) from public.app_features)')), 'ok:1'),
+    ('a teacher cannot delete a period', pg_temp.t_try(u_t1, 'delete from public.exam_periods where name = ''ZZ EP Mock A'''), 'ok:0'),
+    ('the principal deletes it', pg_temp.t_try(u_prin, 'delete from public.exam_periods where name = ''ZZ EP Mock A'''), 'ok:1'),
+    ('its calendar entry goes with it', pg_temp.t_try(u_admin, 'select 1 from public.calendar_events where title = ''ZZ EP Mock A'''), 'ok:0'),
+    ('the assessment stays, with no period', pg_temp.t_scalar('select (exam_period_id is null)::text from public.assessments where id = current_setting(''zz.exam'')::uuid'), 'true'),
+    ('a developer holds the action', pg_temp.t_try(u_dev, 'select 1 where public.has_capability(''grades.manage_exam_periods'')'), 'ok:1'),
+    ('a teacher does not', pg_temp.t_try(u_t1, 'select 1 where public.has_capability(''grades.manage_exam_periods'')'), 'ok:0'),
     -- Email beside SMS
     ('sms and email are in the feature catalogue, on by default',
        pg_temp.t_try(u_admin, 'select 1 from public.app_features where key in (''sms'', ''email'')'), 'ok:2'),
