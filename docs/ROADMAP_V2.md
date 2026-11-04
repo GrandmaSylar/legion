@@ -89,7 +89,8 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 - [x] Student fee notice: a student sees only a short notice that a fees balance is owed, never an amount and never any fee record. It comes from one database function that returns yes or no, and a student can read no invoices, payments or instalments. A school can switch it off in Features, and it needs fees to be on.
 - [x] Marks a student may see: an assessment's marks are hidden from the pupil until the teacher ticks Shown to pupils (or uses Show all for the subject), and everything for a term (the computed result, remarks and conduct) stays hidden until the class's report is published. The database enforces it, so a screen cannot get around it. Pupils get a Marks from your teachers list. Parents and staff are unchanged.
 - [ ] Decide whether parents should follow the same rule. Today a parent sees marks as soon as they are entered.
-- [ ] Timetable flexibility.
+- [x] Timetable flexibility: a school defines its own school day (Settings, Timetable, The school day): any number of lessons per day, any length, with breaks where it wants them. A quick builder (start time, lesson length, number of lessons, breaks) lays a day out, and every time can then be adjusted by hand. Weekdays choose which school day they use (a shorter Friday), a level can run different days (nursery finishes early), and applying the school day lays out each class's slots. A subject already placed in a lesson is never removed. Empty lessons can be filled with the class's subjects in turn. Existing timetables do not change until a day is applied.
+- [ ] Teacher clash checking (one teacher in two classes at once), Saturday classes, rotating weeks, and automatic timetable generation. Phase 4.
 
 ## Open decisions still to make
 
