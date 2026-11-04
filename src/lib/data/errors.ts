@@ -8,6 +8,7 @@ export function friendlyError(e: unknown): string {
       return "This still has records attached to it (such as grades), so it cannot be removed.";
     case "23514":
       return "Some of the values are not valid. Check the dates and try again.";
+    case "PAY01":
     case "CMP01":
     case "CLK01":
     case "LPN01":

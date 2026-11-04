@@ -33,6 +33,7 @@ const Tasks = lazy(() => import("./pages/tasks/Tasks"));
 const LessonPlans = lazy(() => import("./pages/lessons/LessonPlans"));
 const ClockIn = lazy(() => import("./pages/clockin/ClockIn"));
 const Complaints = lazy(() => import("./pages/complaints/Complaints"));
+const Payroll = lazy(() => import("./pages/payroll/Payroll"));
 const Staff = lazy(() => import("./pages/staff/Staff"));
 const Fees = lazy(() => import("./pages/fees/Fees"));
 const Analytics = lazy(() => import("./pages/analytics/Analytics"));
@@ -163,6 +164,8 @@ export default function App() {
                             <ClockIn />
                           ) : item.id === "complaints" ? (
                             <Complaints />
+                          ) : item.id === "payroll" ? (
+                            <Payroll />
                           ) : item.id === "staff" ? (
                             <Staff />
                           ) : item.id === "fees" ? (
