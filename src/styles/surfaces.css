@@ -156,3 +156,16 @@ html[data-surface="glass"] .surface {
     overflow-x: clip;
   }
 }
+
+/*
+ * iOS Safari zooms the page when a field with text under 16px gets focus. The app's base size is 13px, so on touch
+ * screens every text field, select and text area uses 16px. This is unlayered and uses !important so it also wins over
+ * utility classes such as text-sm. Pinch-zoom itself is left on (turning it off would hurt accessibility).
+ */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="button"]):not([type="submit"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
