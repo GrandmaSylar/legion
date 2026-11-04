@@ -169,3 +169,82 @@ html[data-surface="glass"] .surface {
     font-size: 16px !important;
   }
 }
+
+/*
+ * Checkboxes (native and the Radix one). A rounded tile that fills with the accent and a soft glow when ticked, with a
+ * tick that draws itself in and a small pop. The visible box is 22px on a mouse and 26px on touch, and on touch the
+ * whole label row is at least 44px tall. Indeterminate shows a dash. Colours come
+ * from the theme, so it follows the accent and dark mode. Motion is dropped for people who ask for less of it.
+ */
+:is(input[type="checkbox"], button[data-slot="checkbox"]) {
+  --cb: 22px;
+  --cb-tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 12.8l4.2 4.2L18.5 7.6'/%3E%3C/svg%3E");
+  --cb-dash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.4' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--cb);
+  height: var(--cb);
+  min-width: var(--cb);
+  margin: 0;
+  padding: 0;
+  border-radius: 36%;
+  border: 2px solid color-mix(in oklab, currentColor 34%, transparent);
+  background: color-mix(in oklab, currentColor 4%, transparent);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+:is(input[type="checkbox"], button[data-slot="checkbox"])::after {
+  content: "";
+  position: absolute;
+  inset: 14%;
+  background: var(--primary-foreground, #fff);
+  -webkit-mask: var(--cb-tick) center / contain no-repeat;
+  mask: var(--cb-tick) center / contain no-repeat;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.22s ease-out 0.05s;
+}
+/* On touch the whole row is the tap target: a label holding a checkbox is at least 44px tall (no overlapping hit areas). */
+@media (hover: none) and (pointer: coarse) {
+  :is(input[type="checkbox"], button[data-slot="checkbox"]) { --cb: 26px; }
+  label:has(> input[type="checkbox"]) { min-height: 44px; align-items: center; }
+}
+@media (hover: hover) {
+  :is(input[type="checkbox"], button[data-slot="checkbox"]):not(:disabled):hover {
+    border-color: color-mix(in oklab, var(--primary) 70%, transparent);
+  }
+}
+:is(input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate, button[data-slot="checkbox"][data-state="checked"], button[data-slot="checkbox"][data-state="indeterminate"]) {
+  border-color: transparent;
+  background: linear-gradient(145deg, var(--primary), color-mix(in oklab, var(--primary) 72%, black));
+  box-shadow: 0 3px 10px color-mix(in oklab, var(--primary) 45%, transparent);
+  animation: cb-pop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+:is(input[type="checkbox"]:checked, button[data-slot="checkbox"][data-state="checked"])::after {
+  clip-path: inset(0 0 0 0);
+}
+:is(input[type="checkbox"]:indeterminate, button[data-slot="checkbox"][data-state="indeterminate"])::after {
+  -webkit-mask-image: var(--cb-dash);
+  mask-image: var(--cb-dash);
+  clip-path: inset(0 0 0 0);
+}
+:is(input[type="checkbox"], button[data-slot="checkbox"]):not(:disabled):active { transform: scale(0.88); }
+:is(input[type="checkbox"], button[data-slot="checkbox"]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+:is(input[type="checkbox"], button[data-slot="checkbox"]):disabled { opacity: 0.45; cursor: not-allowed; }
+:is(input[type="checkbox"], button[data-slot="checkbox"])[aria-invalid="true"] { border-color: var(--destructive, #dc2626); }
+@keyframes cb-pop {
+  0% { transform: scale(0.8); }
+  60% { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(input[type="checkbox"], button[data-slot="checkbox"]),
+  :is(input[type="checkbox"], button[data-slot="checkbox"])::after { transition: none; animation: none; }
+}
