@@ -15,6 +15,7 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { DownloadMenu } from "../../components/DownloadMenu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
+import { SyllabusDocuments } from "./SyllabusDocuments";
 
 function TopicDialog({ topic, subjectId, levelId, nextPosition, onClose }: { topic: Topic | "new" | null; subjectId: string; levelId: string; nextPosition: number; onClose: () => void }) {
   const qc = useQueryClient();
@@ -93,6 +94,8 @@ export function SyllabusTab() {
         <Field label="Subject" htmlFor="sy-subject"><NativeSelect id="sy-subject" value={subject} onChange={(e) => setSubjectId(e.target.value)}>{(subjects.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</NativeSelect></Field>
         <Field label="Level" htmlFor="sy-level"><NativeSelect id="sy-level" value={level} onChange={(e) => setLevelId(e.target.value)}>{(levels.data ?? []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</NativeSelect></Field>
       </div>
+
+      {subject && level ? <SyllabusDocuments subjectId={subject} levelId={level} label={`${nameOf(subjects.data, subject)}, ${nameOf(levels.data, level)}`} /> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs tabular-nums text-muted-foreground">{list.length} {list.length === 1 ? "topic" : "topics"}</p>
