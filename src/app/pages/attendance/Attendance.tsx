@@ -38,6 +38,7 @@ import {
 } from "../../../lib/data/attendance";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
+import { DownloadMenu } from "../../components/DownloadMenu";
 import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
 import { cn } from "../../components/ui/utils";
@@ -987,10 +988,16 @@ export default function AttendancePage() {
                 Recent attendance · {selectedClass.levelName}{" "}
                 {selectedClass.section}
               </h2>
-              <span className="text-xs text-muted-foreground">
-                Select a day to view or edit
-              </span>
+              <DownloadMenu
+                action="attendance.download" label="Download" disabled={!historyQuery.data?.length}
+                getTable={() => ({
+                  title: `Attendance · ${selectedClass.levelName} ${selectedClass.section}`, filename: `attendance-${selectedClass.levelName}-${selectedClass.section}`,
+                  columns: ["Date", "On the register", "Marked", "Present", "Late", "Excused", "Absent"],
+                  rows: (historyQuery.data ?? []).map((d) => [d.date, d.total, d.marked, d.present, d.late, d.excused, d.absent]),
+                })}
+              />
             </div>
+            <p className="text-xs text-muted-foreground">Select a day to view or edit</p>
 
             {historyQuery.isLoading ? (
               <Skeleton className="h-20 w-full" />

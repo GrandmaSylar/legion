@@ -74,7 +74,7 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 - [ ] Per-school settings for how a school operates (lesson-plan frequency, exam periods and so on) as each module arrives.
 - [ ] Notification layer and email.
 - [x] Shared section navigation (`SectionTabs`): one line with a list on phones, one scrolling row of tabs on larger screens. Used on Fees, Messages and Settings. Other screens with filter chips are still to review.
-- [ ] Shared download menu component (Excel, CSV, PDF, PNG, JPEG, gated by each module's download action).
+- [x] Shared download menu (`DownloadMenu`): Excel, CSV, PDF, PNG and JPEG, shown only to someone who holds the module's download action. On Students (all pages of the current filters), Attendance history, Fees (payments, invoices, instalments), Expenses, Staff and Message history. Analytics keeps its own export. Still to cover: Grades results and report lists, Timetable and the calendar (graphic or list) when those arrive. The audit log CSV and the gradebook template are unchanged because no download action covers them.
 
 ## Open decisions still to make
 

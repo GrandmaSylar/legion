@@ -11,6 +11,8 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { NativeSelect, controlClass } from "../../components/fields";
 import { cn } from "../../components/ui/utils";
 import { StudentAvatar, usePhotoUrls } from "../../components/StudentAvatar";
+import { DownloadMenu } from "../../components/DownloadMenu";
+import type { ExportTable } from "../../../lib/export/tableExport";
 import {
   BulkStudentImportPanel,
   ClassPromotionWizardPanel,
@@ -70,6 +72,24 @@ export default function StudentsList() {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered = !!(q || classId || status !== "active");
 
+  // Everything that matches the filters, not just the 50 on screen.
+  const getTable = async (): Promise<ExportTable> => {
+    const rows = [];
+    for (let pg = 0; pg < 200; pg++) {
+      const res = await listStudents({ search: q, classId, status, page: pg, yearId: currentYear?.id ?? null });
+      rows.push(...res.rows);
+      if (rows.length >= res.total || res.rows.length === 0) break;
+    }
+    const classLabel = classes.data?.find((c) => c.id === classId);
+    return {
+      title: "Students",
+      subtitle: [status ? STATUS_LABEL[status] : "All statuses", classLabel ? `${classLabel.levelName} ${classLabel.section}` : "All classes", q ? `Search: ${q}` : ""].filter(Boolean).join(" · "),
+      filename: "students",
+      columns: ["Admission no.", "Name", "Class", "Gender", "Status"],
+      rows: rows.map((r) => [r.admissionNo, r.fullName, r.className ?? "", r.gender ?? "", STATUS_LABEL[r.status]]),
+    };
+  };
+
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -80,6 +100,9 @@ export default function StudentsList() {
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <DownloadMenu action="students.download" label="Download list" disabled={!list.data || total === 0} getTable={getTable} />
+        </div>
         {canAdd || canPromote ? (
           <div className="flex flex-wrap items-center gap-2">
             {canAdd ? <Button

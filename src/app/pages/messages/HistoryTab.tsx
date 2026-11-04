@@ -7,6 +7,7 @@ import {
 } from "../../../lib/data/messaging";
 import { Button } from "../../components/ui/button";
 import { Skeleton } from "../../components/ui/skeleton";
+import { DownloadMenu } from "../../components/DownloadMenu";
 import { FormMessage } from "../../components/fields";
 import { cn } from "../../components/ui/utils";
 import { useMessagingRights } from "./useMessagingRights";
@@ -66,6 +67,14 @@ function BatchDetail({ batch }: { batch: BatchRow }) {
             {retry.isPending ? "Retrying" : "Retry failed"}
           </Button>
         ) : null}
+        <DownloadMenu
+          action="messages.download" label="Download this list" disabled={!messages.data?.length}
+          getTable={() => ({
+            title: "Messages sent", filename: "messages",
+            columns: ["Recipient", "Phone", "Message", "Parts", "Status", "Problem", "Sent"],
+            rows: (messages.data ?? []).map((m) => [m.recipientName ?? "", m.phone, m.body, m.segments, m.status, m.error ?? "", m.sentAt ?? ""]),
+          })}
+        />
       </div>
       <FormMessage error={error ? errorText(error) : null} ok={check.isSuccess ? `${check.data.delivered} delivered, ${check.data.failed} failed so far.` : retry.isSuccess ? `${retry.data.requeued} queued again.` : null} />
 

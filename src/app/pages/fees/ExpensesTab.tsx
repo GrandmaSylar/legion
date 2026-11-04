@@ -33,6 +33,7 @@ import { Field, FormMessage, NativeSelect } from "../../components/fields";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
+import { DownloadMenu } from "../../components/DownloadMenu";
 
 function formatMoney(amount: number, currency = "GHS"): string {
   return `${currency} ${amount.toLocaleString(undefined, {
@@ -555,6 +556,16 @@ export function ExpensesTab({
               <h2 className="text-base font-semibold">
                 Expense Vouchers &amp; Approval Queue
               </h2>
+              <DownloadMenu
+                action="expenses.download" label="Download vouchers" className="mt-2 block"
+                disabled={filteredExpenses.length === 0}
+                getTable={() => ({
+                  title: "Expense vouchers", filename: "expenses",
+                  subtitle: [statusFilter !== "all" ? `Status: ${statusFilter}` : "", categoryFilter !== "all" ? "One category" : "", searchQuery.trim() ? `Search: ${searchQuery.trim()}` : ""].filter(Boolean).join(" · "),
+                  columns: ["Voucher no.", "Date", "Title", "Category", "Vendor", "Amount (GHS)", "Method", "Reference", "Status", "Requested by", "Reviewed by"],
+                  rows: filteredExpenses.map((r) => [r.voucherNo, r.incurredOn, r.title, r.categoryName, r.vendor ?? "", Number(r.amount.toFixed(2)), r.paymentMethod.replace("_", " "), r.reference ?? "", r.status, r.requestedByName ?? "", r.reviewedByName ?? ""]),
+                })}
+              />
               <p className="text-xs text-muted-foreground">
                 School Admins and Principals can approve or reject pending
                 vouchers; Accountants and Admins can mark approved vouchers as
