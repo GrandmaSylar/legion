@@ -81,7 +81,9 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 ### Phase 3 progress
 
 - [x] Tasks and duty assignments: a task has a title, a kind (duty, invigilation, meeting, other), dates and an optional time and place, and one or more staff; each person ticks off their own part. Recurring rotas rotate a list of staff over chosen weekdays (a new person each day or each week, one or several at a time) and are laid out as ordinary tasks, with a live preview; laying a rota out again keeps the past and everything already ticked off. My tasks appears on the Overview with a one-tap Done. Staff see their own tasks; the head, principal and HR see everyone's; the head and principal assign; downloads follow the tasks download action. People are told when given a task, and told once for a run of rota duties. An invigilation task can point at an exam period. A switch in Features.
-- [ ] Complaints, syllabus and lesson plans, staff clock-in.
+- [x] Syllabus and lesson plans: a syllabus per subject and level (topics with an optional term and week), typed in or imported from an Excel or CSV file with a downloadable template. Teachers write a short plan for each class and subject they teach for a plan period, against a syllabus topic or their own wording, and submit it; the head and principal approve it or send it back with a comment, and a plan sent back is edited and submitted again. How often plans are due is a school setting: one week by default, due on the Friday before the period begins, with review on, all changeable (a period can be 1 to 12 weeks, counted from the term's first Monday). A tracker shows who has planned for a period, and a teacher's Overview reminds them when plans are due. People are told when a plan is submitted or reviewed. A switch in Features.
+- [ ] Storing a PDF of a syllabus for reading. Needs file storage, which is not set up yet.
+- [ ] Complaints and staff clock-in.
 
 ### Phase 2 progress
 
