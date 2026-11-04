@@ -108,7 +108,7 @@ export function PortalDashboard() {
   const marksQuery = useQuery({
     queryKey: ["my-visible-marks", currentEnrol?.enrollmentId],
     queryFn: () => getVisibleMarks(currentEnrol!.enrollmentId),
-    enabled: isStudent && isOn("grades") && !!currentEnrol?.enrollmentId,
+    enabled: (isStudent || isParent) && isOn("grades") && !!currentEnrol?.enrollmentId,
     retry: false,
   });
 
@@ -335,13 +335,13 @@ export function PortalDashboard() {
             ) : null}
           </div>
 
-          {/* A pupil sees only the marks their teachers have chosen to show */}
-          {isStudent && isOn("grades") ? (
-            <section className="surface space-y-3 p-4" aria-label="Marks from your teachers">
-              <h2 className="text-base font-semibold">Marks from your teachers</h2>
+          {/* A pupil, and their parent, see only the marks the teachers have chosen to show */}
+          {(isStudent || isParent) && isOn("grades") ? (
+            <section className="surface space-y-3 p-4" aria-label="Marks from the teachers">
+              <h2 className="text-base font-semibold">{isParent ? `Marks from ${activeStudent.fullName.split(" ")[0]}'s teachers` : "Marks from your teachers"}</h2>
               {marksQuery.isLoading ? <Skeleton className="h-12 w-full" /> : null}
               {marksQuery.data && marksQuery.data.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing has been shown yet. Your teachers show marks here as they are ready, and your full report appears when the school publishes it.</p>
+                <p className="text-sm text-muted-foreground">Nothing has been shown yet. Teachers show marks here as they are ready, and the full report appears when the school publishes it.</p>
               ) : null}
               <ul className="divide-y divide-border">
                 {(marksQuery.data ?? []).map((m) => (
