@@ -73,7 +73,8 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 - [x] Features page: ten switches per school (attendance, grades, fees, online payments, expenses, analytics, staff, SMS, notices, timetable). A feature that is off disappears for everyone and the database stops allowing it; online payments need fees. Parents' fee views and the paystack and messaging functions follow it too. Not yet enforced in the database for portal views of grades, attendance and notices (the screens hide them).
 - [ ] Per-school settings for how a school operates (lesson-plan frequency, exam periods and so on) as each module arrives.
 - [ ] Notification layer and email.
-- [ ] Shared navigation (section picker) and download menu components.
+- [x] Shared section navigation (`SectionTabs`): one line with a list on phones, one scrolling row of tabs on larger screens. Used on Fees, Messages and Settings. Other screens with filter chips are still to review.
+- [ ] Shared download menu component (Excel, CSV, PDF, PNG, JPEG, gated by each module's download action).
 
 ## Open decisions still to make
 
