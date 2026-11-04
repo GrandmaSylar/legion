@@ -84,7 +84,9 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 - [ ] A live calendar link a phone can subscribe to, so changes appear without downloading again. Needs a secret link served by a function.
 - [x] Exam periods (Settings, Exam periods): a named period for a mock, mid-term or term exam, with dates, all classes or chosen ones, an optional window for entering marks, and a switch to show it on the calendar. The window is enforced by the database for adding, changing and removing marks and for deleting a marked assessment; the head and anyone who may enter marks for any class are not held to it. A period's calendar entry is kept in step as a draft. Assessments can be linked to a period in the gradebook. Presets for mock, mid-term and term exam fill in sensible dates and windows.
 - [ ] Exam timetable, invigilation duties and report weighting for a period. They depend on timetable flexibility, tasks and flexible assessment.
-- [ ] Flexible assessment, timetable flexibility and the student fee notice.
+- [x] Flexible assessment: a school builds its own assessment scheme (Settings, How marks add up). A scheme is a list of parts, each with a share of 100, whether it counts as continuous assessment or exam, how its marks combine (average of all, average of the best N, or all marks pooled), and what to do about a missing mark (leave it out or count it as zero). A level uses a scheme and a class can use a different one. A class with no scheme counts marks exactly as before, to the same decimal. Changing a scheme or giving one to a class recalculates the results it touches at once. In the gradebook an assessment is put in a part, and assessments not in a part still count by their own points so nothing is lost.
+- [ ] Per-subject schemes, a total out of something other than 100, and carrying marks across terms (an annual average). Not yet.
+- [ ] Timetable flexibility and the student fee notice.
 
 ## Open decisions still to make
 
