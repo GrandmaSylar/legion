@@ -5,7 +5,10 @@ import type { RunStatus } from "../payroll";
 
 const num = (v: unknown) => Number(v ?? 0);
 
-export interface PayrollConfig { requireSeparateApprover: boolean; currency: string }
+export interface PayrollConfig {
+  requireSeparateApprover: boolean; currency: string;
+  rulesConfirmedBy: string | null; rulesConfirmedNote: string | null; rulesConfirmedAt: string | null; activeRules: number;
+}
 
 export async function getPayrollConfig(): Promise<PayrollConfig> {
   const { data, error } = await supabase.rpc("payroll_config");
@@ -188,13 +191,13 @@ export async function cancelRun(id: string, reason: string): Promise<void> {
   if (error) throw error;
 }
 
-export interface Slip { id: string; staffId: string; name: string; staffNo: string | null; job: string | null; basic: number; gross: number; deductions: number; net: number }
+export interface Slip { id: string; staffId: string; name: string; staffNo: string | null; job: string | null; basic: number; gross: number; deductions: number; net: number; employerCost: number }
 
 export async function listSlips(runId: string): Promise<Slip[]> {
-  const { data, error } = await supabase.from("payroll_slips").select("id, staff_id, staff_name, staff_no, job, basic, gross, deductions, net").eq("run_id", runId).order("staff_name");
+  const { data, error } = await supabase.from("payroll_slips").select("id, staff_id, staff_name, staff_no, job, basic, gross, deductions, net, employer_cost").eq("run_id", runId).order("staff_name");
   if (error) throw error;
-  return ((data ?? []) as { id: string; staff_id: string; staff_name: string; staff_no: string | null; job: string | null; basic: string; gross: string; deductions: string; net: string }[])
-    .map((r) => ({ id: r.id, staffId: r.staff_id, name: r.staff_name, staffNo: r.staff_no, job: r.job, basic: num(r.basic), gross: num(r.gross), deductions: num(r.deductions), net: num(r.net) }));
+  return ((data ?? []) as { id: string; staff_id: string; staff_name: string; staff_no: string | null; job: string | null; basic: string; gross: string; deductions: string; net: string; employer_cost: string }[])
+    .map((r) => ({ id: r.id, staffId: r.staff_id, name: r.staff_name, staffNo: r.staff_no, job: r.job, basic: num(r.basic), gross: num(r.gross), deductions: num(r.deductions), net: num(r.net), employerCost: num(r.employer_cost) }));
 }
 
 export async function listSlipLines(slipId: string): Promise<SlipLine[]> {
@@ -253,4 +256,76 @@ export async function getBankList(runId: string): Promise<BankRow[]> {
   if (error) throw error;
   return ((data ?? []) as { staff_name: string; bank_name: string | null; account_name: string | null; account_no: string | null; net: string }[])
     .map((r) => ({ staffName: r.staff_name, bankName: r.bank_name, accountName: r.account_name, accountNo: r.account_no, net: num(r.net) }));
+}
+
+// ─── Statutory rules ─────────────────────────────────────────────────────────
+
+export type RuleKind = "deduction" | "employer";
+export type RuleMethod = "percent" | "fixed" | "bands";
+export type RuleBase = "basic" | "gross" | "pensionable" | "taxable";
+export type RuleAppliesTo = "all" | "teaching" | "non_teaching";
+
+export interface Band { from: number; to: number | null; rate: number }
+
+export interface Rule {
+  id: string; name: string; kind: RuleKind; method: RuleMethod; base: RuleBase; rate: number | null; fixedAmount: number | null; capBase: number | null;
+  reducesTaxable: boolean; sequence: number; appliesTo: RuleAppliesTo; effectiveFrom: string; effectiveTo: string | null; active: boolean; bands: Band[];
+}
+
+export async function listRules(): Promise<Rule[]> {
+  const [rules, bands] = await Promise.all([
+    supabase.from("payroll_rules").select("id, name, kind, method, base, rate, fixed_amount, cap_base, reduces_taxable, sequence, applies_to, effective_from, effective_to, active").order("sequence").order("name").order("effective_from"),
+    supabase.from("payroll_rule_bands").select("rule_id, from_amount, to_amount, rate").order("from_amount"),
+  ]);
+  if (rules.error) throw rules.error;
+  if (bands.error) throw bands.error;
+  const byRule = new Map<string, Band[]>();
+  for (const b of (bands.data ?? []) as { rule_id: string; from_amount: string; to_amount: string | null; rate: string }[]) {
+    byRule.set(b.rule_id, [...(byRule.get(b.rule_id) ?? []), { from: num(b.from_amount), to: b.to_amount === null ? null : num(b.to_amount), rate: num(b.rate) }]);
+  }
+  return ((rules.data ?? []) as { id: string; name: string; kind: RuleKind; method: RuleMethod; base: RuleBase; rate: string | null; fixed_amount: string | null; cap_base: string | null;
+    reduces_taxable: boolean; sequence: number; applies_to: RuleAppliesTo; effective_from: string; effective_to: string | null; active: boolean }[])
+    .map((r) => ({ id: r.id, name: r.name, kind: r.kind, method: r.method, base: r.base, rate: r.rate === null ? null : num(r.rate), fixedAmount: r.fixed_amount === null ? null : num(r.fixed_amount),
+      capBase: r.cap_base === null ? null : num(r.cap_base), reducesTaxable: r.reduces_taxable, sequence: r.sequence, appliesTo: r.applies_to, effectiveFrom: r.effective_from,
+      effectiveTo: r.effective_to, active: r.active, bands: byRule.get(r.id) ?? [] }));
+}
+
+export interface RuleInput {
+  id?: string; name: string; kind: RuleKind; method: RuleMethod; base: RuleBase; rate: number | null; fixedAmount: number | null; capBase: number | null;
+  reducesTaxable: boolean; sequence: number; appliesTo: RuleAppliesTo; effectiveFrom: string; effectiveTo: string | null; active: boolean; bands: Band[];
+}
+
+export async function saveRule(r: RuleInput): Promise<void> {
+  const { error } = await supabase.rpc("save_payroll_rule", {
+    p_id: r.id ?? null, p_name: r.name, p_kind: r.kind, p_method: r.method, p_base: r.base, p_rate: r.rate, p_fixed: r.fixedAmount, p_cap: r.capBase,
+    p_reduces_taxable: r.reducesTaxable, p_sequence: r.sequence, p_applies_to: r.appliesTo, p_from: r.effectiveFrom, p_to: r.effectiveTo, p_active: r.active,
+    p_bands: r.method === "bands" ? r.bands : null,
+  });
+  if (error) throw error;
+}
+
+export async function newRuleVersion(id: string, from: string, rate: number | null, fixed: number | null, bands: Band[] | null): Promise<void> {
+  const { error } = await supabase.rpc("new_payroll_rule_version", { p_id: id, p_from: from, p_rate: rate, p_fixed: fixed, p_bands: bands });
+  if (error) throw error;
+}
+
+export async function deleteRule(id: string): Promise<void> {
+  const { error } = await supabase.rpc("delete_payroll_rule", { p_id: id });
+  if (error) throw error;
+}
+
+export async function confirmRules(name: string, note: string): Promise<void> {
+  const { error } = await supabase.rpc("confirm_payroll_rules", { p_name: name, p_note: note || null });
+  if (error) throw error;
+}
+
+export async function listExemptions(staffId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("staff_rule_exemptions").select("rule_id").eq("staff_id", staffId);
+  if (error) throw error;
+  return ((data ?? []) as { rule_id: string }[]).map((r) => r.rule_id);
+}
+
+export async function setExemption(staffId: string, ruleId: string, exempt: boolean): Promise<void> {
+  const { error } = await supabase.rpc("set_rule_exemption", { p_staff: staffId, p_rule: ruleId, p_exempt: exempt });
+  if (error) throw error;
 }

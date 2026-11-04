@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import {
-  addStaffComponent, getPayHistory, getStaffAccount, listComponents, listPayStaff, listStaffComponents, removeStaffComponent, saveStaffAccount, saveStaffPay,
+  addStaffComponent, getPayHistory, getStaffAccount, listComponents, listExemptions, listPayStaff, listRules, listStaffComponents, removeStaffComponent, saveStaffAccount, saveStaffPay, setExemption,
   type PayStaff,
 } from "../../../lib/data/payroll";
 import { parseAmount } from "../../../lib/payroll";
@@ -97,6 +97,41 @@ function Allowances({ person, canEdit }: { person: PayStaff; canEdit: boolean })
   );
 }
 
+/** Statutory rules this person is left out of (for example someone who does not take part in a scheme). */
+function Exemptions({ person, canEdit }: { person: PayStaff; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const rules = useQuery({ queryKey: ["payroll-rules"], queryFn: listRules, staleTime: 30_000 });
+  const mine = useQuery({ queryKey: ["staff-exemptions", person.staffId], queryFn: () => listExemptions(person.staffId) });
+  const toggle = useMutation({
+    mutationFn: (v: { id: string; exempt: boolean }) => setExemption(person.staffId, v.id, v.exempt),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["staff-exemptions", person.staffId] }); void qc.invalidateQueries({ queryKey: ["payroll-config"] }); },
+  });
+  const names = [...new Map((rules.data ?? []).map((r) => [r.name.toLowerCase(), r] as const)).values()];
+  if (!rules.data || rules.data.length === 0) return null;
+  const left = new Set(mine.data ?? []);
+  return (
+    <section aria-label="Statutory rules" className="space-y-2">
+      <h3 className="text-sm font-semibold">Statutory rules</h3>
+      <p className="text-xs text-muted-foreground">Every rule applies to this person unless it is ticked here. Changing this clears the accountant&apos;s confirmation of the rules.</p>
+      <ul className="space-y-1">
+        {names.map((r) => {
+          const ids = (rules.data ?? []).filter((x) => x.name.toLowerCase() === r.name.toLowerCase()).map((x) => x.id);
+          const exempt = ids.some((id) => left.has(id));
+          return (
+            <li key={r.id}>
+              <label className="flex min-h-10 items-center gap-3 text-sm">
+                <input type="checkbox" className="size-5 accent-[var(--primary)]" disabled={!canEdit || toggle.isPending} checked={exempt}
+                  onChange={(e) => { for (const id of ids) toggle.mutate({ id, exempt: e.target.checked }); }} />Leave out of {r.name}
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <FormMessage error={toggle.isError ? friendlyError(toggle.error) : null} />
+    </section>
+  );
+}
+
 function Account({ person, canEdit }: { person: PayStaff; canEdit: boolean }) {
   const qc = useQueryClient();
   const acct = useQuery({ queryKey: ["staff-account", person.staffId], queryFn: () => getStaffAccount(person.staffId) });
@@ -164,6 +199,7 @@ export function StaffPayTab() {
               <DialogHeader><DialogTitle className="break-words">{open.name}</DialogTitle><DialogDescription>{open.job ?? "Staff"}{open.staffNo ? ` · ${open.staffNo}` : ""}</DialogDescription></DialogHeader>
               <PayForm person={open} canEdit={canEdit} />
               <Allowances person={open} canEdit={canEdit} />
+              <Exemptions person={open} canEdit={canEdit} />
               <Account person={open} canEdit={canEdit} />
               <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(null)}>Close</Button></DialogFooter>
             </div>

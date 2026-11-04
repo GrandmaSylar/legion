@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import {
-  addAdjustment, approveRun, calculateRun, cancelRun, createRun, getBankList, listAdjustments, listPayStaff, listRunLog, listRuns, listSignatures, listSlipLines,
+  addAdjustment, approveRun, calculateRun, getPayrollConfig, cancelRun, createRun, getBankList, listAdjustments, listPayStaff, listRunLog, listRuns, listSignatures, listSlipLines,
   listSlips, listSteps, markPaid, rejectRun, removeAdjustment, submitRun, type Run, type Slip,
 } from "../../../lib/data/payroll";
 import { RUN_STATUS_HELP, monthLabel, parseAmount } from "../../../lib/payroll";
@@ -27,11 +27,11 @@ function SlipRow({ slip }: { slip: Slip }) {
     <li className="rounded-xl border border-border">
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-12 w-full items-start justify-between gap-3 p-3 text-left focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
         <span className="min-w-0"><span className="block break-words text-sm font-medium">{slip.name}</span><span className="block break-words text-xs text-muted-foreground">{slip.job ?? ""}{slip.staffNo ? ` · ${slip.staffNo}` : ""}</span></span>
-        <span className="shrink-0 text-right text-sm tabular-nums"><span className="block font-semibold">{fmt(slip.net)}</span><span className="block text-xs text-muted-foreground">gross {fmt(slip.gross)}</span></span>
+        <span className="shrink-0 text-right text-sm tabular-nums"><span className="block font-semibold">{fmt(slip.net)}</span><span className="block text-xs text-muted-foreground">gross {fmt(slip.gross)}{slip.employerCost > 0 ? ` · school pays ${fmt(slip.employerCost)} more` : ""}</span></span>
       </button>
       {open ? (
         <ul className="divide-y divide-border border-t border-border px-3 text-sm">
-          {(lines.data ?? []).map((l, i) => <li key={i} className="flex justify-between gap-3 py-1.5"><span className="min-w-0 break-words">{l.kind === "deduction" ? "Less: " : ""}{l.name}</span><span className="shrink-0 tabular-nums">{fmt(l.amount)}</span></li>)}
+          {(lines.data ?? []).map((l, i) => <li key={i} className="flex justify-between gap-3 py-1.5"><span className="min-w-0 break-words">{l.kind === "deduction" ? "Less: " : l.kind === "employer" ? "School pays: " : ""}{l.name}</span><span className="shrink-0 tabular-nums">{fmt(l.amount)}</span></li>)}
           {lines.isLoading ? <li className="py-2"><Skeleton className="h-4 w-full" /></li> : null}
         </ul>
       ) : null}
@@ -102,7 +102,9 @@ function RunDetail({ run, onClose }: { run: Run; onClose: () => void }) {
   const pay = useMutation({ mutationFn: () => markPaid(run.id, reason), onSuccess: done });
   const cancel = useMutation({ mutationFn: () => cancelRun(run.id, reason), onSuccess: () => { done(); onClose(); } });
   const err = [calc, submit, approve, reject, pay, cancel].find((m) => m.isError);
-  const totals = useMemo(() => (slips.data ?? []).reduce((t, s) => ({ gross: t.gross + s.gross, ded: t.ded + s.deductions, net: t.net + s.net }), { gross: 0, ded: 0, net: 0 }), [slips.data]);
+  const totals = useMemo(() => (slips.data ?? []).reduce((t, s) => ({ gross: t.gross + s.gross, ded: t.ded + s.deductions, net: t.net + s.net, emp: t.emp + s.employerCost }), { gross: 0, ded: 0, net: 0, emp: 0 }), [slips.data]);
+  const config = useQuery({ queryKey: ["payroll-config"], queryFn: getPayrollConfig, staleTime: 15_000, retry: false });
+  const unconfirmed = !!config.data && config.data.activeRules > 0 && !config.data.rulesConfirmedAt;
   const status = fresh.status;
   const signedLabels = new Set((sigs.data ?? []).map((s) => s.stepLabel));
   const editable = can("payroll.prepare") && (status === "draft" || status === "calculated");
@@ -113,11 +115,13 @@ function RunDetail({ run, onClose }: { run: Run; onClose: () => void }) {
         <DialogTitle>{monthLabel(run.year, run.month)}</DialogTitle>
         <DialogDescription><span className="mr-2 align-middle"><RunStatusChip status={status} /></span>{RUN_STATUS_HELP[status]}</DialogDescription>
       </DialogHeader>
+      {unconfirmed && status !== "paid" && status !== "cancelled" ? <p role="note" className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-sm">The statutory rules have not been confirmed by an accountant, so this pay run cannot be approved yet. Confirm them under Set up.</p> : null}
       <p className="grid grid-cols-3 gap-2 rounded-xl bg-foreground/5 p-3 text-center text-xs tabular-nums">
         <span><span className="block text-muted-foreground">Gross</span><span className="text-sm font-semibold">{fmt(totals.gross)}</span></span>
         <span><span className="block text-muted-foreground">Deductions</span><span className="text-sm font-semibold">{fmt(totals.ded)}</span></span>
         <span><span className="block text-muted-foreground">Net to pay</span><span className="text-sm font-semibold">{fmt(totals.net)}</span></span>
       </p>
+      {totals.emp > 0 ? <p className="text-center text-xs tabular-nums text-muted-foreground">On top of this, the school pays {fmt(totals.emp)} in employer contributions.</p> : null}
 
       {(steps.data ?? []).length > 0 && status !== "draft" && status !== "calculated" && status !== "cancelled" ? (
         <section aria-label="Approval" className="space-y-1">
@@ -165,7 +169,7 @@ function RunDetail({ run, onClose }: { run: Run; onClose: () => void }) {
         {can("payroll.prepare") && status !== "paid" && status !== "cancelled" && !mode ? <Button type="button" variant="ghost" className="text-destructive" onClick={() => setMode("cancel")}>Cancel pay run</Button> : null}
         <DownloadMenu action="payroll.download" label="Register" disabled={!slips.data?.length} getTable={() => ({
           title: `Payroll register: ${monthLabel(run.year, run.month)}`, filename: `payroll-${run.year}-${String(run.month).padStart(2, "0")}`,
-          columns: ["Name", "Staff no.", "Job", "Basic", "Gross", "Deductions", "Net"], rows: (slips.data ?? []).map((s) => [s.name, s.staffNo ?? "", s.job ?? "", s.basic.toFixed(2), s.gross.toFixed(2), s.deductions.toFixed(2), s.net.toFixed(2)]),
+          columns: ["Name", "Staff no.", "Job", "Basic", "Gross", "Deductions", "Net", "Employer cost"], rows: (slips.data ?? []).map((s) => [s.name, s.staffNo ?? "", s.job ?? "", s.basic.toFixed(2), s.gross.toFixed(2), s.deductions.toFixed(2), s.net.toFixed(2), s.employerCost.toFixed(2)]),
         })} />
         <DownloadMenu action="payroll.download" label="Bank list" disabled={!slips.data?.length || (status !== "approved" && status !== "paid")} getTable={async () => {
           const rows = await getBankList(run.id);
