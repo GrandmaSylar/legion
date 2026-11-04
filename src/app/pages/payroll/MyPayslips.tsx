@@ -13,6 +13,7 @@ function Payslip({ slip, onClose }: { slip: MyPayslip; onClose: () => void }) {
   const lines = useQuery({ queryKey: ["my-payslip-lines", slip.id], queryFn: () => getMyPayslipLines(slip.id) });
   const earnings = (lines.data ?? []).filter((l) => l.kind === "earning");
   const deductions = (lines.data ?? []).filter((l) => l.kind === "deduction");
+  const employer = (lines.data ?? []).filter((l) => l.kind === "employer");
   const Row = ({ name, amount, strong }: { name: string; amount: number; strong?: boolean }) => (
     <li className={`flex items-start justify-between gap-3 py-1.5 text-sm ${strong ? "font-semibold" : ""}`}><span className="min-w-0 break-words">{name}</span><span className="shrink-0 tabular-nums">{fmt(amount)}</span></li>
   );
@@ -25,10 +26,11 @@ function Payslip({ slip, onClose }: { slip: MyPayslip; onClose: () => void }) {
       <section aria-label="Earnings"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Earnings</h3><ul className="divide-y divide-border">{earnings.map((l, i) => <Row key={i} name={l.name} amount={l.amount} />)}<Row name="Total earnings" amount={slip.gross} strong /></ul></section>
       {deductions.length > 0 ? <section aria-label="Deductions"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Deductions</h3><ul className="divide-y divide-border">{deductions.map((l, i) => <Row key={i} name={l.name} amount={l.amount} />)}<Row name="Total deductions" amount={slip.deductions} strong /></ul></section> : null}
       <p className="flex items-center justify-between rounded-xl bg-primary/10 p-3 text-base font-semibold"><span>Net pay</span><span className="tabular-nums">{fmt(slip.net)}</span></p>
+      {employer.length > 0 ? <section aria-label="Paid by the school"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paid by the school (not taken from your pay)</h3><ul className="divide-y divide-border">{employer.map((l, i) => <Row key={i} name={l.name} amount={l.amount} />)}</ul></section> : null}
       <DialogFooter className="gap-2">
         <DownloadMenu action="payroll.view_own" label="Download" formats={["pdf", "xlsx", "csv"]} disabled={!lines.data} getTable={() => ({
           title: `Payslip: ${monthLabel(slip.year, slip.month)}`, filename: `payslip-${slip.year}-${String(slip.month).padStart(2, "0")}`, subtitle: `Net pay ${currency} ${slip.net.toFixed(2)}`,
-          columns: ["Item", "Type", `Amount (${currency})`], rows: [...(lines.data ?? []).map((l) => [l.name, l.kind === "earning" ? "Earning" : "Deduction", l.amount.toFixed(2)]), ["Net pay", "", slip.net.toFixed(2)]],
+          columns: ["Item", "Type", `Amount (${currency})`], rows: [...(lines.data ?? []).map((l) => [l.name, l.kind === "earning" ? "Earning" : l.kind === "deduction" ? "Deduction" : "Paid by the school", l.amount.toFixed(2)]), ["Net pay", "", slip.net.toFixed(2)]],
         })} />
         <Button type="button" variant="ghost" onClick={onClose}>Close</Button>
       </DialogFooter>

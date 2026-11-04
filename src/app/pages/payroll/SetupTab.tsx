@@ -10,6 +10,7 @@ import { Input } from "../../components/ui/input";
 import { Switch } from "../../components/ui/switch";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
+import { RulesTab } from "./RulesTab";
 
 function Components() {
   const qc = useQueryClient();
@@ -17,20 +18,29 @@ function Components() {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<Component["kind"]>("earning");
   const [calc, setCalc] = useState<Component["calc"]>("fixed");
+  const [taxable, setTaxable] = useState(true);
+  const [pensionable, setPensionable] = useState(false);
   const refresh = () => void qc.invalidateQueries({ queryKey: ["pay-components"] });
-  const add = useMutation({ mutationFn: () => saveComponent({ name, kind, calc }), onSuccess: () => { setName(""); refresh(); } });
+  const add = useMutation({ mutationFn: () => saveComponent({ name, kind, calc, taxable, pensionable }), onSuccess: () => { setName(""); refresh(); } });
   const toggle = useMutation({ mutationFn: (c: Component) => saveComponent({ ...c, active: !c.active }), onSuccess: refresh });
+  const toggleFlag = useMutation({ mutationFn: (c: Component) => saveComponent(c), onSuccess: refresh });
   const remove = useMutation({ mutationFn: (id: string) => deleteComponent(id), onSuccess: refresh });
-  const err = add.isError ? friendlyError(add.error) : toggle.isError ? friendlyError(toggle.error) : remove.isError ? "That type is given to someone, so it cannot be deleted. Switch it off instead." : null;
+  const err = add.isError ? friendlyError(add.error) : toggle.isError ? friendlyError(toggle.error) : toggleFlag.isError ? friendlyError(toggleFlag.error) : remove.isError ? "That type is given to someone, so it cannot be deleted. Switch it off instead." : null;
   return (
     <section className="surface space-y-3 p-4">
-      <div><h2 className="text-base font-medium">Allowances and deductions</h2><p className="text-sm text-muted-foreground">The kinds of extra pay and money taken off that this school uses, such as a transport allowance or a welfare contribution. Give each to the people who get it under Staff pay. Statutory deductions are not set up here yet.</p></div>
+      <div><h2 className="text-base font-medium">Allowances and deductions</h2><p className="text-sm text-muted-foreground">The kinds of extra pay and money taken off that this school uses, such as a transport allowance or a welfare contribution. Give each to the people who get it under Staff pay. Statutory deductions are set up further down.</p></div>
       {list.isLoading ? <Skeleton className="h-10 w-full" /> : null}
       {list.data && list.data.length === 0 ? <p className="text-sm text-muted-foreground">None yet.</p> : null}
       <ul className="grid gap-2">
         {(list.data ?? []).map((c) => (
           <li key={c.id} className="flex items-center justify-between gap-2 rounded-xl border border-border p-3 text-sm">
-            <span className="min-w-0"><span className="block break-words font-medium">{c.name}</span><span className="block text-xs text-muted-foreground">{c.kind === "earning" ? "Added to pay" : "Taken from pay"} · {c.calc === "fixed" ? "a fixed amount" : "a percent of basic pay"}{c.active ? "" : " · switched off"}</span></span>
+            <span className="min-w-0"><span className="block break-words font-medium">{c.name}</span><span className="block text-xs text-muted-foreground">{c.kind === "earning" ? "Added to pay" : "Taken from pay"} · {c.calc === "fixed" ? "a fixed amount" : "a percent of basic pay"}{c.active ? "" : " · switched off"}</span>
+              {c.kind === "earning" ? (
+                <span className="mt-1 flex flex-wrap gap-x-4">
+                  <label className="flex min-h-8 items-center gap-2 text-xs"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={c.taxable} onChange={() => toggleFlag.mutate({ ...c, taxable: !c.taxable })} />Counts as taxable pay</label>
+                  <label className="flex min-h-8 items-center gap-2 text-xs"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={c.pensionable} onChange={() => toggleFlag.mutate({ ...c, pensionable: !c.pensionable })} />Counts as pensionable pay</label>
+                </span>
+              ) : null}</span>
             <span className="flex shrink-0 items-center gap-2">
               <Switch checked={c.active} onCheckedChange={() => toggle.mutate(c)} aria-label={`${c.name}: ${c.active ? "on" : "off"}`} />
               <Button type="button" size="icon" variant="ghost" className="text-destructive" aria-label={`Delete ${c.name}`} disabled={remove.isPending} onClick={() => remove.mutate(c.id)}><Trash2 className="size-4" aria-hidden /></Button>
@@ -44,6 +54,12 @@ function Components() {
         <Field label="Worked out as" htmlFor="co-calc"><NativeSelect id="co-calc" value={calc} onChange={(e) => setCalc(e.target.value as Component["calc"])}><option value="fixed">A fixed amount</option><option value="percent_of_basic">A percent of basic</option></NativeSelect></Field>
         <Button type="button" disabled={add.isPending || !name.trim()} onClick={() => add.mutate()}>{add.isPending ? "Adding" : "Add"}</Button>
       </div>
+      {kind === "earning" ? (
+        <div className="flex flex-wrap gap-x-4">
+          <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" className="size-5 accent-[var(--primary)]" checked={taxable} onChange={(e) => setTaxable(e.target.checked)} />Counts as taxable pay</label>
+          <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" className="size-5 accent-[var(--primary)]" checked={pensionable} onChange={(e) => setPensionable(e.target.checked)} />Counts as pensionable pay</label>
+        </div>
+      ) : null}
       <FormMessage error={err} />
     </section>
   );
@@ -112,5 +128,5 @@ function Settings() {
 }
 
 export function SetupTab() {
-  return <div className="space-y-4"><Components /><Steps /><Settings /></div>;
+  return <div className="space-y-4"><Components /><RulesTab /><Steps /><Settings /></div>;
 }
