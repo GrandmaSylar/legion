@@ -5,7 +5,7 @@ Needs the Supabase CLI logged in and linked, and .env.local at the repo root.
 
 Creates throwaway logins (admin, accountant, teacher) and a made-up family, drives
 the live function, then removes everything. Who-may-send, recipient selection and
-message text are checked without Arkesel. If the Arkesel secrets are set, it also
+message text are checked without Arkesel. Email is covered the same way (and a dry-run send when the email secrets exist). If the Arkesel secrets are set, it also
 does a sandbox send (accepted by Arkesel, neither delivered nor billed) and checks
 the log; it never sends a real SMS.
 """
@@ -126,6 +126,10 @@ OPTED = re.findall(r'"id":\s*"([0-9a-f-]{36})"', sql("select id from public.guar
 IDS = ",".join("'" + i + "'" for i in OPTED)
 if OPTED:
     sql("update public.guardians set sms_opt_out = true where id in (" + IDS + ")")
+OPTED_MAIL = re.findall(r'"id":\s*"([0-9a-f-]{36})"', sql("select id from public.guardians where not email_opt_out and full_name not like 'ZZMsg %'"))
+IDS_MAIL = ",".join("'" + i + "'" for i in OPTED_MAIL)
+if OPTED_MAIL:
+    sql("update public.guardians set email_opt_out = true where id in (" + IDS_MAIL + ")")
 try:
     pw = {k: secrets.token_urlsafe(14) for k in ("admin", "acc", "teacher")}
     make_login("zz-msg-admin@example.test", pw["admin"], "school_admin")
@@ -225,6 +229,74 @@ try:
             print("   Arkesel replied:", json.dumps(r.get("provider_response"))[:300])
         check("the status call reports the sender", fn(admin_t, action="status")[1].get("sender"))
 
+    # ── email ────────────────────────────────────────────────────────────────
+    sql("update public.guardians set email = 'zz-parent@example.test', email_opt_out = false where full_name = 'ZZMsg Parent'")
+    code, st = fn(admin_t, action="status", channel="email")
+    check("admin can read the email status", code == 200 and "configured" in st and st.get("enabled") is True)
+    email_configured = bool(st.get("configured"))
+    check("a teacher cannot use email", fn(teacher_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="Hi")[0] == 403)
+    check("an email needs a subject", fn(admin_t, action="preview", channel="email", audience="all_parents", body="Hi")[0] == 400)
+    code, p = fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Fees for {student}", body="Dear {parent}, hello.")
+    smp = (p.get("sample") or [{}])[0] if code == 200 else {}
+    check("email preview finds one parent by email address", code == 200 and p.get("count") == 1 and smp.get("email") == "zz-parent@example.test")
+    check("the subject is filled in per parent", "Ama ZZMsg" in str(smp.get("subject")) and "{" not in str(smp.get("subject")))
+    code, p = fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Hi\r\nBcc: attacker@example.test", body="Hello")
+    check("a line break in the subject cannot add a header", code == 200 and "\n" not in str(p["sample"][0]["subject"]) and "\r" not in str(p["sample"][0]["subject"]))
+    code, p = fn(admin_t, action="preview", channel="email", audience="custom", customNumbers="a@b.com, A@B.com\nnot-an-email; c@d.org", subject="Hi", body="Hello")
+    check("custom emails: duplicates and junk are dropped", code == 200 and p["count"] == 2 and p["skipped"]["badPhone"] == 1 and p["skipped"]["duplicate"] == 1)
+    code, p = fn(admin_t, action="preview", channel="email", audience="custom", customNumbers="0244123456", subject="Hi", body="Hello")
+    check("a phone number is not an email address", code == 200 and p["count"] == 0)
+    code, p = fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="x" * 5001)
+    check("an email over 5000 characters is refused", code == 400)
+    code, p = fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="x" * 700)
+    check("but 700 characters is fine by email", code == 200)
+    sql("update public.guardians set email_opt_out = true where full_name = 'ZZMsg Parent'")
+    code, p = fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="Hello")
+    check("a parent who stopped email is not emailed", code == 200 and p["count"] == 0)
+    code, p = fn(admin_t, action="preview", audience="all_parents", body="Hello")
+    check("and is still texted", code == 200 and p["count"] == 1)
+    sql("update public.guardians set email_opt_out = false, email = null where full_name = 'ZZMsg Parent'")
+    code, p = fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="Hello")
+    check("a parent with no email address is skipped", code == 200 and p["count"] == 0)
+    sql("update public.guardians set email = 'zz-parent@example.test' where full_name = 'ZZMsg Parent'")
+    code, p = fn(acc_t, action="preview", channel="email", audience="fee_balance", subject="Fees", templateKey="fee_reminder")
+    check("accountant can email fee reminders", code == 200 and p["count"] == 1)
+    check("accountant cannot email all parents", fn(acc_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="Hi")[0] == 403)
+    check("accountant cannot send a test email", fn(acc_t, action="test", channel="email", to="a@b.com")[0] == 403)
+
+    # each way of sending is its own switch
+    before_mail = set_feature("email", False)
+    try:
+        code, r = fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="Hi")
+        check("with email switched off the function refuses email", code == 403 and "Email is switched off" in str(r.get("error", "")))
+        check("and reports it switched off", fn(admin_t, action="status", channel="email")[1].get("enabled") is False)
+        check("but text messages still work", fn(admin_t, action="preview", audience="all_parents", body="Hi")[0] == 200)
+    finally:
+        restore_feature("email", before_mail)
+    before_sms = set_feature("sms", False)
+    try:
+        code, r = fn(admin_t, action="preview", audience="all_parents", body="Hi")
+        check("with SMS switched off the function refuses texts", code == 403 and "Text messages are switched off" in str(r.get("error", "")))
+        check("but email still works", fn(admin_t, action="preview", channel="email", audience="all_parents", subject="Hi", body="Hi")[0] == 200)
+    finally:
+        restore_feature("sms", before_sms)
+
+    if not email_configured:
+        check("sending an email without the provider set up gives a clear 503", fn(admin_t, action="send", channel="email", audience="all_parents", subject="Hi", body="Hi")[0] == 503)
+        print("NOTE  email secrets are not set: provider checks skipped")
+    else:
+        code, r = fn(admin_t, action="send", channel="email", audience="fee_balance", templateKey="fee_reminder", subject="Fees for {student}", sandbox=True, title="e2e email dry run")
+        check("a dry-run email send is accepted", code == 200 and r.get("total") == 1 and r.get("remaining") == 0)
+        rows = sql("select channel, status, recipient_email, recipient_phone is null as no_phone, subject, error from public.messages where kind = 'fee_reminder' and recipient_email = 'zz-parent@example.test' order by created_at desc limit 1")
+        check("it is logged as an email to the address, with no phone", '"channel": "email"' in rows and '"status": "sent"' in rows and '"no_phone": true' in rows)
+        check("the logged subject is filled in", "Ama ZZMsg" in rows)
+        bt = sql("select channel, subject from public.message_batches where title = 'e2e email dry run'")
+        check("the batch is an email batch", '"channel": "email"' in bt)
+        code, r = fn(admin_t, action="test", channel="email", to="zz-test@example.test", sandbox=True)
+        check("a dry-run test email works", code == 200 and r.get("sandbox") is True and r.get("status") == "sent")
+        check("a bad test address is refused", fn(admin_t, action="test", channel="email", to="nope", sandbox=True)[0] == 400)
+        check("the email status reports where mail comes from", bool(fn(admin_t, action="status", channel="email")[1].get("from")))
+
     # ── the log is readable only by messaging roles, and clients cannot write ─
     code, rows = get_rest("message_batches?select=id", admin_t)
     check("admin can read the batch log", code == 200)
@@ -237,6 +309,8 @@ try:
                    {"apikey": KEY, "Authorization": "Bearer " + admin_t, "Content-Type": "application/json"})
     check("the audience function cannot be called from the browser", code >= 400)
 finally:
+    if OPTED_MAIL:
+        sql("update public.guardians set email_opt_out = false where id in (" + IDS_MAIL + ")")
     if OPTED:
         sql("update public.guardians set sms_opt_out = false where id in (" + IDS + ")")
     cleanup()
