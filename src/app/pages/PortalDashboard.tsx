@@ -21,6 +21,7 @@ import {
 import {
   getMyViewableStudents,
   getStudentGradesOverview,
+  getVisibleMarks,
 } from "../../lib/data/grades";
 import { listNotices } from "../../lib/data/notices";
 import { WEEKDAYS, listClassTimetable } from "../../lib/data/timetable";
@@ -104,6 +105,12 @@ export function PortalDashboard() {
     enabled: !!currentEnrol?.classId,
   });
   const timetableSlots = timetableQuery.data ?? [];
+  const marksQuery = useQuery({
+    queryKey: ["my-visible-marks", currentEnrol?.enrollmentId],
+    queryFn: () => getVisibleMarks(currentEnrol!.enrollmentId),
+    enabled: isStudent && isOn("grades") && !!currentEnrol?.enrollmentId,
+    retry: false,
+  });
 
   const firstName = profile?.fullName.split(" ")[0] ?? "";
   const dateLabel = new Date().toLocaleDateString(undefined, {
@@ -328,6 +335,30 @@ export function PortalDashboard() {
             ) : null}
           </div>
 
+          {/* A pupil sees only the marks their teachers have chosen to show */}
+          {isStudent && isOn("grades") ? (
+            <section className="surface space-y-3 p-4" aria-label="Marks from your teachers">
+              <h2 className="text-base font-semibold">Marks from your teachers</h2>
+              {marksQuery.isLoading ? <Skeleton className="h-12 w-full" /> : null}
+              {marksQuery.data && marksQuery.data.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing has been shown yet. Your teachers show marks here as they are ready, and your full report appears when the school publishes it.</p>
+              ) : null}
+              <ul className="divide-y divide-border">
+                {(marksQuery.data ?? []).map((m) => (
+                  <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="min-w-0">
+                      <span className="block break-words font-medium">{m.title}</span>
+                      <span className="block text-xs text-muted-foreground">{m.subject}</span>
+                    </span>
+                    <span className="shrink-0 text-right tabular-nums">
+                      <span className="font-semibold">{m.score}</span> <span className="text-muted-foreground">/ {m.maxScore}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           {/* A student is told only that a balance is owed, never how much */}
           {isStudent && feeNotice.data ? (
             <section role="status" className="surface flex items-start gap-3 border-amber-500/40 p-4 text-sm">
@@ -446,7 +477,9 @@ export function PortalDashboard() {
                 <Skeleton className="h-32 w-full" />
               ) : !latestTerm ? (
                 <p className="py-6 text-sm text-muted-foreground">
-                  No grades or observations have been recorded yet.
+                  {isStudent
+                    ? "Your teachers show marks here as they are ready, and your full report appears when the school publishes it."
+                    : "No grades or observations have been recorded yet."}
                 </p>
               ) : (
                 <div className="space-y-3">

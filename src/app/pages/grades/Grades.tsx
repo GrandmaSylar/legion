@@ -30,6 +30,8 @@ import {
   createStandardGesAssessments,
   deleteAssessment,
   setAssessmentComponent,
+  setAssessmentVisibility,
+  setMarksVisibility,
   getClassBroadsheet,
   getClassGradingConfig,
   getMyTeachingAssignments,
@@ -331,6 +333,14 @@ function SubjectGradebookSection({
     mutationFn: (v: { id: string; componentId: string | null }) => setAssessmentComponent(v.id, v.componentId),
     onSuccess: invalidateGradebook,
   });
+  const visibilityMutation = useMutation({
+    mutationFn: (v: { id: string; visible: boolean }) => setAssessmentVisibility(v.id, v.visible),
+    onSuccess: invalidateGradebook,
+  });
+  const visibilityAllMutation = useMutation({
+    mutationFn: (visible: boolean) => setMarksVisibility(classSubjectId, termId, visible),
+    onSuccess: invalidateGradebook,
+  });
   const periodsQuery = useQuery({ queryKey: ["exam-periods"], queryFn: listExamPeriods, staleTime: 60_000, retry: false });
   const termPeriods = (periodsQuery.data ?? []).filter(
     (p) => p.termId === termId && (p.allClasses || p.classIds.includes(classId)),
@@ -570,6 +580,14 @@ function SubjectGradebookSection({
                     : "Use standard GES assessments (CA 30 + Exam 70)"}
                 </Button>
               ) : null}
+              {assessments.length > 0 ? (
+                <Button
+                  type="button" variant="outline" size="sm" disabled={visibilityAllMutation.isPending}
+                  onClick={() => visibilityAllMutation.mutate(!assessments.every((x) => x.visibleToStudents))}
+                >
+                  {assessments.every((x) => x.visibleToStudents) ? "Hide all from pupils" : "Show all to pupils"}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -620,6 +638,17 @@ function SubjectGradebookSection({
                       return w === "upcoming" ? ` · opens ${p.entryOpensOn}` : ` · entry closed ${p.entryClosesOn}`;
                     })()}
                   </span>
+                ) : null}
+                {canEdit ? (
+                  <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground" title="Pupils see these marks only when this is ticked, or once the report is published">
+                    <input
+                      type="checkbox" className="size-3.5 accent-[var(--primary)]" checked={a.visibleToStudents}
+                      disabled={visibilityMutation.isPending || visibilityAllMutation.isPending}
+                      aria-label={`Show ${a.title} marks to pupils`}
+                      onChange={(e) => visibilityMutation.mutate({ id: a.id, visible: e.target.checked })}
+                    />
+                    Shown to pupils
+                  </label>
                 ) : null}
                 {canEdit ? (
                   <button
