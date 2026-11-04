@@ -20,17 +20,22 @@ export interface SectionItem {
  * The content of each section goes inside as <TabsContent value="…">.
  */
 export function SectionTabs({
-  items, defaultValue, label = "Section", className, children,
+  items, defaultValue, value: controlled, onValueChange, label = "Section", className, children,
 }: {
   items: SectionItem[];
   defaultValue?: string;
+  /** Set both of these to let the parent choose the section (for example to move on after a form is sent). */
+  value?: string;
+  onValueChange?: (value: string) => void;
   /** What the phone list is called, for example "Section" or "Show". */
   label?: string;
   className?: string;
   children: ReactNode;
 }) {
   const first = items[0]?.value ?? "";
-  const [picked, setPicked] = useState(defaultValue ?? first);
+  const [own, setOwn] = useState(defaultValue ?? first);
+  const picked = controlled ?? own;
+  const setPicked = (v: string) => { setOwn(v); onValueChange?.(v); };
   const [open, setOpen] = useState(false);
   // If the chosen section has gone (an action was switched off), fall back to the first.
   const value = items.some((i) => i.value === picked) ? picked : first;
