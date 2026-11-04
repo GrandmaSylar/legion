@@ -14,6 +14,7 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
 import { cn } from "../../components/ui/utils";
 import { CalendarDownload, type Scope } from "./CalendarDownload";
+import { CalendarFeed } from "./CalendarFeed";
 import { EventDialog } from "./EventDialog";
 
 const KIND_CLASS: Record<EventKind, string> = {
@@ -166,6 +167,7 @@ export default function Calendar() {
           <p className="text-sm text-muted-foreground">{year ? `Dates for ${year.name}.` : "Dates for the term."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <CalendarFeed />
           {canDownload ? (
             <CalendarDownload scopes={scopes} defaultScope={currentTermScope} schoolName={school.data?.name ?? ""} canSeeDrafts={canManage} />
           ) : null}
