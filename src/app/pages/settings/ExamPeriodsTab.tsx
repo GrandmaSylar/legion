@@ -16,6 +16,7 @@ import { Switch } from "../../components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
 import { cn } from "../../components/ui/utils";
+import { ExamTimetableDialog } from "./ExamTimetableDialog";
 
 const KINDS = Object.keys(EXAM_KIND_LABELS) as ExamKind[];
 
@@ -33,6 +34,7 @@ export default function ExamPeriodsTab() {
   const periods = useQuery({ queryKey: ["exam-periods"], queryFn: listExamPeriods });
   const terms = useQuery({ queryKey: ["terms"], queryFn: listTerms, staleTime: 5 * 60_000 });
   const [editing, setEditing] = useState<ExamPeriod | "new" | null>(null);
+  const [timetable, setTimetable] = useState<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const termName = (id: string) => terms.data?.find((t) => t.id === id)?.name ?? "";
 
@@ -65,7 +67,12 @@ export default function ExamPeriodsTab() {
                   <h3 className="break-words text-sm font-semibold">{p.name}</h3>
                   <p className="text-xs text-muted-foreground">{EXAM_KIND_LABELS[p.kind]} · {termName(p.termId)} · {formatRange({ startsOn: p.startsOn, endsOn: p.endsOn, startsAt: null, endsAt: null })}</p>
                 </div>
-                {canManage ? <Button type="button" size="sm" variant="outline" onClick={() => setEditing(p)}>Edit</Button> : null}
+                {canManage ? (
+                  <span className="flex gap-2">
+                    {p.useTimetable ? <Button type="button" size="sm" variant="outline" onClick={() => setTimetable(p.id)}>Timetable</Button> : null}
+                    <Button type="button" size="sm" variant="outline" onClick={() => setEditing(p)}>Edit</Button>
+                  </span>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full bg-foreground/10 px-2.5 py-1">{p.allClasses ? "All classes" : `${p.classIds.length} ${p.classIds.length === 1 ? "class" : "classes"}`}</span>
@@ -75,12 +82,14 @@ export default function ExamPeriodsTab() {
                   </span>
                 ) : <span className="rounded-full bg-foreground/10 px-2.5 py-1">Marks can be entered any time</span>}
                 {p.showOnCalendar ? <span className="rounded-full bg-sky-500/15 px-2.5 py-1 text-sky-800 dark:text-sky-200">On the calendar</span> : null}
+                {p.useTimetable ? <span className={cn("rounded-full px-2.5 py-1", p.timetablePublished ? "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200" : "bg-foreground/10")}>{p.timetablePublished ? "Timetable published" : "Timetable (draft)"}</span> : null}
               </div>
             </li>
           );
         })}
       </ul>
 
+      {(periods.data ?? []).filter((p) => p.id === timetable).map((p) => <ExamTimetableDialog key={p.id} period={p} open onClose={() => setTimetable(null)} />)}
       <PeriodDialog
         key={editing === null ? "none" : editing === "new" ? "new" : editing.id}
         open={editing !== null} onClose={() => setEditing(null)}
@@ -109,8 +118,8 @@ function Form({ period, onClose }: { period: ExamPeriod | null; onClose: () => v
   const [f, setF] = useState<ExamPeriodInput>(() => period ? {
     termId: period.termId, name: period.name, kind: period.kind, startsOn: period.startsOn, endsOn: period.endsOn, allClasses: period.allClasses,
     classIds: period.classIds, restrictEntry: period.restrictEntry, entryOpensOn: period.entryOpensOn ?? period.startsOn,
-    entryClosesOn: period.entryClosesOn ?? addDays(period.endsOn, 3), showOnCalendar: period.showOnCalendar,
-  } : { termId: "", name: "", kind: "term_exam", startsOn: "", endsOn: "", allClasses: true, classIds: [], restrictEntry: false, entryOpensOn: "", entryClosesOn: "", showOnCalendar: true });
+    entryClosesOn: period.entryClosesOn ?? addDays(period.endsOn, 3), showOnCalendar: period.showOnCalendar, useTimetable: period.useTimetable,
+  } : { termId: "", name: "", kind: "term_exam", startsOn: "", endsOn: "", allClasses: true, classIds: [], restrictEntry: false, entryOpensOn: "", entryClosesOn: "", showOnCalendar: true, useTimetable: false });
   const [autoWindow, setAutoWindow] = useState(!period);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const termId = f.termId || currentTerm?.id || "";
@@ -245,7 +254,14 @@ function Form({ period, onClose }: { period: ExamPeriod | null; onClose: () => v
         </div>
         <Switch id="ep-cal" checked={f.showOnCalendar} onCheckedChange={(v) => set("showOnCalendar", v)} aria-label={`Show on the calendar: ${f.showOnCalendar ? "on" : "off"}`} />
       </div>
-      <p className="text-xs text-muted-foreground">Exam timetables, invigilation duties and report weighting are not part of a period yet. They arrive with the timetable and assessment work.</p>
+      <div className="flex items-start justify-between gap-3 rounded-xl border border-border p-3">
+        <div className="min-w-0">
+          <label htmlFor="ep-tt" className="block text-sm font-medium">Exam timetable</label>
+          <p className="text-xs text-muted-foreground">Lets you list the papers (class, subject, day, time and room), give them invigilators, and publish the timetable to parents and pupils. Switching it off returns a published timetable to a draft.</p>
+        </div>
+        <Switch id="ep-tt" checked={f.useTimetable} onCheckedChange={(v) => set("useTimetable", v)} aria-label={`Exam timetable: ${f.useTimetable ? "on" : "off"}`} />
+      </div>
+      <p className="text-xs text-muted-foreground">How this period counts toward a term result is set by the assessment scheme: tie a part to this kind of exam under Settings, How marks add up.</p>
 
       <FormMessage error={problem && (f.name || f.startsOn) ? problem : err} />
       <DialogFooter className="gap-2 sm:justify-between">

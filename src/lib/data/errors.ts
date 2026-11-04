@@ -9,6 +9,7 @@ export function friendlyError(e: unknown): string {
     case "23514":
       return "Some of the values are not valid. Check the dates and try again.";
     case "PAY01":
+    case "EXT01":
     case "CMP01":
     case "CLK01":
     case "LPN01":

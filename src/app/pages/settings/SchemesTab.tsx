@@ -6,6 +6,8 @@ import {
   setClassScheme, setLevelScheme, type PartFeeds, type PartInput, type PartMethod, type PartMissing, type Scheme,
 } from "../../../lib/data/schemes";
 import { friendlyError } from "../../../lib/data/errors";
+import { EXAM_KIND_LABELS } from "../../../lib/data/examPeriods";
+import { setPartExamKind } from "../../../lib/data/examTimetable";
 import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -55,6 +57,8 @@ export default function SchemesTab() {
     onError: () => setMessage(null),
   });
   const remove = useMutation({ mutationFn: (id: string) => deleteScheme(id), onSuccess: refresh });
+  // Tie a part to a kind of exam: assessments linked to a period of that kind then go into it by themselves.
+  const tie = useMutation({ mutationFn: (v: { id: string; kind: string | null }) => setPartExamKind(v.id, v.kind), onSuccess: refresh });
 
   const usedBy = useMemo(() => {
     const out = new Map<string, string[]>();
@@ -82,7 +86,7 @@ export default function SchemesTab() {
       {schemes.isLoading ? <Skeleton className="h-24 w-full" /> : null}
       {schemes.isError ? <p role="alert" className="surface p-4 text-sm">Schemes could not be loaded.</p> : null}
       {schemes.data && list.length === 0 ? <p className="surface p-6 text-sm text-muted-foreground">No schemes yet.{canManage ? " Press New scheme to build one, or start from the Ghana standard." : ""}</p> : null}
-      <FormMessage error={remove.isError ? friendlyError(remove.error) : null} />
+      <FormMessage error={remove.isError ? friendlyError(remove.error) : tie.isError ? friendlyError(tie.error) : null} />
 
       <ul className="grid gap-3">
         {list.map((s) => (
@@ -107,7 +111,20 @@ export default function SchemesTab() {
             </div>
             <ShareBar parts={s.parts} />
             <ul className="space-y-0.5 text-xs text-muted-foreground">
-              {s.parts.map((p) => <li key={p.id}><strong className="font-medium text-foreground">{p.name}</strong> counts as {FEEDS_LABELS[p.feeds].toLowerCase()}. {describePart(p)}</li>)}
+              {s.parts.map((p) => (
+                <li key={p.id} className="space-y-1">
+                  <span><strong className="font-medium text-foreground">{p.name}</strong> counts as {FEEDS_LABELS[p.feeds].toLowerCase()}. {describePart(p)}</span>
+                  {canManage ? (
+                    <span className="flex flex-wrap items-center gap-2">
+                      <label htmlFor={`kind-${p.id}`} className="text-xs">Takes the marks of:</label>
+                      <NativeSelect id={`kind-${p.id}`} className="h-8 w-auto text-xs" value={p.examKind ?? ""} disabled={tie.isPending} onChange={(e) => tie.mutate({ id: p.id, kind: e.target.value || null })}>
+                        <option value="">Whatever the teacher chooses</option>
+                        {Object.entries(EXAM_KIND_LABELS).map(([k, label]) => <option key={k} value={k}>Assessments linked to a {label.toLowerCase()} period</option>)}
+                      </NativeSelect>
+                    </span>
+                  ) : p.examKind ? <span className="block text-xs">Takes the marks of {EXAM_KIND_LABELS[p.examKind as keyof typeof EXAM_KIND_LABELS]?.toLowerCase() ?? p.examKind} periods.</span> : null}
+                </li>
+              ))}
             </ul>
           </li>
         ))}

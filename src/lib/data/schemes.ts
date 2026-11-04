@@ -14,6 +14,8 @@ export interface SchemePart {
   method: PartMethod;
   bestN: number | null;
   missing: PartMissing;
+  /** The kind of exam (mock, mid_term, term_exam, other) this part is tied to, or null. */
+  examKind: string | null;
 }
 
 export interface Scheme {
@@ -38,18 +40,18 @@ export function describePart(p: Pick<SchemePart, "method" | "bestN" | "missing" 
 }
 
 interface PartRow {
-  id: string; scheme_id: string; name: string; feeds: string; weight: number | string; method: string; best_n: number | null; missing: string; sort: number;
+  id: string; scheme_id: string; name: string; feeds: string; weight: number | string; method: string; best_n: number | null; missing: string; sort: number; exam_kind: string | null;
 }
 
 const toPart = (r: PartRow): SchemePart => ({
   id: r.id, name: r.name, feeds: r.feeds as PartFeeds, weight: Number(r.weight), method: r.method as PartMethod,
-  bestN: r.best_n, missing: r.missing as PartMissing,
+  bestN: r.best_n, missing: r.missing as PartMissing, examKind: r.exam_kind,
 });
 
 export async function listSchemes(): Promise<Scheme[]> {
   const [s, c] = await Promise.all([
     supabase.from("assessment_schemes").select("id, name, description").order("name"),
-    supabase.from("assessment_components").select("id, scheme_id, name, feeds, weight, method, best_n, missing, sort").order("sort"),
+    supabase.from("assessment_components").select("id, scheme_id, name, feeds, weight, method, best_n, missing, sort, exam_kind").order("sort"),
   ]);
   if (s.error) throw s.error;
   if (c.error) throw c.error;
