@@ -63,61 +63,31 @@ function PasswordField({ id, value, onChange }: { id: string; value: string; onC
 }
 
 function RolesAndModules({
-  roles, setRoles, modules, setModules, canGrantDeveloper, disabled, lockedDeveloper,
+  roles, setRoles, canGrantDeveloper, disabled, lockedDeveloper,
 }: {
   roles: AppRole[]; setRoles: (r: AppRole[]) => void;
-  modules: string[] | null; setModules: (m: string[] | null) => void;
   canGrantDeveloper: boolean; disabled: boolean; lockedDeveloper: boolean;
 }) {
   const options = canGrantDeveloper ? (["developer", ...BASE_ROLES] as AppRole[]) : BASE_ROLES;
-  const sections = assignableModules(roles);
-  const toggleRole = (r: AppRole, on: boolean) => {
-    const next = on ? [...roles, r] : roles.filter((x) => x !== r);
-    setRoles(next);
-    // Keep the section list inside what the remaining roles allow.
-    if (modules) setModules(modules.filter((m) => assignableModules(next).some((s) => s.id === m)));
-  };
+  const toggleRole = (r: AppRole, on: boolean) => setRoles(on ? [...roles, r] : roles.filter((x) => x !== r));
   return (
-    <>
-      <section className="surface space-y-3 p-4">
-        <h2 className="text-base font-medium">Roles</h2>
-        <p className="text-sm text-muted-foreground">A role decides what data the person can reach.</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {options.map((r) => (
-            <CheckRow
-              key={r} id={`role-${r}`} checked={roles.includes(r)}
-              disabled={disabled || (r === "developer" && lockedDeveloper)}
-              onChange={(on) => toggleRole(r, on)}
-            >
-              {ROLE_LABELS[r]}
-            </CheckRow>
-          ))}
-        </div>
-      </section>
-
-      <section className="surface space-y-3 p-4">
-        <h2 className="text-base font-medium">Sections</h2>
-        <p className="text-sm text-muted-foreground">
-          Switch sections off to hide them from this person. A section can only be on if their role allows it.
-        </p>
-        <CheckRow id="all-modules" checked={modules === null} disabled={disabled} onChange={(all) => setModules(all ? null : sections.map((s) => s.id))}>
-          Everything their role allows
-        </CheckRow>
-        {modules !== null ? (
-          <div className="grid gap-2 border-t border-border pt-3 sm:grid-cols-2">
-            {sections.length === 0 ? <p className="text-sm text-muted-foreground">Choose a role first.</p> : null}
-            {sections.map((s) => (
-              <CheckRow
-                key={s.id} id={`mod-${s.id}`} checked={modules.includes(s.id)} disabled={disabled}
-                onChange={(on) => setModules(on ? [...modules, s.id] : modules.filter((m) => m !== s.id))}
-              >
-                {s.label}
-              </CheckRow>
-            ))}
-          </div>
-        ) : null}
-      </section>
-    </>
+    <section className="surface space-y-3 p-4">
+      <h2 className="text-base font-medium">Job</h2>
+      <p className="text-sm text-muted-foreground">
+        A job gives the person a sensible starting set of access. After saving, fine-tune exactly what they can do on their page, under &ldquo;What they can do&rdquo;.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((r) => (
+          <CheckRow
+            key={r} id={`role-${r}`} checked={roles.includes(r)}
+            disabled={disabled || (r === "developer" && lockedDeveloper)}
+            onChange={(on) => toggleRole(r, on)}
+          >
+            {ROLE_LABELS[r]}
+          </CheckRow>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -190,7 +160,7 @@ function CreateUser() {
       </section>
 
       <RolesAndModules
-        roles={roles} setRoles={setRoles} modules={modules} setModules={setModules}
+        roles={roles} setRoles={setRoles}
         canGrantDeveloper={myRoles.includes("developer")} disabled={false} lockedDeveloper={false}
       />
 
@@ -274,7 +244,7 @@ function EditUser({ user }: { user: UserRow }) {
           </div>
         </section>
         <RolesAndModules
-          roles={roles} setRoles={setRoles} modules={modules} setModules={setModules}
+          roles={roles} setRoles={setRoles}
           canGrantDeveloper={iAmDev} disabled={readOnly} lockedDeveloper={isSelf}
         />
         <FormMessage error={save.isError ? message(save.error) : null} ok={save.isSuccess ? "Saved" : null} />
