@@ -120,6 +120,7 @@ export function RegisterTab() {
         </div>
       </div>
 
+      <p className="text-xs text-muted-foreground">Weekends are left out, and so are holidays on the school calendar, unless someone clocked in that day.</p>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm tabular-nums text-muted-foreground">{counts.present} present · {counts.late} late · {counts.absent} absent</p>
         {can("clockin.download") ? (
@@ -139,7 +140,7 @@ export function RegisterTab() {
 
       {roster.isLoading ? <Skeleton className="h-24 w-full" /> : null}
       {roster.isError ? <p role="alert" className="surface p-4 text-sm">{friendlyError(roster.error)}</p> : null}
-      {roster.data && byDay.length === 0 ? <p className="surface p-6 text-center text-sm text-muted-foreground">{(roster.data.length === 0) ? "No school days in this range yet (weekends are left out)." : "Nobody matches."}</p> : null}
+      {roster.data && byDay.length === 0 ? <p className="surface p-6 text-center text-sm text-muted-foreground">{(roster.data.length === 0) ? "No school days in this range yet. Weekends, and holidays on the school calendar, are left out." : "Nobody matches."}</p> : null}
       {byDay.map(([day, list]) => (
         <section key={day} aria-label={dayText(day)} className="space-y-2">
           <h3 className="text-sm font-semibold">{dayText(day)}</h3>
