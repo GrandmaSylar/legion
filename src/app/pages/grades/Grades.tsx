@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { getClassScheme } from "../../../lib/data/schemes";
 import { listExamPeriods, windowState } from "../../../lib/data/examPeriods";
 import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ import {
   createAssessment,
   createStandardGesAssessments,
   deleteAssessment,
+  setAssessmentComponent,
   getClassBroadsheet,
   getClassGradingConfig,
   getMyTeachingAssignments,
@@ -245,6 +247,7 @@ function SubjectGradebookSection({
   const [newMaxScore, setNewMaxScore] = useState("20");
   const [newWeight, setNewWeight] = useState("10");
   const [newPeriod, setNewPeriod] = useState("");
+  const [newComponent, setNewComponent] = useState("");
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -296,12 +299,15 @@ function SubjectGradebookSection({
         type: newType,
         title: newTitle,
         maxScore: Number(newMaxScore),
-        weight: Number(newWeight),
+        // Under a scheme the part decides the share, so the assessment's own weight is only kept for the record.
+        weight: scheme ? (partOf(newComponent)?.weight ?? 1) : Number(newWeight),
         examPeriodId: newPeriod || null,
+        componentId: scheme ? newComponent || null : null,
       }),
     onSuccess: () => {
       setNewTitle("");
       setNewPeriod("");
+      setNewComponent("");
       setShowAddAssessment(false);
       invalidateGradebook();
     },
@@ -318,6 +324,13 @@ function SubjectGradebookSection({
   });
 
   const { can } = useCapabilities();
+  const schemeQuery = useQuery({ queryKey: ["class-scheme", classId], queryFn: () => getClassScheme(classId), staleTime: 30_000, retry: false });
+  const scheme = schemeQuery.data ?? null;
+  const partOf = (id: string | null) => scheme?.parts.find((p) => p.id === id) ?? null;
+  const moveMutation = useMutation({
+    mutationFn: (v: { id: string; componentId: string | null }) => setAssessmentComponent(v.id, v.componentId),
+    onSuccess: invalidateGradebook,
+  });
   const periodsQuery = useQuery({ queryKey: ["exam-periods"], queryFn: listExamPeriods, staleTime: 60_000, retry: false });
   const termPeriods = (periodsQuery.data ?? []).filter(
     (p) => p.termId === termId && (p.allClasses || p.classIds.includes(classId)),
@@ -534,14 +547,16 @@ function SubjectGradebookSection({
             </div>
             <p className="text-xs text-muted-foreground">
               {isNumeric
-                ? `Continuous Assessment (CA): ${weightsSummary.caWeight}% (target 30%) · Exam: ${weightsSummary.examWeight}% (target 70%) · Total weight: ${weightsSummary.totalWeight}%`
+                ? scheme
+                  ? `${scheme.name}: ${scheme.parts.map((p) => `${p.name} ${p.weight}%`).join(" · ")}`
+                  : `Continuous Assessment (CA): ${weightsSummary.caWeight}% (target 30%) · Exam: ${weightsSummary.examWeight}% (target 70%) · Total weight: ${weightsSummary.totalWeight}%`
                 : "Enter observations or milestone remarks for each pupil in this subject."}
             </p>
           </div>
 
           {isNumeric && canEdit ? (
             <div className="flex flex-wrap items-center gap-2">
-              {assessments.length === 0 ? (
+              {assessments.length === 0 && !scheme ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -578,8 +593,23 @@ function SubjectGradebookSection({
               >
                 <span className="font-medium">{a.title}</span>
                 <span className="tabular-nums text-muted-foreground">
-                  Max {a.maxScore} · Weight {a.weight}%
+                  {scheme && a.componentId ? `Max ${a.maxScore}` : `Max ${a.maxScore} · Weight ${a.weight}%`}
                 </span>
+                {scheme ? (
+                  canEdit ? (
+                    <select
+                      aria-label={`Part of the result for ${a.title}`} value={a.componentId ?? ""}
+                      disabled={moveMutation.isPending}
+                      onChange={(e) => moveMutation.mutate({ id: a.id, componentId: e.target.value || null })}
+                      className={cn("max-w-40 rounded-md border bg-background px-1.5 py-0.5 text-[11px]", a.componentId ? "border-border" : "border-amber-500 text-amber-700 dark:text-amber-300")}
+                    >
+                      <option value="">Not in a part (counts by its own points)</option>
+                      {scheme.parts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  ) : (
+                    <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px]">{partOf(a.componentId)?.name ?? "Not in a part"}</span>
+                  )
+                ) : null}
                 {periodOf(a.examPeriodId) ? (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                     {periodOf(a.examPeriodId)!.name}
@@ -652,17 +682,26 @@ function SubjectGradebookSection({
                 onChange={(e) => setNewMaxScore(e.target.value)}
               />
             </Field>
-            <Field label="Weight (%)" htmlFor="ass-weight">
-              <Input
-                id="ass-weight"
-                type="number"
-                min="1"
-                max="100"
-                step="any"
-                value={newWeight}
-                onChange={(e) => setNewWeight(e.target.value)}
-              />
-            </Field>
+            {scheme ? (
+              <Field label="Part of the result" htmlFor="ass-part">
+                <NativeSelect id="ass-part" value={newComponent} onChange={(e) => setNewComponent(e.target.value)} required>
+                  <option value="">Choose a part</option>
+                  {scheme.parts.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.weight}%)</option>)}
+                </NativeSelect>
+              </Field>
+            ) : (
+              <Field label="Weight (%)" htmlFor="ass-weight">
+                <Input
+                  id="ass-weight"
+                  type="number"
+                  min="1"
+                  max="100"
+                  step="any"
+                  value={newWeight}
+                  onChange={(e) => setNewWeight(e.target.value)}
+                />
+              </Field>
+            )}
             {termPeriods.length > 0 ? (
               <div className="sm:col-span-5">
                 <Field label="Exam period (optional)" htmlFor="ass-period">
@@ -685,7 +724,7 @@ function SubjectGradebookSection({
                 disabled={
                   addAssessmentMutation.isPending ||
                   !(Number(newMaxScore) > 0) ||
-                  !(Number(newWeight) > 0 && Number(newWeight) <= 100)
+                  (scheme ? !newComponent : !(Number(newWeight) > 0 && Number(newWeight) <= 100))
                 }
               >
                 Add

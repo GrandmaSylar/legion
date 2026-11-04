@@ -80,6 +80,8 @@ export interface Assessment {
   weight: number;
   /** The exam period this belongs to, if any. A period can limit when marks may be entered. */
   examPeriodId: string | null;
+  /** The part of the result (in the class's assessment scheme) this belongs to, if any. */
+  componentId: string | null;
 }
 
 export interface GradebookStudentRow {
@@ -422,7 +424,7 @@ export async function listAssessments(
   const rows = check(
     await supabase
       .from("assessments")
-      .select("id, class_subject_id, term_id, type, title, max_score, weight, exam_period_id, created_at")
+      .select("id, class_subject_id, term_id, type, title, max_score, weight, exam_period_id, component_id, created_at")
       .eq("class_subject_id", classSubjectId)
       .eq("term_id", termId)
       .order("created_at", { ascending: true }),
@@ -440,6 +442,7 @@ export async function listAssessments(
     maxScore: Number(r.max_score),
     weight: Number(r.weight),
     examPeriodId: (r.exam_period_id as string | null) ?? null,
+    componentId: (r.component_id as string | null) ?? null,
   }));
 }
 
@@ -451,10 +454,12 @@ export async function createAssessment(input: {
   maxScore: number;
   weight: number;
   examPeriodId?: string | null;
+  componentId?: string | null;
 }): Promise<void> {
   check(
     await supabase.from("assessments").insert({
       exam_period_id: input.examPeriodId || null,
+      component_id: input.componentId || null,
       class_subject_id: input.classSubjectId,
       term_id: input.termId,
       type: input.type,
@@ -501,6 +506,11 @@ export async function createStandardGesAssessments(
       },
     ]),
   );
+}
+
+/** Moves an assessment into another part of the class's scheme (or out of any part). Results are recalculated. */
+export async function setAssessmentComponent(id: string, componentId: string | null): Promise<void> {
+  check(await supabase.from("assessments").update({ component_id: componentId }).eq("id", id));
 }
 
 export async function deleteAssessment(id: string): Promise<void> {
