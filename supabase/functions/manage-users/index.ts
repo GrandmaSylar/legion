@@ -3,9 +3,10 @@
 // Creating a login needs the service role key, which must never reach the
 // browser, so it lives here. Because the service role bypasses row level
 // security, every check that RLS would normally do is repeated below:
-//   - the caller must be an active school_admin or developer,
+//   - the caller must hold the matching users action (a developer holds every action),
 //   - every target must belong to the caller's school,
-//   - only a developer may touch developer or super_admin accounts or grant those roles.
+//   - only a developer may touch developer or super_admin accounts or grant those roles,
+//   - nobody can give a role whose preset of actions they do not hold in full themselves.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const CORS = {
@@ -74,11 +75,26 @@ Deno.serve(async (req) => {
     const { data: myRoleRows } = await admin.from("user_roles").select("role").eq("profile_id", me.id);
     const myRoles = (myRoleRows ?? []).map((r) => r.role as string);
     const isDev = myRoles.includes("developer");
-    if (!isDev && !myRoles.includes("school_admin")) {
+    // What this person may do comes from the actions switched on for them (a developer holds every action).
+    const { data: heldRows } = await admin.from("user_capabilities").select("capability, expires_at").eq("profile_id", me.id);
+    const holds = new Set((heldRows ?? []).filter((r) => !r.expires_at || Date.parse(r.expires_at as string) > Date.now()).map((r) => r.capability as string));
+    const can = (a: string) => isDev || holds.has(a);
+    const need = (a: string, message: string) => { if (!can(a)) throw new HttpError(403, message); };
+    if (!["users.view", "users.create", "users.edit", "users.reset_password"].some(can)) {
       throw new HttpError(403, "You do not have permission to manage users.");
     }
     const schoolId = profile.school_id as string;
     const assignable = isDev ? [...ADMIN_ASSIGNABLE, "developer"] : ADMIN_ASSIGNABLE;
+
+    // Giving a role also gives its preset of actions, so a person can only give a role whose preset
+    // they hold in full themselves (a developer may give any).
+    async function checkReach(roles: string[]) {
+      if (isDev || roles.length === 0) return;
+      const { data } = await admin.from("access_preset_capabilities").select("role, capability").in("role", roles);
+      if ((data ?? []).some((r) => !holds.has(r.capability as string))) {
+        throw new HttpError(403, "You cannot give a role that carries more access than you have yourself.");
+      }
+    }
 
     // Load a target and refuse anything outside the caller's reach.
     async function target(id: string) {
@@ -100,6 +116,7 @@ Deno.serve(async (req) => {
 
     // ── create ────────────────────────────────────────────────────────────────
     if (action === "create") {
+      need("users.create", "You do not have permission to create logins.");
       const email = str(body.email).toLowerCase();
       const fullName = str(body.fullName);
       const phone = str(body.phone);
@@ -110,6 +127,7 @@ Deno.serve(async (req) => {
       if (!fullName) throw new HttpError(400, "Enter the person's name.");
       checkPassword(password);
       checkRoles(roles);
+      await checkReach(roles);
 
       const { data: created, error: createError } = await admin.auth.admin.createUser({
         email, password, email_confirm: true,
@@ -166,6 +184,7 @@ Deno.serve(async (req) => {
 
     // ── update ────────────────────────────────────────────────────────────────
     if (action === "update") {
+      need("users.edit", "You do not have permission to edit logins.");
       const t = await target(userId);
       const patch: Record<string, unknown> = {};
       if (body.fullName !== undefined) {
@@ -191,6 +210,7 @@ Deno.serve(async (req) => {
         }
         const removed = t.roles.filter((r) => !roles.includes(r));
         const added = roles.filter((r) => !t.roles.includes(r));
+        await checkReach(added);
         if (removed.some((r) => PRIVILEGED.includes(r)) && !isDev) throw new HttpError(403, "Only a developer can remove that role.");
         if (removed.includes("developer")) {
           const { count } = await admin.from("user_roles").select("profile_id", { count: "exact", head: true })
@@ -211,6 +231,7 @@ Deno.serve(async (req) => {
 
     // ── deactivate / reactivate ───────────────────────────────────────────────
     if (action === "set_active") {
+      need("users.edit", "You do not have permission to deactivate or reactivate logins.");
       const active = body.active === true;
       if (userId === me.id) throw new HttpError(400, "You cannot deactivate your own account.");
       await target(userId);
@@ -224,6 +245,7 @@ Deno.serve(async (req) => {
 
     // ── reset password ────────────────────────────────────────────────────────
     if (action === "reset_password") {
+      need("users.reset_password", "You do not have permission to reset passwords.");
       if (userId === me.id) throw new HttpError(400, "Change your own password from your account instead.");
       await target(userId);
       const password = str(body.tempPassword);

@@ -68,8 +68,8 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 - [x] Access screen on each staff person's edit page, and the app reading access from the new model (`useCapabilities`).
 - [ ] Move each database rule from roles to actions, one module at a time, with an equivalence test after each.
   - [x] Messages, Students, Attendance, Grades, Fees and Expenses, Notices, Staff, Analytics (screens by section)
-  - [ ] Timetable, Users, Settings, the audit trail
-  - [ ] Retire the old role checks once every module has moved
+  - [x] Timetable, Users, Settings, the audit trail
+  - [x] Every staff-facing rule is now decided by actions. Roles remain only as job labels that carry a preset, and as the parent and student portal accounts. Handing out a role is limited to roles whose preset you hold in full.
 - [ ] Features page and per-school settings.
 - [ ] Notification layer and email.
 - [ ] Shared navigation (section picker) and download menu components.

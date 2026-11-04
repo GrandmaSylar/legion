@@ -48,7 +48,7 @@ function topRole(roles: AppRole[]): string {
 /** The one main action for a screen, shown as the top bar's button. */
 const PRIMARY_ACTIONS: { path: string; label: string; to: string; roles: AppRole[]; action?: string }[] = [
   { path: "/students", label: "Add student", to: "/students/new", roles: ["school_admin", "receptionist"], action: "students.create" },
-  { path: "/users", label: "Add user", to: "/users/new", roles: ["school_admin"] },
+  { path: "/users", label: "Add user", to: "/users/new", roles: ["school_admin"], action: "users.create" },
 ];
 
 function RailLink({ to, end, label, Icon }: { to: string; end: boolean; label: string; Icon: LucideIcon }) {

@@ -695,7 +695,42 @@ begin
     ('so the HR officer can no longer edit a staff record', pg_temp.t_try(u_hr, 'update public.staff set phone = phone'), 'ok:0'),
     ('but still sees the staff directory', (pg_temp.t_count(u_hr,'staff') > 0)::text, 'true'),
     ('the HR officer is put back to the HR preset',
-       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''hr_officer''))', u_hr)), 'ok:1')
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''hr_officer''))', u_hr)), 'ok:1'),
+    -- Timetable, Users, Settings and the audit trail are decided by actions
+    ('a teacher edits the timetable only for their own classes, not any class',
+       (pg_temp.t_try(u_t1, 'select 1 where public.has_capability(''timetable.edit_own_classes'')') = 'ok:1'
+        and pg_temp.t_try(u_t1, 'select 1 where public.has_capability(''timetable.edit'')') = 'ok:0')::text, 'true'),
+    ('the principal edits any class timetable', pg_temp.t_try(u_prin, 'select 1 where public.has_capability(''timetable.edit'')'), 'ok:1'),
+    ('an admin does not hold delete-logins by default', pg_temp.t_try(u_admin, 'select 1 where public.has_capability(''users.delete'')'), 'ok:0'),
+    ('but the developer does', pg_temp.t_try(u_dev, 'select 1 where public.has_capability(''users.delete'')'), 'ok:1'),
+    ('the principal reads no audit trail', pg_temp.t_count(u_prin,'audit_log')::text, '0'),
+    ('the admin reads the audit trail', (pg_temp.t_count(u_admin,'audit_log') > 0)::text, 'true'),
+    ('a teacher reads only their own login record', pg_temp.t_count(u_t1,'profiles')::text, '1'),
+    ('the principal can see everyone''s name', (pg_temp.t_count(u_prin,'profiles') > 1)::text, 'true'),
+    ('a receptionist cannot change school settings', pg_temp.t_try(u_rec, 'update public.schools set name = name'), 'ok:0'),
+    ('the admin can', pg_temp.t_try(u_admin, 'update public.schools set name = name'), 'ok:1'),
+    ('a receptionist cannot add a class', pg_temp.t_try(u_rec, format('insert into public.classes (school_id,level_id,academic_year_id,section) values (%L,%L,%L,''Z'')', a, lvl, yr)), 'denied'),
+    -- handing out a role hands out its actions, so you can only give a role you hold in full
+    ('an admin gives the receptionist the teacher role',
+       pg_temp.t_try(u_admin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''teacher'')', u_rec, a)), 'ok:1'),
+    ('and the receptionist now holds the teacher actions', pg_temp.t_try(u_rec, 'select 1 where public.has_capability(''attendance.take_own_classes'')'), 'ok:1'),
+    ('the admin takes the teacher role away again',
+       pg_temp.t_try(u_admin, format('delete from public.user_roles where profile_id = %L and role = ''teacher''', u_rec)), 'ok:1'),
+    ('and the teacher actions go with it', pg_temp.t_try(u_rec, 'select 1 where public.has_capability(''attendance.take_own_classes'')'), 'ok:0'),
+    ('the developer lets the principal manage logins',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''principal'') || array[''users.edit''])', u_prin)), 'ok:1'),
+    ('the principal cannot give someone the admin role, which carries more than they hold',
+       pg_temp.t_try(u_prin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''school_admin'')', u_rec, a)), 'denied'),
+    ('nor the teacher role, which carries actions they lack',
+       pg_temp.t_try(u_prin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''teacher'')', u_rec, a)), 'denied'),
+    ('but can give a role with no extra actions',
+       pg_temp.t_try(u_prin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''parent'')', u_rec, a)), 'ok:1'),
+    ('and nobody but a developer can give the developer role',
+       pg_temp.t_try(u_admin, format('insert into public.user_roles (profile_id,school_id,role) values (%L,%L,''developer'')', u_rec, a)), 'denied'),
+    ('the principal is put back to the principal preset',
+       pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''principal''))', u_prin)), 'ok:1'),
+    ('and the extra parent role is removed again',
+       pg_temp.t_scalar(format('with x as (delete from public.user_roles where profile_id = %L and role = ''parent'' returning 1) select count(*)::text from x', u_rec)), '1')
   ) as x(label, got, want)
   loop
     if r.got = r.want then passes := passes + 1;

@@ -162,7 +162,7 @@ export default function App() {
                   <Route
                     path="/users/new"
                     element={
-                      <RequireRole allowed={["school_admin"]} module="users">
+                      <RequireRole allowed={["school_admin"]} module="users" anyAction={["users.create"]}>
                         <NewUserPage />
                       </RequireRole>
                     }
@@ -170,7 +170,7 @@ export default function App() {
                   <Route
                     path="/users/:id"
                     element={
-                      <RequireRole allowed={["school_admin"]} module="users">
+                      <RequireRole allowed={["school_admin"]} module="users" anyAction={["users.view"]}>
                         <UserPage />
                       </RequireRole>
                     }

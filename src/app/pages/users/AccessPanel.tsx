@@ -16,9 +16,6 @@ const MODULE_NAME: Record<string, string> = {
   users: "Users", settings: "School settings", access: "Who can do what", audit: "Audit trail",
 };
 
-/** Modules the database already decides by these actions. The rest still follow each person's role for now. */
-const DECIDED_BY_ACTIONS = new Set(["messages", "access", "students", "attendance", "grades", "fees", "expenses", "notices", "staff", "analytics"]);
-
 const PRESET_ROLES: AppRole[] = ["school_admin", "principal", "accountant", "teacher", "hr_officer", "receptionist", "librarian"];
 
 function errorText(e: unknown): string {
@@ -82,7 +79,7 @@ export function AccessPanel({ userId, userName, roles }: { userId: string; userN
           Switch on exactly what this person needs, module by module. Where you can only give something you hold yourself, other boxes are greyed out.
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Students, Attendance, Grades, Fees, Expenses, Notices, Staff, Analytics, Messages and this screen already follow these settings. Other modules still follow the person's role for now and will move over one at a time.
+          Every module now follows these settings. The person's job (Teacher, Bursar and so on) is only a starting point that fills them in, and what you tick here is what counts.
         </p>
       </div>
 
@@ -108,7 +105,6 @@ export function AccessPanel({ userId, userName, roles }: { userId: string; userN
                   <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 p-3 focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
                     <span className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="text-sm font-medium">{MODULE_NAME[module] ?? module}</span>
-                      {!DECIDED_BY_ACTIONS.has(module) ? <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs text-muted-foreground">Follows role for now</span> : null}
                     </span>
                     <span className="flex items-center gap-2 text-xs tabular-nums text-muted-foreground">
                       {held} of {keys.length}

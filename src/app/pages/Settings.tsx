@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { useCapabilities } from "../../lib/access/useCapabilities";
 import InstitutionTab from "./settings/InstitutionTab";
 import CalendarTab from "./settings/CalendarTab";
 import ClassesTab from "./settings/ClassesTab";
@@ -11,6 +12,10 @@ import { LegionLogo } from "../components/brand/LegionLogo";
 import { DevelopedByPhinova } from "../components/brand/DevelopedByPhinova";
 
 export default function Settings() {
+  // The audit trail and the timetable have their own actions; the rest is the school's set-up.
+  const { can, canAny } = useCapabilities();
+  const showTimetable = canAny(["timetable.view", "timetable.edit", "timetable.edit_own_classes"]);
+  const showAudit = can("audit.view");
   return (
     <div className="w-full space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -31,8 +36,8 @@ export default function Settings() {
             <TabsTrigger value="classes">Classes</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="grading">Grading</TabsTrigger>
-            <TabsTrigger value="timetable">Timetable</TabsTrigger>
-            <TabsTrigger value="audit">Security &amp; Audit Log</TabsTrigger>
+            {showTimetable ? <TabsTrigger value="timetable">Timetable</TabsTrigger> : null}
+            {showAudit ? <TabsTrigger value="audit">Security &amp; Audit Log</TabsTrigger> : null}
           </TabsList>
         </div>
         <TabsContent value="institution"><InstitutionTab /></TabsContent>
@@ -40,8 +45,8 @@ export default function Settings() {
         <TabsContent value="classes"><ClassesTab /></TabsContent>
         <TabsContent value="subjects"><SubjectsTab /></TabsContent>
         <TabsContent value="grading"><GradingTab /></TabsContent>
-        <TabsContent value="timetable"><TimetableTab /></TabsContent>
-        <TabsContent value="audit"><AuditLogTab /></TabsContent>
+        {showTimetable ? <TabsContent value="timetable"><TimetableTab /></TabsContent> : null}
+        {showAudit ? <TabsContent value="audit"><AuditLogTab /></TabsContent> : null}
       </Tabs>
 
       {/* Interactive System Dialogs Showcase & System Credit */}
