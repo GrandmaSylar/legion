@@ -1,4 +1,5 @@
 import { useCapabilities } from "../../lib/access/useCapabilities";
+import { MyTasksPanel } from "./tasks/MyTasksPanel";
 import { useFeatures } from "../../lib/access/useFeatures";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -331,6 +332,7 @@ function TodayPanel({ isAdmin }: { isAdmin: boolean }) {
 function StaffDashboard() {
   const { profile } = useAuth();
   const { can } = useCapabilities();
+  const { isOn } = useFeatures();
   const { data, isError, refetch } = useQuery({
     queryKey: ["dashboard"],
     queryFn: getDashboardStats,
@@ -382,6 +384,7 @@ function StaffDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {can("tasks.view_own") && isOn("tasks") ? <div className="lg:col-span-3"><MyTasksPanel /></div> : null}
         <ActivityPanel isAdmin={can("audit.view")} />
         <QuickActionsPanel />
         <TodayPanel isAdmin={can("settings.edit")} />
