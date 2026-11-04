@@ -3,6 +3,7 @@ import { SectionTabs } from "../components/SectionTabs";
 import { useCapabilities } from "../../lib/access/useCapabilities";
 import InstitutionTab from "./settings/InstitutionTab";
 import FeaturesTab from "./settings/FeaturesTab";
+import NotificationsTab from "./settings/NotificationsTab";
 import CalendarTab from "./settings/CalendarTab";
 import ClassesTab from "./settings/ClassesTab";
 import SubjectsTab from "./settings/SubjectsTab";
@@ -36,6 +37,7 @@ export default function Settings() {
         items={[
           { value: "institution", label: "Institution & receipts" },
           { value: "features", label: "Features" },
+          { value: "notifications", label: "Notifications" },
           { value: "calendar", label: "Academic year" },
           { value: "classes", label: "Classes" },
           { value: "subjects", label: "Subjects" },
@@ -46,6 +48,7 @@ export default function Settings() {
       >
         <TabsContent value="institution"><InstitutionTab /></TabsContent>
         <TabsContent value="features"><FeaturesTab /></TabsContent>
+        <TabsContent value="notifications"><NotificationsTab /></TabsContent>
         <TabsContent value="calendar"><CalendarTab /></TabsContent>
         <TabsContent value="classes"><ClassesTab /></TabsContent>
         <TabsContent value="subjects"><SubjectsTab /></TabsContent>
