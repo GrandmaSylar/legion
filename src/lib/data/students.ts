@@ -317,7 +317,7 @@ export interface StudentDetail {
   enrollments: { id: string; className: string; yearName: string; yearId: string; sitsBece: boolean }[];
   guardians: {
     id: string; fullName: string; phone: string | null; relationship: string | null; occupation: string | null;
-    email: string | null; employer: string | null; address: string | null; smsOptOut: boolean;
+    email: string | null; employer: string | null; address: string | null; smsOptOut: boolean; emailOptOut: boolean;
     isPrimary: boolean; isFeePayer: boolean; isEmergencyContact: boolean; canPickup: boolean;
   }[];
   bece: { examYear: number; indexNumber: string | null }[];
@@ -330,7 +330,7 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
       `*,
        enrollments(id, academic_year_id, academic_years(name, start_date), classes(section, levels(name, sits_bece))),
        student_guardians(is_primary, is_fee_payer, is_emergency_contact, can_pickup,
-         guardians(id, full_name, phone, relationship, occupation, email, employer, address, sms_opt_out)),
+         guardians(id, full_name, phone, relationship, occupation, email, employer, address, sms_opt_out, email_opt_out)),
        bece_registrations(exam_year, index_number)`,
     )
     .eq("id", id)
@@ -366,7 +366,7 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
     is_primary: boolean; is_fee_payer: boolean; is_emergency_contact: boolean; can_pickup: boolean;
     guardians: {
       id: string; full_name: string; phone: string | null; relationship: string | null; occupation: string | null;
-      email: string | null; employer: string | null; address: string | null; sms_opt_out: boolean;
+      email: string | null; employer: string | null; address: string | null; sms_opt_out: boolean; email_opt_out: boolean;
     } | null;
   };
   const guardians = ((r.student_guardians ?? []) as unknown as SG[])
@@ -381,6 +381,7 @@ export async function getStudent(id: string): Promise<StudentDetail | null> {
       employer: x.guardians!.employer,
       address: x.guardians!.address,
       smsOptOut: x.guardians!.sms_opt_out,
+      emailOptOut: x.guardians!.email_opt_out,
       isPrimary: x.is_primary,
       isFeePayer: x.is_fee_payer,
       isEmergencyContact: x.is_emergency_contact,
@@ -507,6 +508,11 @@ export async function addStudentGuardian(studentId: string, g: GuardianEntry) {
 /** Stops (or resumes) school SMS to one parent, for every child they have. */
 export async function setGuardianSmsOptOut(guardianId: string, optOut: boolean) {
   check(await supabase.from("guardians").update({ sms_opt_out: optOut }).eq("id", guardianId));
+}
+
+/** Stops (or resumes) school email to one parent, for every child they have. */
+export async function setGuardianEmailOptOut(guardianId: string, optOut: boolean) {
+  check(await supabase.from("guardians").update({ email_opt_out: optOut }).eq("id", guardianId));
 }
 
 export async function updateStudentGuardian(studentId: string, guardianId: string, g: GuardianEntry) {

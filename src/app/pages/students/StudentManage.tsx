@@ -8,7 +8,7 @@ import { useDebounced } from "../../../lib/useDebounced";
 import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import {
   RELATIONSHIPS, addStudentGuardian, changeStudentClass, deleteStudent, emptyGuardian, findGuardiansByPhone,
-  removeStudentGuardian, setGuardianSmsOptOut, updateStudentGuardian, type GuardianEntry, type StudentDetail,
+  removeStudentGuardian, setGuardianEmailOptOut, setGuardianSmsOptOut, updateStudentGuardian, type GuardianEntry, type StudentDetail,
 } from "../../../lib/data/students";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
@@ -161,6 +161,7 @@ function GuardianRow({ s, g, canEdit }: { s: StudentDetail; g: Guardian; canEdit
   const save = useMutation({ mutationFn: (e: GuardianEntry) => updateStudentGuardian(s.id, g.id, e), onSuccess: () => { setEditing(false); refresh(); } });
   const remove = useMutation({ mutationFn: () => removeStudentGuardian(s.id, g.id), onSuccess: refresh });
   const optOut = useMutation({ mutationFn: () => setGuardianSmsOptOut(g.id, !g.smsOptOut), onSuccess: refresh });
+  const emailOptOut = useMutation({ mutationFn: () => setGuardianEmailOptOut(g.id, !g.emailOptOut), onSuccess: refresh });
 
   return (
     <li className="space-y-2 py-2">
@@ -182,7 +183,7 @@ function GuardianRow({ s, g, canEdit }: { s: StudentDetail; g: Guardian; canEdit
       <div className="text-xs text-muted-foreground">
         {[g.isPrimary && "Main contact", g.isFeePayer && "Pays fees", g.isEmergencyContact && "Emergency contact", !g.canPickup && "May not collect", g.occupation].filter(Boolean).join(" · ")}
       </div>
-      {g.smsOptOut || canEdit ? (
+      {g.smsOptOut || g.emailOptOut || canEdit ? (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {g.smsOptOut ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">SMS stopped</span> : null}
           {canEdit ? (
@@ -190,7 +191,14 @@ function GuardianRow({ s, g, canEdit }: { s: StudentDetail; g: Guardian; canEdit
               {g.smsOptOut ? "Resume SMS" : "Stop SMS to this parent"}
             </Button>
           ) : null}
+          {g.emailOptOut ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">Email stopped</span> : null}
+          {canEdit ? (
+            <Button type="button" size="sm" variant="ghost" disabled={emailOptOut.isPending} onClick={() => emailOptOut.mutate()}>
+              {g.emailOptOut ? "Resume email" : "Stop email to this parent"}
+            </Button>
+          ) : null}
           {optOut.isError ? <span role="alert" className="text-destructive">{friendlyError(optOut.error)}</span> : null}
+          {emailOptOut.isError ? <span role="alert" className="text-destructive">{friendlyError(emailOptOut.error)}</span> : null}
         </div>
       ) : null}
       {editing ? (

@@ -8,6 +8,10 @@
 //     overlapping calls never send the same message twice,
 //   - and keeps the raw provider reply on each message to diagnose problems.
 //
+// Email goes out through Resend from a PhiNova address, with replies going to the school's own
+// email. Secrets: RESEND_API_KEY, EMAIL_FROM (the verified sending address). Optional
+// EMAIL_SANDBOX=true records every email as sent without contacting the provider.
+//
 // Secret (supabase secrets set): ARKESEL_API_KEY. The sender ID (3 to 11 letters
 // or digits, approved by Arkesel) is set per school in the app (message_settings);
 // ARKESEL_SENDER_ID is only a server-wide fallback for a school that has not set
@@ -19,6 +23,9 @@
 // defensively because their exact shape is not documented in those SDKs.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { countSegments, formatMoney, normalizePhone, parseNumberList, render } from "./sms.ts";
+import {
+  buildEmail, cleanHeader, friendlyEmailError, fromHeader, MAX_EMAIL_BODY, normalizeEmail, parseEmailList,
+} from "./email.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -34,6 +41,8 @@ class HttpError extends Error {
 }
 
 const API = "https://sms.arkesel.com/api/v2";
+const EMAIL_API = "https://api.resend.com";
+type Channel = "sms" | "email";
 const MAX_RECIPIENTS = 2000;
 const MAX_BODY = 640; // four SMS parts
 const SEND_BUDGET_MS = 100_000; // stay inside the function's time limit
@@ -58,6 +67,32 @@ function requireKey() {
   const c = apiConfig();
   if (!c) throw new HttpError(503, "SMS is not set up yet. The Arkesel API key has not been added to the server.");
   return c;
+}
+
+function emailConfig() {
+  const key = Deno.env.get("RESEND_API_KEY")?.trim();
+  const from = Deno.env.get("EMAIL_FROM")?.trim();
+  if (!key || !from) return null;
+  return { key, from, sandbox: Deno.env.get("EMAIL_SANDBOX")?.trim().toLowerCase() === "true" };
+}
+
+function requireEmail() {
+  const c = emailConfig();
+  if (!c) throw new HttpError(503, "Email is not set up yet. The email provider key and sending address have not been added to the server.");
+  return c;
+}
+
+async function resend(path: string, init: RequestInit = {}) {
+  const c = requireEmail();
+  const res = await fetch(`${EMAIL_API}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${c.key}`, "Content-Type": "application/json", Accept: "application/json", ...(init.headers ?? {}) },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const text = await res.text();
+  let body: Record<string, any> = {};
+  try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 500) }; }
+  return { status: res.status, body };
 }
 
 /** The sender ID in force for a school: its own setting, else the server-wide fallback. */
@@ -125,7 +160,7 @@ function parseSendReply(status: number, body: Record<string, any>) {
   return { ok, id: id ? String(id) : null, error: ok ? null : friendlyProviderError(complaint) };
 }
 
-async function sendOne(m: Record<string, any>, sandbox: boolean, sender: string) {
+async function sendSms(m: Record<string, any>, sandbox: boolean, sender: string) {
   const payload = { sender, message: m.body, recipients: [m.recipient_phone], sandbox };
   let last = { status: 0, body: {} as Record<string, any> };
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -148,12 +183,59 @@ async function sendOne(m: Record<string, any>, sandbox: boolean, sender: string)
   return parsed.ok;
 }
 
+async function sendEmail(
+  m: Record<string, any>, sandbox: boolean, school: { name: string; replyTo: string | null }, from: string,
+) {
+  const now = new Date().toISOString();
+  if (sandbox) {
+    await admin.from("messages").update({
+      status: "sent", sent_at: now, provider_message_id: `sandbox-${m.id}`, provider_response: { sandbox: true }, error: null,
+    }).eq("id", m.id);
+    return true;
+  }
+  const mail = buildEmail(m.body as string, school.name, school.replyTo);
+  const payload: Record<string, unknown> = {
+    from: fromHeader(school.name, from), to: [m.recipient_email], subject: cleanHeader(String(m.subject ?? "")) || school.name,
+    text: mail.text, html: mail.html,
+  };
+  if (school.replyTo) payload.reply_to = school.replyTo;
+  let last = { status: 0, body: {} as Record<string, any> };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      // The idempotency key makes a repeat harmless if our first try did reach the provider.
+      last = await resend("/emails", { method: "POST", body: JSON.stringify(payload), headers: { "Idempotency-Key": `message-${m.id}` } });
+    } catch (e) {
+      last = { status: 0, body: { error: e instanceof Error ? e.message : "network error" } };
+    }
+    if (last.status !== 0 && last.status !== 429 && last.status < 500) break;
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+  const id = last.body?.id ? String(last.body.id) : null;
+  const ok = last.status >= 200 && last.status < 300 && !!id;
+  await admin.from("messages").update(
+    ok
+      ? { status: "sent", sent_at: now, provider_message_id: id, provider_response: last.body, error: null }
+      : { status: "failed", provider_message_id: id, provider_response: last.body, error: friendlyEmailError(last.status, last.body) },
+  ).eq("id", m.id);
+  return ok;
+}
+
 /** Send what is queued for one batch until the time budget runs out. */
 async function processBatch(batchId: string) {
-  const { data: batch } = await admin.from("message_batches").select("sandbox, school_id").eq("id", batchId).maybeSingle();
+  const { data: batch } = await admin.from("message_batches").select("sandbox, school_id, channel").eq("id", batchId).maybeSingle();
   if (!batch) throw new HttpError(404, "Batch not found.");
-  const sender = await requireSender(batch.school_id as string);
-  const sandbox = !!batch.sandbox || apiConfig()?.forceSandbox === true;
+  let send: (m: Record<string, any>) => Promise<boolean>;
+  if ((batch.channel as Channel) === "email") {
+    const cfg = requireEmail();
+    const { data: sch } = await admin.from("schools").select("name, email").eq("id", batch.school_id).maybeSingle();
+    const school = { name: (sch?.name as string) ?? "School", replyTo: normalizeEmail(String(sch?.email ?? "")) };
+    const dry = !!batch.sandbox || cfg.sandbox;
+    send = (m) => sendEmail(m, dry, school, cfg.from);
+  } else {
+    const sender = await requireSender(batch.school_id as string);
+    const dry = !!batch.sandbox || apiConfig()?.forceSandbox === true;
+    send = (m) => sendSms(m, dry, sender);
+  }
   const started = Date.now();
   let sent = 0;
   let failed = 0;
@@ -161,7 +243,7 @@ async function processBatch(batchId: string) {
     const { data: claimed } = await admin.rpc("claim_messages", { p_batch: batchId, p_limit: CLAIM_SIZE });
     if (!claimed || claimed.length === 0) break;
     await pool(claimed as Record<string, any>[], CONCURRENCY, async (m) => {
-      if (await sendOne(m, sandbox, sender)) sent++;
+      if (await send(m)) sent++;
       else failed++;
     });
   }
@@ -178,42 +260,53 @@ interface Recipient {
   studentId: string | null;
   name: string;
   phone: string;
+  email: string;
   studentNames: string;
   className: string;
   balance: number;
 }
 
-async function loadAudience(schoolId: string, body: Record<string, unknown>) {
+async function loadAudience(schoolId: string, body: Record<string, unknown>, channel: Channel) {
   const audience = str(body.audience);
   if (!AUDIENCES.includes(audience)) throw new HttpError(400, "Choose who the message is for.");
   const classId = str(body.classId);
   if (audience === "class_parents" && !isUuid(classId)) throw new HttpError(400, "Choose a class.");
 
   const skipped = { noPhone: 0, badPhone: 0, duplicate: 0 };
+  const addressOf = (r: Recipient) => (channel === "email" ? r.email : r.phone);
   const recipients: Recipient[] = [];
   const seen = new Set<string>();
   const add = (r: Recipient) => {
-    if (seen.has(r.phone)) { skipped.duplicate++; return; }
-    seen.add(r.phone);
+    const key = addressOf(r);
+    if (seen.has(key)) { skipped.duplicate++; return; }
+    seen.add(key);
     recipients.push(r);
   };
 
   if (audience === "custom") {
-    const { valid, invalid, duplicates } = parseNumberList(str(body.customNumbers));
+    const { valid, invalid, duplicates } = channel === "email"
+      ? parseEmailList(str(body.customNumbers))
+      : parseNumberList(str(body.customNumbers));
     skipped.badPhone += invalid.length;
     skipped.duplicate += duplicates;
-    for (const phone of valid) add({ guardianId: null, staffId: null, studentId: null, name: "", phone, studentNames: "", className: "", balance: 0 });
+    for (const a of valid) {
+      add({
+        guardianId: null, staffId: null, studentId: null, name: "", phone: channel === "sms" ? a : "", email: channel === "email" ? a : "",
+        studentNames: "", className: "", balance: 0,
+      });
+    }
   } else {
     const { data, error } = await admin.rpc("messaging_audience", {
-      p_school: schoolId, p_kind: audience, p_class: audience === "class_parents" ? classId : null,
+      p_school: schoolId, p_kind: audience, p_class: audience === "class_parents" ? classId : null, p_channel: channel,
     });
     if (error) throw new HttpError(500, "The recipients could not be loaded.");
     for (const r of (data ?? []) as Record<string, any>[]) {
-      const phone = normalizePhone(String(r.phone ?? ""));
-      if (!phone) { skipped.badPhone++; continue; }
+      const phone = channel === "sms" ? normalizePhone(String(r.phone ?? "")) : "";
+      const email = channel === "email" ? normalizeEmail(String(r.email ?? "")) : "";
+      if (!(channel === "sms" ? phone : email)) { skipped.badPhone++; continue; }
       add({
         guardianId: r.guardian_id, staffId: r.staff_id, studentId: r.student_id, name: r.recipient_name ?? "",
-        phone, studentNames: r.student_names ?? "", className: r.class_name ?? "", balance: Number(r.balance ?? 0),
+        phone: phone ?? "", email: email ?? "", studentNames: r.student_names ?? "", className: r.class_name ?? "", balance: Number(r.balance ?? 0),
       });
     }
   }
@@ -221,7 +314,7 @@ async function loadAudience(schoolId: string, body: Record<string, unknown>) {
   return { audience, classId: classId || null, recipients, skipped };
 }
 
-async function loadBody(schoolId: string, body: Record<string, unknown>) {
+async function loadBody(schoolId: string, body: Record<string, unknown>, channel: Channel) {
   const key = str(body.templateKey);
   let text = str(body.body);
   let kind = "custom";
@@ -233,8 +326,11 @@ async function loadBody(schoolId: string, body: Record<string, unknown>) {
   }
   if (key && text) kind = key;
   if (!text) throw new HttpError(400, "Write a message first.");
-  if (text.length > MAX_BODY) throw new HttpError(400, `The message is too long (${text.length} of ${MAX_BODY} characters).`);
-  return { text, kind };
+  const max = channel === "email" ? MAX_EMAIL_BODY : MAX_BODY;
+  if (text.length > max) throw new HttpError(400, `The message is too long (${text.length} of ${max} characters).`);
+  const subject = cleanHeader(str(body.subject));
+  if (channel === "email" && !subject) throw new HttpError(400, "Write a subject for the email.");
+  return { text, kind, subject };
 }
 
 function messageFor(template: string, r: Recipient, school: string, date: string) {
@@ -280,11 +376,26 @@ Deno.serve(async (req) => {
     const { data: school } = await admin.from("schools").select("name").eq("id", schoolId).maybeSingle();
     const schoolName = (school?.name as string) ?? "School";
 
+    // Each way of sending is its own switch. A message action names its channel (SMS unless it says email).
+    const channel: Channel = str(body.channel) === "email" ? "email" : "sms";
+    const channelOn = async (c: Channel) => (await admin.rpc("school_feature_enabled", { p_school: schoolId, p_key: c })).data !== false;
+    async function assertChannelOn(c: Channel) {
+      if (!(await channelOn(c))) throw new HttpError(403, c === "email" ? "Email is switched off for this school." : "Text messages are switched off for this school.");
+    }
+
     function assertMayUse(audience: string) {
       if (feeOnly && audience !== "fee_balance") throw new HttpError(403, "You can only send fee reminders.");
     }
 
     // ── status: is SMS set up, and what is left on the account ───────────────
+    if (action === "status" && channel === "email") {
+      const cfg = emailConfig();
+      const { data: sch } = await admin.from("schools").select("email").eq("id", schoolId).maybeSingle();
+      return json({
+        configured: cfg !== null, from: cfg?.from ?? null, sandboxForced: cfg?.sandbox === true,
+        replyTo: normalizeEmail(String(sch?.email ?? "")), enabled: await channelOn("email"),
+      });
+    }
     if (action === "status") {
       const found = await senderFor(schoolId);
       const info = {
@@ -313,30 +424,38 @@ Deno.serve(async (req) => {
     // ── preview: who would get it, and exactly what they would read ──────────
     if (action === "preview") {
       assertMayUse(str(body.audience));
-      const a = await loadAudience(schoolId, body);
-      const msg = await loadBody(schoolId, body);
+      await assertChannelOn(channel);
+      const a = await loadAudience(schoolId, body, channel);
+      const msg = await loadBody(schoolId, body, channel);
       const date = todayLabel();
       const sample = a.recipients.slice(0, 3).map((r) => {
         const text = messageFor(msg.text, r, schoolName, date);
-        return { name: r.name, phone: r.phone, text, segments: countSegments(text).segments };
+        return {
+          name: r.name, phone: r.phone, email: r.email, text, segments: countSegments(text).segments,
+          subject: channel === "email" ? cleanHeader(messageFor(msg.subject, r, schoolName, date)) : null,
+        };
       });
-      const parts = a.recipients.reduce((n, r) => n + countSegments(messageFor(msg.text, r, schoolName, date)).segments, 0);
-      return json({ count: a.recipients.length, parts, skipped: a.skipped, sample });
+      const parts = channel === "email"
+        ? a.recipients.length
+        : a.recipients.reduce((n, r) => n + countSegments(messageFor(msg.text, r, schoolName, date)).segments, 0);
+      return json({ count: a.recipients.length, parts, skipped: a.skipped, sample, channel });
     }
 
     // ── send ──────────────────────────────────────────────────────────────────
     if (action === "send") {
       assertMayUse(str(body.audience));
-      requireKey();
-      await requireSender(schoolId);
-      const a = await loadAudience(schoolId, body);
-      const msg = await loadBody(schoolId, body);
+      await assertChannelOn(channel);
+      if (channel === "email") requireEmail();
+      else { requireKey(); await requireSender(schoolId); }
+      const a = await loadAudience(schoolId, body, channel);
+      const msg = await loadBody(schoolId, body, channel);
       if (a.recipients.length === 0) throw new HttpError(400, "There is nobody to send this to.");
       const sandbox = body.sandbox === true;
 
       const { data: batch, error: batchError } = await admin.from("message_batches").insert({
         school_id: schoolId, title: str(body.title) || msg.kind, kind: msg.kind, audience: a.audience,
-        class_id: a.classId, body_template: msg.text, sandbox, created_by: me.id,
+        class_id: a.classId, body_template: msg.text, sandbox, created_by: me.id, channel,
+        subject: channel === "email" ? msg.subject : null,
       }).select("id").single();
       if (batchError || !batch) throw new HttpError(500, "The send could not be started.");
 
@@ -344,9 +463,11 @@ Deno.serve(async (req) => {
       const rows = a.recipients.map((r) => {
         const text = messageFor(msg.text, r, schoolName, date);
         return {
-          school_id: schoolId, batch_id: batch.id, kind: msg.kind, recipient_name: r.name || null, recipient_phone: r.phone,
+          school_id: schoolId, batch_id: batch.id, kind: msg.kind, recipient_name: r.name || null, channel,
+          recipient_phone: channel === "sms" ? r.phone : null, recipient_email: channel === "email" ? r.email : null,
+          subject: channel === "email" ? cleanHeader(messageFor(msg.subject, r, schoolName, date)) : null,
           guardian_id: r.guardianId, staff_id: r.staffId, student_id: r.studentId, body: text,
-          segments: Math.max(countSegments(text).segments, 1), created_by: me.id,
+          segments: channel === "email" ? 1 : Math.max(countSegments(text).segments, 1), created_by: me.id,
         };
       });
       for (let i = 0; i < rows.length; i += 500) {
@@ -361,18 +482,18 @@ Deno.serve(async (req) => {
     if (action === "process") {
       const batchId = str(body.batchId);
       if (!isUuid(batchId)) throw new HttpError(400, "Invalid batch.");
-      const { data: b } = await admin.from("message_batches").select("school_id, audience").eq("id", batchId).maybeSingle();
+      const { data: b } = await admin.from("message_batches").select("school_id, audience, channel").eq("id", batchId).maybeSingle();
       if (!b || b.school_id !== schoolId) throw new HttpError(404, "Batch not found.");
       assertMayUse(b.audience as string);
-      requireKey();
+      await assertChannelOn(b.channel as Channel);
+      if (b.channel === "email") requireEmail(); else requireKey();
       return json({ batchId, ...(await processBatch(batchId)) });
     }
 
     // ── refresh: ask Arkesel what became of the messages already sent ────────
     if (action === "refresh") {
-      requireKey();
       const batchId = str(body.batchId);
-      let q = admin.from("messages").select("id, provider_message_id, provider_response, batch_id")
+      let q = admin.from("messages").select("id, provider_message_id, provider_response, batch_id, channel")
         .eq("school_id", schoolId).eq("status", "sent").not("provider_message_id", "is", null)
         .lt("sent_at", new Date(Date.now() - 20_000).toISOString()).limit(100);
       if (isUuid(batchId)) q = q.eq("batch_id", batchId);
@@ -385,8 +506,21 @@ Deno.serve(async (req) => {
       }
       let delivered = 0;
       let failed = 0;
-      await pool((open ?? []).filter((m) => !sandboxBatches.has(m.batch_id as string)), 4, async (m) => {
+      const toCheck = (open ?? []).filter((m) => !sandboxBatches.has(m.batch_id as string));
+      if (toCheck.some((m) => m.channel === "email")) requireEmail();
+      if (toCheck.some((m) => m.channel !== "email")) requireKey();
+      await pool(toCheck, 4, async (m) => {
         try {
+          if (m.channel === "email") {
+            // Resend reports the latest thing that happened to the email.
+            const r = await resend(`/emails/${encodeURIComponent(m.provider_message_id as string)}`);
+            const state = String(r.body?.last_event ?? "").toLowerCase();
+            const patch: Record<string, unknown> = { provider_response: { send: m.provider_response, status: r.body } };
+            if (/bounce|complain|fail|reject/.test(state)) { patch.status = "failed"; patch.error = state.includes("complain") ? "The recipient marked it as spam." : `Not delivered (${state}).`; failed++; }
+            else if (/deliver/.test(state) && !/delay/.test(state)) { patch.status = "delivered"; patch.delivered_at = new Date().toISOString(); delivered++; }
+            await admin.from("messages").update(patch).eq("id", m.id);
+            return;
+          }
           const r = await arkesel(`/sms/${encodeURIComponent(m.provider_message_id as string)}`);
           const d = (r.body?.data ?? r.body) as Record<string, any>;
           const state = String(d?.status ?? d?.delivery_status ?? "").toLowerCase();
@@ -396,16 +530,17 @@ Deno.serve(async (req) => {
           await admin.from("messages").update(patch).eq("id", m.id);
         } catch { /* try again on the next refresh */ }
       });
-      return json({ checked: (open ?? []).length - sandboxBatches.size, delivered, failed });
+      return json({ checked: toCheck.length, delivered, failed });
     }
 
     // ── retry: put failed messages back in the queue (never ones that may have sent) ─
     if (action === "retry") {
       const batchId = str(body.batchId);
       if (!isUuid(batchId)) throw new HttpError(400, "Invalid batch.");
-      const { data: b } = await admin.from("message_batches").select("school_id, audience").eq("id", batchId).maybeSingle();
+      const { data: b } = await admin.from("message_batches").select("school_id, audience, channel").eq("id", batchId).maybeSingle();
       if (!b || b.school_id !== schoolId) throw new HttpError(404, "Batch not found.");
       assertMayUse(b.audience as string);
+      await assertChannelOn(b.channel as Channel);
       const { data: requeued } = await admin.from("messages").update({ status: "queued", error: null })
         .eq("batch_id", batchId).eq("status", "failed").is("provider_message_id", null)
         .not("error", "ilike", "Interrupted%").lt("attempts", 3).select("id");
@@ -415,25 +550,32 @@ Deno.serve(async (req) => {
     // ── test: one message to one number, showing what Arkesel answered ───────
     if (action === "test") {
       if (!canManage) throw new HttpError(403, "You do not have permission to send a test message.");
-      requireKey();
-      await requireSender(schoolId);
-      const phone = normalizePhone(str(body.to));
-      if (!phone) throw new HttpError(400, "That phone number does not look right.");
+      await assertChannelOn(channel);
+      const isEmail = channel === "email";
+      if (isEmail) requireEmail();
+      else { requireKey(); await requireSender(schoolId); }
+      const phone = isEmail ? null : normalizePhone(str(body.to));
+      const address = isEmail ? normalizeEmail(str(body.to)) : null;
+      if (isEmail ? !address : !phone) throw new HttpError(400, isEmail ? "That email address does not look right." : "That phone number does not look right.");
       const text = str(body.body) || `${schoolName}: this is a test message.`;
-      if (text.length > MAX_BODY) throw new HttpError(400, "The message is too long.");
+      const max = isEmail ? MAX_EMAIL_BODY : MAX_BODY;
+      if (text.length > max) throw new HttpError(400, "The message is too long.");
       const sandbox = body.sandbox === true;
+      const subject = isEmail ? cleanHeader(str(body.subject)) || `Test email from ${schoolName}` : null;
 
       const { data: batch } = await admin.from("message_batches").insert({
-        school_id: schoolId, title: "Test message", kind: "test", audience: "custom", body_template: text, sandbox, created_by: me.id,
+        school_id: schoolId, title: isEmail ? "Test email" : "Test message", kind: "test", audience: "custom",
+        body_template: text, sandbox, created_by: me.id, channel, subject,
       }).select("id").single();
       const { data: row } = await admin.from("messages").insert({
-        school_id: schoolId, batch_id: batch!.id, kind: "test", recipient_phone: phone, body: text,
-        segments: Math.max(countSegments(text).segments, 1), created_by: me.id,
+        school_id: schoolId, batch_id: batch!.id, kind: "test", channel, recipient_phone: phone, recipient_email: address, subject,
+        body: text, segments: isEmail ? 1 : Math.max(countSegments(text).segments, 1), created_by: me.id,
       }).select("id").single();
       await processBatch(batch!.id);
       const { data: result } = await admin.from("messages").select("status, error, provider_message_id, provider_response")
         .eq("id", row!.id).maybeSingle();
-      return json({ sandbox: sandbox || apiConfig()?.forceSandbox === true, ...result });
+      const forced = isEmail ? emailConfig()?.sandbox === true : apiConfig()?.forceSandbox === true;
+      return json({ sandbox: sandbox || forced, ...result });
     }
 
     throw new HttpError(400, "Unknown action.");

@@ -1,5 +1,5 @@
-// Data layer for SMS messaging. Sending goes through the `messaging` Edge Function
-// (which holds the Arkesel key and decides the recipients); reading the log and
+// Data layer for messaging by SMS and email. Sending goes through the `messaging` Edge Function
+// (which holds the provider keys and decides the recipients); reading the log and
 // editing templates goes through the database, where row level security applies.
 import { supabase } from "../supabase";
 import { invokeFunction } from "./functions";
@@ -17,6 +17,10 @@ export const AUDIENCE_LABELS: Record<Audience, string> = {
   custom: "Phone numbers I type in",
 };
 
+export type Channel = "sms" | "email";
+
+export const CHANNEL_LABELS: Record<Channel, string> = { sms: "Text message (SMS)", email: "Email" };
+
 export type MessageStatus = "queued" | "sending" | "sent" | "delivered" | "failed" | "cancelled";
 
 // ─── Provider status ─────────────────────────────────────────────────────────
@@ -33,6 +37,18 @@ export interface SmsStatus {
 }
 
 export const getSmsStatus = () => invokeFunction<SmsStatus>("messaging", { action: "status" });
+
+export interface EmailStatus {
+  configured: boolean;
+  /** The PhiNova address emails are sent from. */
+  from: string | null;
+  sandboxForced: boolean;
+  /** The school's own email, where replies go. Null when the school has not set one. */
+  replyTo: string | null;
+  enabled: boolean;
+}
+
+export const getEmailStatus = () => invokeFunction<EmailStatus>("messaging", { action: "status", channel: "email" });
 
 /** The school's own sender ID, or null when it relies on the server-wide one. */
 export async function getSenderSetting(): Promise<string | null> {
@@ -54,6 +70,9 @@ export async function saveSenderSetting(senderId: string): Promise<void> {
 // ─── Preview and send ────────────────────────────────────────────────────────
 
 export interface Draft {
+  channel?: Channel;
+  /** Email only. Placeholders such as {student} work here too. */
+  subject?: string;
   audience: Audience;
   classId?: string;
   customNumbers?: string;
@@ -66,7 +85,7 @@ export interface Preview {
   /** Total SMS parts across everyone, which is what is billed. */
   parts: number;
   skipped: { noPhone: number; badPhone: number; duplicate: number };
-  sample: { name: string; phone: string; text: string; segments: number }[];
+  sample: { name: string; phone: string; email: string; subject: string | null; text: string; segments: number }[];
 }
 
 export const previewMessage = (d: Draft) => invokeFunction<Preview>("messaging", { action: "preview", ...d });
@@ -100,8 +119,8 @@ export interface TestResult {
   provider_response: unknown;
 }
 
-export const sendTest = (to: string, body: string, sandbox: boolean) =>
-  invokeFunction<TestResult>("messaging", { action: "test", to, body, sandbox });
+export const sendTest = (to: string, body: string, sandbox: boolean, channel: Channel = "sms", subject?: string) =>
+  invokeFunction<TestResult>("messaging", { action: "test", to, body, sandbox, channel, subject });
 
 // ─── History ─────────────────────────────────────────────────────────────────
 
@@ -110,6 +129,7 @@ export interface BatchRow {
   title: string;
   kind: string;
   audience: Audience;
+  channel: Channel;
   sandbox: boolean;
   createdAt: string;
   total: number;
@@ -127,6 +147,7 @@ export async function listBatches(limit = 50): Promise<BatchRow[]> {
     title: r.title as string,
     kind: r.kind as string,
     audience: r.audience as Audience,
+    channel: ((r.channel as Channel | null) ?? "sms"),
     sandbox: r.sandbox as boolean,
     createdAt: r.created_at as string,
     total: Number(r.total),
@@ -140,7 +161,10 @@ export async function listBatches(limit = 50): Promise<BatchRow[]> {
 export interface MessageRow {
   id: string;
   recipientName: string | null;
+  channel: Channel;
+  /** The phone number for a text message, the email address for an email. */
   phone: string;
+  subject: string | null;
   body: string;
   segments: number;
   status: MessageStatus;
@@ -151,7 +175,7 @@ export interface MessageRow {
 export async function listMessages(batchId: string): Promise<MessageRow[]> {
   const { data, error } = await supabase
     .from("messages")
-    .select("id, recipient_name, recipient_phone, body, segments, status, error, sent_at")
+    .select("id, recipient_name, recipient_phone, recipient_email, channel, subject, body, segments, status, error, sent_at")
     .eq("batch_id", batchId)
     .order("created_at")
     .limit(500);
@@ -159,7 +183,9 @@ export async function listMessages(batchId: string): Promise<MessageRow[]> {
   return (data ?? []).map((m) => ({
     id: m.id,
     recipientName: m.recipient_name,
-    phone: m.recipient_phone,
+    channel: (m.channel as Channel) ?? "sms",
+    phone: (m.channel === "email" ? m.recipient_email : m.recipient_phone) ?? "",
+    subject: m.subject,
     body: m.body,
     segments: m.segments,
     status: m.status as MessageStatus,

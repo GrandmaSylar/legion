@@ -71,8 +71,8 @@ function BatchDetail({ batch }: { batch: BatchRow }) {
           action="messages.download" label="Download this list" disabled={!messages.data?.length}
           getTable={() => ({
             title: "Messages sent", filename: "messages",
-            columns: ["Recipient", "Phone", "Message", "Parts", "Status", "Problem", "Sent"],
-            rows: (messages.data ?? []).map((m) => [m.recipientName ?? "", m.phone, m.body, m.segments, m.status, m.error ?? "", m.sentAt ?? ""]),
+            columns: ["Recipient", "Way", "Phone or email", "Subject", "Message", "SMS parts", "Status", "Problem", "Sent"],
+            rows: (messages.data ?? []).map((m) => [m.recipientName ?? "", m.channel === "email" ? "Email" : "SMS", m.phone, m.subject ?? "", m.body, m.channel === "email" ? "" : m.segments, m.status, m.error ?? "", m.sentAt ?? ""]),
           })}
         />
       </div>
@@ -87,7 +87,10 @@ function BatchDetail({ batch }: { batch: BatchRow }) {
               <span className="break-words font-medium">{m.recipientName || m.phone}</span>
               <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_STYLE[m.status])}>{m.status}</span>
             </div>
-            <div className="text-xs tabular-nums text-muted-foreground">{m.recipientName ? `${m.phone} · ` : ""}{m.segments} {m.segments === 1 ? "part" : "parts"}</div>
+            <div className="break-all text-xs tabular-nums text-muted-foreground">
+              {m.recipientName ? `${m.phone}` : ""}{m.channel === "email" ? "" : <>{m.recipientName ? " · " : ""}{m.segments} {m.segments === 1 ? "part" : "parts"}</>}
+            </div>
+            {m.subject ? <p className="break-words text-sm font-medium">{m.subject}</p> : null}
             <p className="whitespace-pre-wrap break-words text-muted-foreground">{m.body}</p>
             {m.error ? <p role="alert" className="text-xs text-destructive">{m.error}</p> : null}
           </li>
@@ -118,6 +121,7 @@ export default function HistoryTab() {
             <span className="min-w-0">
               <span className="flex flex-wrap items-center gap-2">
                 <span className="break-words text-sm font-medium">{b.title}</span>
+                <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-medium text-muted-foreground">{b.channel === "email" ? "Email" : "SMS"}</span>
                 {b.sandbox ? <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">Dry run</span> : null}
               </span>
               <span className="block text-xs text-muted-foreground">{AUDIENCE_LABELS[b.audience]} · {when(b.createdAt)}</span>

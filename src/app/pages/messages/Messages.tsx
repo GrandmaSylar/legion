@@ -14,7 +14,7 @@ export default function Messages() {
       <div>
         <h1 className="text-2xl font-semibold">Messages</h1>
         <p className="text-sm text-muted-foreground">
-          Send SMS to parents and staff, see what was delivered, and keep your standard wording ready.
+          Send SMS or email to parents and staff, see what was delivered, and keep your standard wording ready.
         </p>
       </div>
 
