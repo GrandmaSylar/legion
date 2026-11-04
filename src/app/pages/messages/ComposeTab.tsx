@@ -5,9 +5,11 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { countSegments, PLACEHOLDERS } from "../../../lib/sms";
 import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import {
-  AUDIENCE_LABELS, continueBatch, getSmsStatus, listTemplates, previewMessage, sendMessage,
-  type Audience, type Draft, type SendResult,
+  AUDIENCE_LABELS, CHANNEL_LABELS, continueBatch, getEmailStatus, getSmsStatus, listTemplates, previewMessage, sendMessage,
+  type Audience, type Channel, type Draft, type SendResult,
 } from "../../../lib/data/messaging";
+import { useFeatures } from "../../../lib/access/useFeatures";
+import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Textarea } from "../../components/ui/textarea";
 import { Field, FormMessage, NativeSelect, controlClass } from "../../components/fields";
@@ -25,7 +27,16 @@ export default function ComposeTab() {
   const { feeOnly } = useMessagingRights();
   const audiences = feeOnly ? (["fee_balance"] as Audience[]) : ALL_AUDIENCES;
 
-  const status = useQuery({ queryKey: ["sms-status"], queryFn: getSmsStatus, staleTime: 60_000, retry: false });
+  const { isOn } = useFeatures();
+  const channels = (["sms", "email"] as Channel[]).filter((c) => isOn(c));
+  const [picked, setPicked] = useState<Channel>("sms");
+  // If the chosen way has been switched off, fall back to one that is still on.
+  const channel: Channel = channels.includes(picked) ? picked : (channels[0] ?? "sms");
+  const isEmail = channel === "email";
+  const smsStatus = useQuery({ queryKey: ["sms-status"], queryFn: getSmsStatus, staleTime: 60_000, retry: false, enabled: !isEmail });
+  const emailStatus = useQuery({ queryKey: ["email-status"], queryFn: getEmailStatus, staleTime: 60_000, retry: false, enabled: isEmail });
+  const status = { data: isEmail ? emailStatus.data : smsStatus.data };
+  const [subject, setSubject] = useState("");
   const templates = useQuery({ queryKey: ["message-templates"], queryFn: listTemplates });
   const years = useQuery({ queryKey: ["academic-years"], queryFn: listAcademicYears });
   const year = years.data?.find((y) => y.isCurrent) ?? null;
@@ -55,6 +66,7 @@ export default function ComposeTab() {
   }
 
   const draft: Draft = {
+    channel, subject: isEmail ? subject : undefined,
     audience, body, templateKey: templateKey || undefined,
     classId: audience === "class_parents" ? classId : undefined,
     customNumbers: audience === "custom" ? customNumbers : undefined,
@@ -78,6 +90,7 @@ export default function ComposeTab() {
       setProgress(null);
       void qc.invalidateQueries({ queryKey: ["message-batches"] });
       void qc.invalidateQueries({ queryKey: ["sms-status"] });
+      void qc.invalidateQueries({ queryKey: ["email-status"] });
     },
     onError: () => setProgress(null),
   });
@@ -106,9 +119,10 @@ export default function ComposeTab() {
   };
 
   const seg = countSegments(body);
-  const ready = body.trim().length > 0 && (audience !== "class_parents" || !!classId) && (audience !== "custom" || customNumbers.trim().length > 0);
+  const ready = body.trim().length > 0 && (!isEmail || subject.trim().length > 0) && (audience !== "class_parents" || !!classId) && (audience !== "custom" || customNumbers.trim().length > 0);
   const p = preview.data;
-  const needsCredit = p && status.data?.balance != null && p.parts > status.data.balance;
+  const smsData = smsStatus.data;
+  const needsCredit = !isEmail && p && smsData?.balance != null && p.parts > smsData.balance;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
@@ -116,8 +130,28 @@ export default function ComposeTab() {
         {status.data && !status.data.configured ? (
           <section className="surface flex items-start gap-3 p-4 text-sm" role="status">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" aria-hidden />
-            <span>SMS is not connected yet, so you can preview a message but not send it. See the Setup tab.</span>
+            <span>{isEmail ? "Email" : "SMS"} is not connected yet, so you can preview a message but not send it. See the Setup tab.</span>
           </section>
+        ) : null}
+
+        {channels.length === 0 ? (
+          <section className="surface p-4 text-sm" role="status">Text messages and email are both switched off for this school. A school administrator can switch them on under Settings, Features.</section>
+        ) : null}
+        {channels.length > 1 ? (
+          <div role="radiogroup" aria-label="How to send" className="grid grid-cols-2 gap-2">
+            {channels.map((c) => (
+              <button
+                key={c} type="button" role="radio" aria-checked={c === channel}
+                onClick={() => { setPicked(c); touch(); }}
+                className={cn(
+                  "min-h-12 rounded-xl border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[var(--ring)]",
+                  c === channel ? "border-primary bg-primary/10" : "border-border hover:bg-foreground/5",
+                )}
+              >
+                {CHANNEL_LABELS[c]}
+              </button>
+            ))}
+          </div>
         ) : null}
 
         <section className="surface space-y-4 p-4">
@@ -136,8 +170,8 @@ export default function ComposeTab() {
             </Field>
           ) : null}
           {audience === "custom" ? (
-            <Field label="Phone numbers (one per line, or separated by commas)" htmlFor="msg-numbers">
-              <Textarea id="msg-numbers" rows={3} value={customNumbers} onChange={(e) => { setCustomNumbers(e.target.value); touch(); }} placeholder={"024 412 3456\n020 123 4567"} />
+            <Field label={isEmail ? "Email addresses (one per line, or separated by commas)" : "Phone numbers (one per line, or separated by commas)"} htmlFor="msg-numbers">
+              <Textarea id="msg-numbers" rows={3} value={customNumbers} onChange={(e) => { setCustomNumbers(e.target.value); touch(); }} placeholder={isEmail ? "ama@example.com\nkofi@example.com" : "024 412 3456\n020 123 4567"} />
             </Field>
           ) : null}
           {feeOnly ? <p className="text-xs text-muted-foreground">As accountant you can send fee reminders to parents who owe.</p> : null}
@@ -151,8 +185,13 @@ export default function ComposeTab() {
               {templates.data?.filter((t) => t.isActive).map((t) => <option key={t.id} value={t.key}>{t.name}</option>)}
             </NativeSelect>
           </Field>
+          {isEmail ? (
+            <Field label="Subject" htmlFor="msg-subject">
+              <Input id="msg-subject" value={subject} maxLength={150} onChange={(e) => { setSubject(e.target.value); touch(); }} placeholder="e.g. Fees reminder for {student}" />
+            </Field>
+          ) : null}
           <Field label="Message" htmlFor="msg-body">
-            <textarea id="msg-body" ref={box} rows={5} value={body} onChange={(e) => { setBody(e.target.value); touch(); }} placeholder="Dear {parent}, …" maxLength={640} className={cn(controlClass, "h-auto min-h-28 py-2")} />
+            <textarea id="msg-body" ref={box} rows={5} value={body} onChange={(e) => { setBody(e.target.value); touch(); }} placeholder="Dear {parent}, …" maxLength={isEmail ? 5000 : 640} className={cn(controlClass, "h-auto min-h-28 py-2")} />
           </Field>
           <div className="flex flex-wrap items-center gap-2" aria-label="Insert a placeholder">
             <span className="text-xs text-muted-foreground">Fill in automatically:</span>
@@ -166,7 +205,9 @@ export default function ComposeTab() {
             ))}
           </div>
           <p className="text-xs tabular-nums text-muted-foreground">
-            {seg.length} characters · {seg.segments} SMS {seg.segments === 1 ? "part" : "parts"} each ({seg.encoding}). Names and amounts change the length, so check the preview.
+            {isEmail
+              ? `${body.length} of 5000 characters. Each email says it comes from your school through PhiNova, and replies go to the school's own email address.`
+              : `${seg.length} characters · ${seg.segments} SMS ${seg.segments === 1 ? "part" : "parts"} each (${seg.encoding}). Names and amounts change the length, so check the preview.`}
           </p>
         </section>
 
@@ -178,7 +219,7 @@ export default function ComposeTab() {
           </Button>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={sandbox || !!status.data?.sandboxForced} disabled={!!status.data?.sandboxForced} onChange={(e) => setSandbox(e.target.checked)} className="size-4 accent-[var(--primary)]" />
-            Dry run (nothing is delivered or charged)
+            {isEmail ? "Dry run (nothing is emailed)" : "Dry run (nothing is delivered or charged)"}
           </label>
         </div>
       </div>
@@ -196,7 +237,7 @@ export default function ComposeTab() {
           <section className="surface space-y-3 p-4">
             <h2 className="text-base font-medium">Preview</h2>
             <p className="text-sm tabular-nums">
-              <strong>{p.count}</strong> {p.count === 1 ? "person" : "people"} · <strong>{p.parts}</strong> SMS {p.parts === 1 ? "part" : "parts"} in total
+              <strong>{p.count}</strong> {p.count === 1 ? "person" : "people"}{isEmail ? "" : <> · <strong>{p.parts}</strong> SMS {p.parts === 1 ? "part" : "parts"} in total</>}
             </p>
             {p.skipped.badPhone + p.skipped.duplicate > 0 ? (
               <p className="text-xs text-muted-foreground">
@@ -209,13 +250,14 @@ export default function ComposeTab() {
             <ul className="space-y-2">
               {p.sample.map((s, i) => (
                 <li key={i} className="rounded-xl border border-border p-3 text-sm">
-                  <div className="mb-1 text-xs text-muted-foreground">To {s.name || "number"} · {s.phone}</div>
+                  <div className="mb-1 text-xs text-muted-foreground">To {s.name || (isEmail ? "address" : "number")} · {isEmail ? s.email : s.phone}</div>
+                  {isEmail && s.subject ? <div className="mb-1 break-words font-medium">{s.subject}</div> : null}
                   <p className="whitespace-pre-wrap break-words">{s.text}</p>
-                  <div className="mt-1 text-xs tabular-nums text-muted-foreground">{s.segments} {s.segments === 1 ? "part" : "parts"}</div>
+                  {isEmail ? null : <div className="mt-1 text-xs tabular-nums text-muted-foreground">{s.segments} {s.segments === 1 ? "part" : "parts"}</div>}
                 </li>
               ))}
             </ul>
-            {needsCredit ? <p className="text-sm text-destructive" role="alert">This needs {p.parts} SMS credits and you have {status.data?.balance}.</p> : null}
+            {needsCredit ? <p className="text-sm text-destructive" role="alert">This needs {p.parts} SMS credits and you have {smsData?.balance}.</p> : null}
 
             {p.count > 0 && !confirming ? (
               <Button disabled={send.isPending || status.data?.configured === false} onClick={() => setConfirming(true)}>
@@ -225,7 +267,7 @@ export default function ComposeTab() {
             {confirming ? (
               <div className="space-y-2 rounded-xl border border-primary/40 bg-primary/5 p-3">
                 <p className="text-sm font-medium">
-                  {sandbox || status.data?.sandboxForced ? "Dry run: " : ""}Send to {p.count} {p.count === 1 ? "person" : "people"} ({p.parts} SMS {p.parts === 1 ? "part" : "parts"})?
+                  {sandbox || status.data?.sandboxForced ? "Dry run: " : ""}Send to {p.count} {p.count === 1 ? "person" : "people"} {isEmail ? "" : ` (${p.parts} SMS ${p.parts === 1 ? "part" : "parts"})`}?
                 </p>
                 {!(sandbox || status.data?.sandboxForced) ? <p className="text-xs text-muted-foreground">Real messages cannot be recalled once sent.</p> : null}
                 <div className="flex gap-2">

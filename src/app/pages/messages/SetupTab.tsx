@@ -2,7 +2,8 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, RefreshCw } from "lucide-react";
 import { countSegments, normalizePhone } from "../../../lib/sms";
-import { getSenderSetting, getSmsStatus, saveSenderSetting, sendTest } from "../../../lib/data/messaging";
+import { getEmailStatus, getSenderSetting, getSmsStatus, saveSenderSetting, sendTest } from "../../../lib/data/messaging";
+import { useFeatures } from "../../../lib/access/useFeatures";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Field, FormMessage, controlClass } from "../../components/fields";
@@ -42,7 +43,7 @@ function SenderForm({ serverSender }: { serverSender: string | null | undefined 
   );
 }
 
-export default function SetupTab() {
+function SmsSetup() {
   const { canManageSetup } = useMessagingRights();
   const status = useQuery({ queryKey: ["sms-status"], queryFn: getSmsStatus, staleTime: 30_000, retry: false });
   const s = status.data;
@@ -130,6 +131,115 @@ export default function SetupTab() {
           ) : null}
         </form>
       ) : null}
+    </div>
+  );
+}
+
+const looksLikeEmail = (v: string) => /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]{2,}$/.test(v.trim());
+
+function EmailSetup() {
+  const { canManageSetup } = useMessagingRights();
+  const status = useQuery({ queryKey: ["email-status"], queryFn: getEmailStatus, staleTime: 30_000, retry: false });
+  const s = status.data;
+  const [to, setTo] = useState("");
+  const [subject, setSubject] = useState("");
+  const [text, setText] = useState("");
+  const [dry, setDry] = useState(true);
+  const test = useMutation({ mutationFn: () => sendTest(to.trim(), text.trim(), dry || !!s?.sandboxForced, "email", subject.trim() || undefined) });
+  const submit = (e: FormEvent) => { e.preventDefault(); test.mutate(); };
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-2">
+      <section className="surface space-y-3 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-medium">Email connection</h2>
+          <Button size="sm" variant="ghost" disabled={status.isFetching} onClick={() => void status.refetch()}>
+            <RefreshCw className={cn("size-4", status.isFetching && "animate-spin")} aria-hidden /> Check again
+          </Button>
+        </div>
+        {status.isLoading ? <p className="text-sm text-muted-foreground">Checking…</p> : null}
+        {status.isError ? <p role="alert" className="text-sm text-destructive">{errorText(status.error)}</p> : null}
+
+        {s && s.configured ? (
+          <ul className="space-y-2 text-sm">
+            <li className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" aria-hidden /> Email is connected.</li>
+            <li>Sent from: <strong className="break-all">{s.from}</strong></li>
+            <li>
+              Replies go to:{" "}
+              {s.replyTo ? <strong className="break-all">{s.replyTo}</strong>
+                : <span className="text-amber-700 dark:text-amber-300">no school email is set, so parents cannot reply. Add one under Settings, Institution.</span>}
+            </li>
+            {s.sandboxForced ? (
+              <li className="rounded-xl bg-amber-500/10 p-3 text-amber-800 dark:text-amber-200">
+                Dry-run mode is switched on for the whole system, so no email is really sent until it is turned off.
+              </li>
+            ) : null}
+          </ul>
+        ) : null}
+        {s && !s.configured ? (
+          <div className="space-y-2 text-sm">
+            <p className="flex items-start gap-2"><CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" aria-hidden /> Email is not connected yet.</p>
+            <p className="text-muted-foreground">
+              A developer saves the email provider key once on the server as <code className="break-all">RESEND_API_KEY</code>, together with the sending address as <code className="break-all">EMAIL_FROM</code>. It never reaches this browser.
+            </p>
+          </div>
+        ) : null}
+        <p className="text-xs text-muted-foreground">
+          Emails say they come from your school through PhiNova. Parents who do not want email can be switched off on their page, under the student&apos;s parents.
+        </p>
+      </section>
+
+      {canManageSetup ? (
+        <form onSubmit={submit} className="surface space-y-4 p-4">
+          <h2 className="text-base font-medium">Send a test email</h2>
+          <p className="text-sm text-muted-foreground">One email to one address, showing exactly what the provider replies. Use a dry run first.</p>
+          <Field label="Email address" htmlFor="test-email-to">
+            <Input id="test-email-to" type="email" inputMode="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="you@example.com" autoComplete="off" required />
+          </Field>
+          {to && !looksLikeEmail(to) ? <p className="text-xs text-destructive">That address does not look right.</p> : null}
+          <Field label="Subject (optional)" htmlFor="test-email-subject">
+            <Input id="test-email-subject" value={subject} maxLength={150} onChange={(e) => setSubject(e.target.value)} placeholder="Leave empty for a standard subject" />
+          </Field>
+          <Field label="Message (optional)" htmlFor="test-email-text">
+            <textarea id="test-email-text" rows={3} value={text} maxLength={5000} onChange={(e) => setText(e.target.value)} placeholder="Leave empty for a standard test message" className={cn(controlClass, "h-auto min-h-20 py-2")} />
+          </Field>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={dry || !!s?.sandboxForced} disabled={!!s?.sandboxForced} onChange={(e) => setDry(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+            Dry run (nothing is emailed)
+          </label>
+          <FormMessage error={test.isError ? errorText(test.error) : null} />
+          <Button type="submit" disabled={test.isPending || !looksLikeEmail(to) || s?.configured === false}>{test.isPending ? "Sending" : dry ? "Send dry run" : "Send for real"}</Button>
+          {test.data ? (
+            <div className="space-y-2 rounded-xl border border-border p-3 text-sm" role="status">
+              <p>Result: <strong>{test.data.status}</strong>{test.data.sandbox ? " (dry run)" : ""}</p>
+              {test.data.error ? <p className="text-destructive">{test.data.error}</p> : null}
+            </div>
+          ) : null}
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+export default function SetupTab() {
+  const { isOn } = useFeatures();
+  const sms = isOn("sms");
+  const email = isOn("email");
+  return (
+    <div className="space-y-8">
+      {sms ? (
+        <div className="space-y-3">
+          {email ? <h2 className="text-lg font-semibold">Text messages (SMS)</h2> : null}
+          <SmsSetup />
+        </div>
+      ) : null}
+      {email ? (
+        <div className="space-y-3">
+          {sms ? <h2 className="text-lg font-semibold">Email</h2> : null}
+          <EmailSetup />
+        </div>
+      ) : null}
+      {!sms && !email ? <section className="surface p-4 text-sm">Text messages and email are both switched off for this school.</section> : null}
     </div>
   );
 }
