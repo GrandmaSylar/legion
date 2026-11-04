@@ -10,6 +10,7 @@ import {
   GraduationCap,
   Pin,
   User,
+  Wallet,
 } from "lucide-react";
 import { useAuth } from "../../lib/auth/AuthProvider";
 import {
@@ -26,6 +27,7 @@ import { WEEKDAYS, listClassTimetable } from "../../lib/data/timetable";
 import { StudentAvatar, usePhotoUrls } from "../components/StudentAvatar";
 import { FeesSummaryCard } from "./FeesSummaryCard";
 import { useFeatures } from "../../lib/access/useFeatures";
+import { getMyFeeNotice } from "../../lib/data/feeNotice";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../components/ui/utils";
@@ -55,6 +57,7 @@ const STATUS_PILL: Record<
 export function PortalDashboard() {
   const { profile, roles } = useAuth();
   const isParent = roles.includes("parent");
+  const isStudent = roles.includes("student");
 
   const studentsQuery = useQuery({
     queryKey: ["my-viewable-students"],
@@ -67,6 +70,10 @@ export function PortalDashboard() {
 
   // Features the school has switched off disappear from the portal too.
   const { isOn } = useFeatures();
+  const feeNotice = useQuery({
+    queryKey: ["my-fee-notice"], queryFn: getMyFeeNotice, retry: false, staleTime: 60_000,
+    enabled: isStudent && isOn("fees") && isOn("student_fee_notice"),
+  });
   const students = studentsQuery.data ?? [];
   const [selectedId, setSelectedId] = useState("");
   const activeStudent =
@@ -320,6 +327,14 @@ export function PortalDashboard() {
             </section>
             ) : null}
           </div>
+
+          {/* A student is told only that a balance is owed, never how much */}
+          {isStudent && feeNotice.data ? (
+            <section role="status" className="surface flex items-start gap-3 border-amber-500/40 p-4 text-sm">
+              <Wallet className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+              <p>There is a school fees balance on your account. Please ask your parent or guardian to settle it at the school office.</p>
+            </section>
+          ) : null}
 
           {/* Fees: what is owed for this child, with a way to pay it now */}
           {isParent && isOn("fees") ? <FeesSummaryCard studentId={activeStudent.id} studentName={activeStudent.fullName} /> : null}
