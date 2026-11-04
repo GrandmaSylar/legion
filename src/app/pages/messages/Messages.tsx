@@ -1,4 +1,5 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { TabsContent } from "../../components/ui/tabs";
+import { SectionTabs } from "../../components/SectionTabs";
 import ComposeTab from "./ComposeTab";
 import HistoryTab from "./HistoryTab";
 import SetupTab from "./SetupTab";
@@ -17,18 +18,22 @@ export default function Messages() {
         </p>
       </div>
 
-      <Tabs defaultValue={canCompose ? "compose" : canViewLog ? "history" : "templates"} className="space-y-4">
-        <TabsList className="h-auto w-full flex-wrap justify-start">
-          {canCompose ? <TabsTrigger value="compose">Compose</TabsTrigger> : null}
-          {canViewLog ? <TabsTrigger value="history">History</TabsTrigger> : null}
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          {canCompose ? <TabsTrigger value="setup">{canManageSetup ? "Setup and test" : "Status"}</TabsTrigger> : null}
-        </TabsList>
+      <SectionTabs
+        defaultValue={canCompose ? "compose" : canViewLog ? "history" : "templates"}
+        label="Messages section"
+        className="space-y-4"
+        items={[
+          ...(canCompose ? [{ value: "compose", label: "Compose" }] : []),
+          ...(canViewLog ? [{ value: "history", label: "History" }] : []),
+          { value: "templates", label: "Templates" },
+          ...(canCompose ? [{ value: "setup", label: canManageSetup ? "Setup and test" : "Status" }] : []),
+        ]}
+      >
         {canCompose ? <TabsContent value="compose"><ComposeTab /></TabsContent> : null}
         {canViewLog ? <TabsContent value="history"><HistoryTab /></TabsContent> : null}
         <TabsContent value="templates"><TemplatesTab /></TabsContent>
         {canCompose ? <TabsContent value="setup"><SetupTab /></TabsContent> : null}
-      </Tabs>
+      </SectionTabs>
     </div>
   );
 }
