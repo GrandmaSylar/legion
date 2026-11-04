@@ -48,12 +48,15 @@ export interface NotificationEventDef {
   label: string;
   description: string;
   feature: string | null;
+  /** Whether this event can also go to parents by text message and email. */
+  canMessage: boolean;
 }
 
 export async function listNotificationEvents(): Promise<NotificationEventDef[]> {
-  const { data, error } = await supabase.from("notification_events").select("key, label, description, feature").order("sort");
+  const { data, error } = await supabase.from("notification_events").select("key, label, description, feature, can_message").order("sort");
   if (error) throw error;
-  return (data ?? []) as NotificationEventDef[];
+  return ((data ?? []) as { key: string; label: string; description: string; feature: string | null; can_message: boolean }[])
+    .map((r) => ({ key: r.key, label: r.label, description: r.description, feature: r.feature, canMessage: r.can_message }));
 }
 
 /** The events a school has switched off. An event with no saved choice is on. */
@@ -67,5 +70,40 @@ export async function setNotificationEvent(event: string, enabled: boolean): Pro
   const { error } = await supabase
     .from("notification_settings")
     .upsert({ event, enabled, updated_at: new Date().toISOString() }, { onConflict: "school_id,event" });
+  if (error) throw error;
+}
+
+// ─── Sending these as text messages and email ───────────────────────────────
+
+export type AutoChannel = "sms" | "email";
+
+/** Which events a school has switched on for text messages and for email. Every one starts off. */
+export async function listChannelSwitches(): Promise<Record<string, { sms: boolean; email: boolean }>> {
+  const { data, error } = await supabase.from("notification_settings").select("event, sms_enabled, email_enabled");
+  if (error) throw error;
+  return Object.fromEntries(((data ?? []) as { event: string; sms_enabled: boolean; email_enabled: boolean }[]).map((r) => [r.event, { sms: r.sms_enabled, email: r.email_enabled }]));
+}
+
+export async function setChannelSwitch(event: string, channel: AutoChannel, on: boolean): Promise<void> {
+  const column = channel === "sms" ? "sms_enabled" : "email_enabled";
+  const existing = await supabase.from("notification_settings").select("event").eq("event", event).maybeSingle();
+  if (existing.error) throw existing.error;
+  // Change only the one switch: never touch whether the bell notification itself is on.
+  const res = existing.data
+    ? await supabase.from("notification_settings").update({ [column]: on, updated_at: new Date().toISOString() }).eq("event", event)
+    : await supabase.from("notification_settings").insert({ event, enabled: true, [column]: on });
+  if (res.error) throw res.error;
+}
+
+export interface AutoStatus { scheduled: boolean; queued: number; sentToday: number; failedToday: number; dailyLimit: number }
+
+export async function getAutoStatus(): Promise<AutoStatus> {
+  const { data, error } = await supabase.rpc("auto_message_status");
+  if (error) throw error;
+  return data as AutoStatus;
+}
+
+export async function setAutoLimit(limit: number): Promise<void> {
+  const { error } = await supabase.from("auto_message_settings").upsert({ daily_limit: limit, updated_at: new Date().toISOString() }, { onConflict: "school_id" });
   if (error) throw error;
 }

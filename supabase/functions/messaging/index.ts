@@ -23,6 +23,7 @@
 // defensively because their exact shape is not documented in those SDKs.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { countSegments, formatMoney, normalizePhone, parseNumberList, render } from "./sms.ts";
+import { isStale, sameSecret, withinSendingHours } from "./auto.ts";
 import {
   buildEmail, cleanHeader, friendlyEmailError, fromHeader, MAX_EMAIL_BODY, normalizeEmail, parseEmailList,
 } from "./email.ts";
@@ -343,11 +344,63 @@ function messageFor(template: string, r: Recipient, school: string, date: string
 const todayLabel = () =>
   new Date().toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Accra" });
 
+
+// ─── The automatic sender ────────────────────────────────────────────────────
+// A scheduler in the database calls this about once a minute, but only when automatic messages are waiting.
+// It has no signed-in person: the call carries a shared secret (kept in the database's vault, never in the app),
+// which this checks against the database before doing anything. It sends what the database queued when an event
+// happened (an absence, a payment, a notice, a report), one batch at a time, through the same sending code a
+// person's own send uses. Texts wait for the morning if it is night; anything waiting more than a day and a half
+// is cancelled rather than sent late; a channel the school has since switched off is cancelled, not sent.
+async function runTick(): Promise<Record<string, unknown>> {
+  const started = Date.now();
+  const now = new Date();
+  const { data: open } = await admin.from("messages").select("batch_id, created_at").like("kind", "auto\\_%").eq("status", "queued").limit(2000);
+  const rows = (open ?? []) as { batch_id: string; created_at: string }[];
+  // Too old to be useful: cancel.
+  const stale = rows.filter((r) => isStale(r.created_at, now));
+  if (stale.length > 0) {
+    await admin.from("messages").update({ status: "cancelled", error: "Not sent: it waited too long to still be useful." })
+      .like("kind", "auto\\_%").eq("status", "queued").lt("created_at", new Date(now.getTime() - 36 * 3600 * 1000).toISOString());
+  }
+  const batchIds = [...new Set(rows.filter((r) => !isStale(r.created_at, now)).map((r) => r.batch_id))];
+  const out = { batches: batchIds.length, sent: 0, failed: 0, cancelled: stale.length, waiting: 0, problems: [] as string[] };
+  for (const id of batchIds) {
+    if (Date.now() - started > 90_000) { out.waiting += 1; continue; }
+    const { data: b } = await admin.from("message_batches").select("school_id, channel").eq("id", id).maybeSingle();
+    if (!b) continue;
+    const school = b.school_id as string;
+    const channel = b.channel as Channel;
+    const on = (await admin.rpc("school_feature_enabled", { p_school: school, p_key: channel })).data !== false
+      && (await admin.rpc("school_feature_enabled", { p_school: school, p_key: "messages" })).data !== false;
+    if (!on) {
+      await admin.from("messages").update({ status: "cancelled", error: "Not sent: this way of sending was switched off." }).eq("batch_id", id).eq("status", "queued");
+      out.cancelled += 1;
+      continue;
+    }
+    if (channel === "sms" && !withinSendingHours(now)) { out.waiting += 1; continue; }
+    try {
+      const r = await processBatch(id);
+      out.sent += r.sent; out.failed += r.failed;
+    } catch (e) {
+      out.problems.push(e instanceof Error ? e.message : "unknown problem");
+    }
+  }
+  return out;
+}
+
 // ─── Request handling ────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
+    // The scheduler has no login: it proves itself with the shared secret held in the database.
+    const tickSecret = req.headers.get("x-tick-secret");
+    if (tickSecret) {
+      const { data: expected } = await admin.rpc("messaging_tick_secret");
+      if (typeof expected !== "string" || !expected || !sameSecret(tickSecret, expected)) throw new HttpError(401, "Not allowed.");
+      return json(await runTick());
+    }
     const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer /i, "");
     const { data: auth, error: authError } = await admin.auth.getUser(token);
     if (authError || !auth.user) throw new HttpError(401, "You are not signed in.");
