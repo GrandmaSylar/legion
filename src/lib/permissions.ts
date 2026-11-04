@@ -55,6 +55,8 @@ export interface NavItem {
   anyAction?: string[];
   /** Portal accounts (parents, students) who see this item whatever their actions: they are not staff. */
   portalRoles?: AppRole[];
+  /** The school can switch this feature off; the item then disappears for everyone, portal accounts included. */
+  feature?: string;
 }
 
 const STAFF: AppRole[] = [
@@ -91,13 +93,13 @@ export const SETTINGS_ACTIONS = ["settings.view", "settings.edit"];
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
   { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true, anyAction: STUDENT_ACTIONS },
-  { id: "attendance", label: "Attendance", path: "/attendance", roles: ["school_admin", "principal", "teacher"], built: true, anyAction: ATTENDANCE_ACTIONS },
-  { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "receptionist", "parent", "student"], built: true, anyAction: GRADES_ACTIONS, portalRoles: ["parent", "student"] },
-  { id: "fees", label: "Fees & Finance", path: "/fees", roles: ["school_admin", "accountant", "principal", "parent"], built: true, anyAction: FEES_ACTIONS, portalRoles: ["parent"] },
-  { id: "analytics", label: "Analytics", path: "/analytics", roles: ["school_admin", "principal", "accountant", "hr_officer"], built: true, anyAction: ANALYTICS_ACTIONS },
-  { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true, anyAction: STAFF_ACTIONS },
-  { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS },
-  { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true },
+  { id: "attendance", label: "Attendance", path: "/attendance", roles: ["school_admin", "principal", "teacher"], built: true, anyAction: ATTENDANCE_ACTIONS, feature: "attendance" },
+  { id: "grades", label: "Grades", path: "/grades", roles: ["school_admin", "principal", "teacher", "receptionist", "parent", "student"], built: true, anyAction: GRADES_ACTIONS, portalRoles: ["parent", "student"], feature: "grades" },
+  { id: "fees", label: "Fees & Finance", path: "/fees", roles: ["school_admin", "accountant", "principal", "parent"], built: true, anyAction: FEES_ACTIONS, portalRoles: ["parent"], feature: "fees" },
+  { id: "analytics", label: "Analytics", path: "/analytics", roles: ["school_admin", "principal", "accountant", "hr_officer"], built: true, anyAction: ANALYTICS_ACTIONS, feature: "analytics" },
+  { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true, anyAction: STAFF_ACTIONS, feature: "staff" },
+  { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS, feature: "messages" },
+  { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true, feature: "notices" },
   { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true, anyAction: USERS_ACTIONS },
   { id: "settings", label: "Settings", path: "/settings", roles: ["school_admin"], built: true, anyAction: SETTINGS_ACTIONS },
 ];
@@ -106,7 +108,8 @@ export const NAV: NavItem[] = [
  * A user's own switches (profile.modules) can only narrow what their role
  * allows. null means "everything the role allows"; Overview is always on.
  */
-export function canSee(item: NavItem, roles: AppRole[], modules: string[] | null, caps: string[] | null = null): boolean {
+export function canSee(item: NavItem, roles: AppRole[], modules: string[] | null, caps: string[] | null = null, disabled: string[] | null = null): boolean {
+  if (item.feature && disabled?.includes(item.feature)) return false;
   // A module decided by actions shows for anyone holding one of them, whatever their role.
   // Until the actions have loaded it stays hidden.
   const portal = !!item.portalRoles && hasAnyRole(roles, item.portalRoles);
@@ -115,8 +118,8 @@ export function canSee(item: NavItem, roles: AppRole[], modules: string[] | null
   return modules === null || item.id === "dashboard" || modules.includes(item.id);
 }
 
-export function navFor(roles: AppRole[], modules: string[] | null = null, caps: string[] | null = null): NavItem[] {
-  return NAV.filter((item) => canSee(item, roles, modules, caps));
+export function navFor(roles: AppRole[], modules: string[] | null = null, caps: string[] | null = null, disabled: string[] | null = null): NavItem[] {
+  return NAV.filter((item) => canSee(item, roles, modules, caps, disabled));
 }
 
 /** Sections a person with these roles could be given. Overview is always included. */

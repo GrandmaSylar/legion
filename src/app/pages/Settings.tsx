@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { useCapabilities } from "../../lib/access/useCapabilities";
 import InstitutionTab from "./settings/InstitutionTab";
+import FeaturesTab from "./settings/FeaturesTab";
 import CalendarTab from "./settings/CalendarTab";
 import ClassesTab from "./settings/ClassesTab";
 import SubjectsTab from "./settings/SubjectsTab";
@@ -32,6 +33,7 @@ export default function Settings() {
         <div>
           <TabsList className="h-auto w-full flex-wrap justify-start">
             <TabsTrigger value="institution">Institution &amp; receipts</TabsTrigger>
+            <TabsTrigger value="features">Features</TabsTrigger>
             <TabsTrigger value="calendar">Academic year</TabsTrigger>
             <TabsTrigger value="classes">Classes</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
@@ -41,6 +43,7 @@ export default function Settings() {
           </TabsList>
         </div>
         <TabsContent value="institution"><InstitutionTab /></TabsContent>
+        <TabsContent value="features"><FeaturesTab /></TabsContent>
         <TabsContent value="calendar"><CalendarTab /></TabsContent>
         <TabsContent value="classes"><ClassesTab /></TabsContent>
         <TabsContent value="subjects"><SubjectsTab /></TabsContent>
