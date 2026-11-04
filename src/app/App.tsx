@@ -31,6 +31,7 @@ const Notices = lazy(() => import("./pages/notices/Notices"));
 const Calendar = lazy(() => import("./pages/calendar/Calendar"));
 const Tasks = lazy(() => import("./pages/tasks/Tasks"));
 const LessonPlans = lazy(() => import("./pages/lessons/LessonPlans"));
+const ClockIn = lazy(() => import("./pages/clockin/ClockIn"));
 const Staff = lazy(() => import("./pages/staff/Staff"));
 const Fees = lazy(() => import("./pages/fees/Fees"));
 const Analytics = lazy(() => import("./pages/analytics/Analytics"));
@@ -70,7 +71,7 @@ function RequireAuth({ children }: { children: ReactElement }) {
   const { status, mustChangePassword } = useAuth();
   const location = useLocation();
   if (status === "loading") return <Splash />;
-  if (status === "signedOut") return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (status === "signedOut") return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (status === "deactivated") return <Deactivated />;
   // A temporary password must be replaced before anything else.
   if (mustChangePassword && location.pathname !== "/change-password") return <Navigate to="/change-password" replace />;
@@ -157,6 +158,8 @@ export default function App() {
                             <Tasks />
                           ) : item.id === "lessons" ? (
                             <LessonPlans />
+                          ) : item.id === "clockin" ? (
+                            <ClockIn />
                           ) : item.id === "staff" ? (
                             <Staff />
                           ) : item.id === "fees" ? (

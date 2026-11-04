@@ -1,6 +1,7 @@
 import { useCapabilities } from "../../lib/access/useCapabilities";
 import { MyTasksPanel } from "./tasks/MyTasksPanel";
 import { LessonPlanReminder } from "./lessons/LessonPlanReminder";
+import { ClockInCard } from "./clockin/ClockInCard";
 import { useFeatures } from "../../lib/access/useFeatures";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -385,6 +386,7 @@ function StaffDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {can("clockin.use") && isOn("clockin") ? <div className="lg:col-span-3"><ClockInCard /></div> : null}
         {can("lessons.write_own") && isOn("lessons") ? <div className="lg:col-span-3"><LessonPlanReminder /></div> : null}
         {can("tasks.view_own") && isOn("tasks") ? <div className="lg:col-span-3"><MyTasksPanel /></div> : null}
         <ActivityPanel isAdmin={can("audit.view")} />
