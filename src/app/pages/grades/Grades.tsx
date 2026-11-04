@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { listExamPeriods, windowState } from "../../../lib/data/examPeriods";
 import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -243,6 +244,7 @@ function SubjectGradebookSection({
   const [newTitle, setNewTitle] = useState("");
   const [newMaxScore, setNewMaxScore] = useState("20");
   const [newWeight, setNewWeight] = useState("10");
+  const [newPeriod, setNewPeriod] = useState("");
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -295,9 +297,11 @@ function SubjectGradebookSection({
         title: newTitle,
         maxScore: Number(newMaxScore),
         weight: Number(newWeight),
+        examPeriodId: newPeriod || null,
       }),
     onSuccess: () => {
       setNewTitle("");
+      setNewPeriod("");
       setShowAddAssessment(false);
       invalidateGradebook();
     },
@@ -313,6 +317,13 @@ function SubjectGradebookSection({
     onSuccess: invalidateGradebook,
   });
 
+  const { can } = useCapabilities();
+  const periodsQuery = useQuery({ queryKey: ["exam-periods"], queryFn: listExamPeriods, staleTime: 60_000, retry: false });
+  const termPeriods = (periodsQuery.data ?? []).filter(
+    (p) => p.termId === termId && (p.allClasses || p.classIds.includes(classId)),
+  );
+  const periodOf = (id: string | null) => (id ? (periodsQuery.data ?? []).find((p) => p.id === id) ?? null : null);
+  const today = new Date().toISOString().slice(0, 10);
   const assessments = gradebookQuery.data?.assessments ?? [];
   const students = gradebookQuery.data?.students ?? [];
   const config = configQuery.data;
@@ -569,6 +580,17 @@ function SubjectGradebookSection({
                 <span className="tabular-nums text-muted-foreground">
                   Max {a.maxScore} · Weight {a.weight}%
                 </span>
+                {periodOf(a.examPeriodId) ? (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                    {periodOf(a.examPeriodId)!.name}
+                    {(() => {
+                      const p = periodOf(a.examPeriodId)!;
+                      const w = windowState(p, today);
+                      if (can("grades.enter_any") || w === "none" || w === "open") return "";
+                      return w === "upcoming" ? ` · opens ${p.entryOpensOn}` : ` · entry closed ${p.entryClosesOn}`;
+                    })()}
+                  </span>
+                ) : null}
                 {canEdit ? (
                   <button
                     type="button"
@@ -641,6 +663,21 @@ function SubjectGradebookSection({
                 onChange={(e) => setNewWeight(e.target.value)}
               />
             </Field>
+            {termPeriods.length > 0 ? (
+              <div className="sm:col-span-5">
+                <Field label="Exam period (optional)" htmlFor="ass-period">
+                  <NativeSelect id="ass-period" value={newPeriod} onChange={(e) => setNewPeriod(e.target.value)}>
+                    <option value="">Not part of an exam period</option>
+                    {termPeriods.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </NativeSelect>
+                </Field>
+                {newPeriod && periodOf(newPeriod)?.restrictEntry ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Marks can be entered from {periodOf(newPeriod)!.entryOpensOn} to {periodOf(newPeriod)!.entryClosesOn}.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex gap-2">
               <Button
                 type="submit"

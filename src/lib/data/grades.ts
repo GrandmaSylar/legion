@@ -78,6 +78,8 @@ export interface Assessment {
   title: string;
   maxScore: number;
   weight: number;
+  /** The exam period this belongs to, if any. A period can limit when marks may be entered. */
+  examPeriodId: string | null;
 }
 
 export interface GradebookStudentRow {
@@ -420,7 +422,7 @@ export async function listAssessments(
   const rows = check(
     await supabase
       .from("assessments")
-      .select("id, class_subject_id, term_id, type, title, max_score, weight, created_at")
+      .select("id, class_subject_id, term_id, type, title, max_score, weight, exam_period_id, created_at")
       .eq("class_subject_id", classSubjectId)
       .eq("term_id", termId)
       .order("created_at", { ascending: true }),
@@ -437,6 +439,7 @@ export async function listAssessments(
       r.type,
     maxScore: Number(r.max_score),
     weight: Number(r.weight),
+    examPeriodId: (r.exam_period_id as string | null) ?? null,
   }));
 }
 
@@ -447,9 +450,11 @@ export async function createAssessment(input: {
   title: string;
   maxScore: number;
   weight: number;
+  examPeriodId?: string | null;
 }): Promise<void> {
   check(
     await supabase.from("assessments").insert({
+      exam_period_id: input.examPeriodId || null,
       class_subject_id: input.classSubjectId,
       term_id: input.termId,
       type: input.type,
