@@ -30,6 +30,7 @@ const Grades = lazy(() => import("./pages/grades/Grades"));
 const Notices = lazy(() => import("./pages/notices/Notices"));
 const Calendar = lazy(() => import("./pages/calendar/Calendar"));
 const Tasks = lazy(() => import("./pages/tasks/Tasks"));
+const LessonPlans = lazy(() => import("./pages/lessons/LessonPlans"));
 const Staff = lazy(() => import("./pages/staff/Staff"));
 const Fees = lazy(() => import("./pages/fees/Fees"));
 const Analytics = lazy(() => import("./pages/analytics/Analytics"));
@@ -154,6 +155,8 @@ export default function App() {
                             <Calendar />
                           ) : item.id === "tasks" ? (
                             <Tasks />
+                          ) : item.id === "lessons" ? (
+                            <LessonPlans />
                           ) : item.id === "staff" ? (
                             <Staff />
                           ) : item.id === "fees" ? (
