@@ -1,6 +1,7 @@
 // The app frame: a floating rounded card with an accent icon rail on the left and
 // a top bar (current section, search, light/dark, user menu). On phones the rail
 // becomes a floating bar at the bottom.
+import { NotificationBell } from "../components/NotificationBell";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import {
@@ -407,6 +408,7 @@ export function Shell() {
                 {surface === "glass" ? <Layers className="size-4" aria-hidden /> : <Square className="size-4" aria-hidden />}
               </button>
               <ThemeSwitch />
+              <NotificationBell />
               <button
                 type="button"
                 onClick={() => setCustomizerOpen(true)}
