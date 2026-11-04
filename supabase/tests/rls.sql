@@ -730,7 +730,32 @@ begin
     ('the principal is put back to the principal preset',
        pg_temp.t_try(u_dev, format('select public.set_user_capabilities(%L, (select array_agg(capability) from public.access_preset_capabilities where role = ''principal''))', u_prin)), 'ok:1'),
     ('and the extra parent role is removed again',
-       pg_temp.t_scalar(format('with x as (delete from public.user_roles where profile_id = %L and role = ''parent'' returning 1) select count(*)::text from x', u_rec)), '1')
+       pg_temp.t_scalar(format('with x as (delete from public.user_roles where profile_id = %L and role = ''parent'' returning 1) select count(*)::text from x', u_rec)), '1'),
+    -- Features can be switched off per school
+    ('every feature starts on', pg_temp.t_try(u_admin, 'select 1 where cardinality(public.my_disabled_features()) = 0'), 'ok:1'),
+    ('a teacher cannot switch features', pg_temp.t_try(u_t1, format('select public.set_school_features(%s)', '(select array_agg(key) from public.app_features)')), 'denied'),
+    ('a parent cannot switch features', pg_temp.t_try(u_p1, format('select public.set_school_features(%s)', '(select array_agg(key) from public.app_features)')), 'denied'),
+    ('an unknown feature is refused', pg_temp.t_try(u_admin, 'select public.set_school_features(array[''nope''])'), 'denied'),
+    ('online payments cannot be on while fees are off',
+       pg_temp.t_try(u_admin, 'select public.set_school_features((select array_agg(key) from public.app_features where key <> ''fees''))'), 'denied'),
+    ('an admin switches fees and online payments off',
+       pg_temp.t_try(u_admin, 'select public.set_school_features((select array_agg(key) from public.app_features where key not in (''fees'', ''online_payments'')))'), 'ok:1'),
+    ('so the accountant no longer reads invoices', pg_temp.t_count(u_acc,'invoices')::text, '0'),
+    ('and holds no fee actions', pg_temp.t_try(u_acc, 'select 1 where public.has_capability(''fees.record_payment'')'), 'ok:0'),
+    ('not even the developer holds a fee action while fees are off', pg_temp.t_try(u_dev, 'select 1 where public.has_capability(''fees.cancel_receipt'')'), 'ok:0'),
+    ('a parent no longer reads their child''s invoices', pg_temp.t_count(u_p1,'invoices')::text, '0'),
+    ('and no payments', pg_temp.t_count(u_p1,'payments')::text, '0'),
+    ('the other modules are untouched', pg_temp.t_try(u_t1, 'select 1 where public.has_capability(''attendance.take_own_classes'')'), 'ok:1'),
+    ('and the core parts cannot be switched off', pg_temp.t_try(u_admin, 'select 1 where public.has_capability(''users.view'')'), 'ok:1'),
+    ('the disabled list says fees and online payments', pg_temp.t_try(u_admin, 'select 1 where public.my_disabled_features() @> array[''fees'', ''online_payments'']'), 'ok:1'),
+    ('the admin turns fees back on but leaves online payments off',
+       pg_temp.t_try(u_admin, 'select public.set_school_features((select array_agg(key) from public.app_features where key <> ''online_payments''))'), 'ok:1'),
+    ('so the accountant can record payments again', pg_temp.t_try(u_acc, 'select 1 where public.has_capability(''fees.record_payment'')'), 'ok:1'),
+    ('but cannot review online payments, which are off', pg_temp.t_try(u_acc, 'select 1 where public.has_capability(''fees.review_online'')'), 'ok:0'),
+    ('the admin turns everything back on', pg_temp.t_try(u_admin, format('select public.set_school_features(%s)', '(select array_agg(key) from public.app_features)')), 'ok:1'),
+    ('and the accountant reads invoices again', (pg_temp.t_count(u_acc,'invoices') > 0)::text, 'true'),
+    ('and the parent''s fees are switched back on', pg_temp.t_try(u_p1, 'select 1 where public.feature_enabled(''fees'')'), 'ok:1'),
+    ('the changes were audited', pg_temp.t_scalar('select (count(*) >= 2)::text from public.audit_log where action = ''FEATURES_CHANGE'''), 'true')
   ) as x(label, got, want)
   loop
     if r.got = r.want then passes := passes + 1;

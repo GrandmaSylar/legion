@@ -78,6 +78,24 @@ def make_login(email, pw, role):
 results = []
 
 
+def set_feature(key, enabled):
+    """Switch a school feature on or off for the test school and remember what it was before."""
+    out = sql(f"select enabled from public.school_features where feature = '{key}' and school_id = (select id from public.schools where name = 'Pinks Academy')")
+    before = None if '"enabled"' not in out else ('"enabled": true' in out)
+    sql(f"""insert into public.school_features (school_id, feature, enabled)
+            select id, '{key}', {str(enabled).lower()} from public.schools where name = 'Pinks Academy'
+            on conflict (school_id, feature) do update set enabled = excluded.enabled""")
+    return before
+
+
+def restore_feature(key, before):
+    """Put the switch back exactly as it was: no row at all, or the value it had."""
+    if before is None:
+        sql(f"delete from public.school_features where feature = '{key}' and school_id = (select id from public.schools where name = 'Pinks Academy')")
+    else:
+        sql(f"update public.school_features set enabled = {str(before).lower()} where feature = '{key}' and school_id = (select id from public.schools where name = 'Pinks Academy')")
+
+
 def check(label, ok):
     results.append(bool(ok))
     print(("PASS " if ok else "FAIL ") + label)
@@ -166,6 +184,16 @@ try:
     check("an empty message is refused", fn(admin_t, action="preview", audience="all_parents", body="")[0] == 400)
     check("a very long message is refused", fn(admin_t, action="preview", audience="all_parents", body="x" * 700)[0] == 400)
     check("an unknown template is refused", fn(admin_t, action="preview", audience="all_parents", templateKey="nope")[0] == 404)
+
+    # a school can switch text messages off
+    prior = set_feature("messages", False)
+    try:
+        code, r = fn(admin_t, action="status")
+        check("with text messages switched off the function refuses", code == 403 and "switched off" in str(r.get("error", "")))
+        check("and refuses a preview too", fn(admin_t, action="preview", audience="all_parents", body="Hi")[0] == 403)
+    finally:
+        restore_feature("messages", prior)
+    check("switched back on, it answers again", fn(admin_t, action="status")[0] == 200)
 
     # opted-out parents are left alone
     sql("update public.guardians set sms_opt_out = true where full_name = 'ZZMsg Parent'")
