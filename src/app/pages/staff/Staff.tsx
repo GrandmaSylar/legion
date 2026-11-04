@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { DownloadMenu } from "../../components/DownloadMenu";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -243,6 +244,14 @@ export default function StaffPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <DownloadMenu
+            action="staff.download" label="Download directory" disabled={staff.length === 0}
+            getTable={() => ({
+              title: "Staff directory", filename: "staff",
+              columns: ["Staff no.", "Name", "Role / title", "Type", "Phone", "Email", "Hired", "Status", "Classes", "Subjects"],
+              rows: staff.map((m) => [m.staffNo ?? "", m.fullName, m.roleTitle ?? "", m.type === "teaching" ? "Teaching" : "Non-teaching", m.phone ?? "", m.email ?? "", m.hiredOn ?? "", m.status.replace("_", " "), m.classesCount, m.subjectsCount]),
+            })}
+          />
           {canCreate ? (
             <Button
               type="button"

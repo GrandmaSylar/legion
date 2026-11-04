@@ -61,6 +61,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/ta
 import { ReceiptView } from "./ReceiptView";
 import { PayOnlineDialog } from "./PayOnlineDialog";
 import { SectionTabs } from "../../components/SectionTabs";
+import { DownloadMenu } from "../../components/DownloadMenu";
+import type { ExportTable } from "../../../lib/export/tableExport";
 import { cn } from "../../components/ui/utils";
 import { CancelReceiptDialog } from "./CancelReceiptDialog";
 import { listOnlinePayments } from "../../../lib/data/onlinePayments";
@@ -277,6 +279,24 @@ export default function Fees() {
     () => extractInstallmentsFromInvoices(invoicesQ.data ?? []),
     [invoicesQ.data],
   );
+
+  const school = institutionQ.data?.name ?? "";
+  const money = (n: number) => Number(n.toFixed(2));
+  const paymentsTable = (): ExportTable => ({
+    title: "Payments and receipts", subtitle: school, filename: "payments",
+    columns: ["Receipt no.", "Date", "Admission no.", "Student", "Invoice", "Term", "Method", "Reference", "Amount (GHS)", "Received by", "Status"],
+    rows: allPayments.map((p) => [p.receiptNo, p.paidOn, p.studentAdmissionNo, p.studentName, p.invoiceNumber, p.termName ?? "", p.method.replace("_", " "), p.reference ?? "", money(p.amount), p.receivedByName ?? "", p.voidedAt ? `Cancelled${p.voidReason ? `: ${p.voidReason}` : ""}` : "Valid"]),
+  });
+  const invoicesTable = (): ExportTable => ({
+    title: "Invoices", subtitle: school, filename: "invoices",
+    columns: ["Invoice no.", "Issued", "Due", "Admission no.", "Student", "Term", "Status", "Total (GHS)", "Paid (GHS)", "Balance (GHS)"],
+    rows: (invoicesQ.data ?? []).map((i) => [i.number, i.issuedOn, i.dueOn ?? "", i.studentAdmissionNo, i.studentName, i.termName ?? "", i.status, money(i.totalAmount), money(i.paidAmount), money(i.balance)]),
+  });
+  const installmentsTable = (): ExportTable => ({
+    title: "Installment schedules", subtitle: school, filename: "installments",
+    columns: ["Due date", "Admission no.", "Student", "Invoice", "Amount (GHS)", "Invoice balance (GHS)", "Invoice status"],
+    rows: allInstallments.map((r) => [r.dueOn, r.studentAdmissionNo, r.studentName, r.invoiceNumber, money(r.amount), money(r.invoiceBalance), r.invoiceStatus]),
+  });
 
   const selectedPayment = useMemo(
     () => allPayments.find((p) => p.id === selectedReceiptId) ?? null,
@@ -789,7 +809,8 @@ export default function Fees() {
                 <Receipt className="size-4 text-primary" aria-hidden />
                 Official Payment Receipts
               </h2>
-              <span className="text-xs text-muted-foreground">
+              <DownloadMenu action="fees.download" label="Download receipts list" disabled={allPayments.length === 0} getTable={paymentsTable} />
+              <span className="w-full text-xs text-muted-foreground">
                 Select any payment to view or print its official receipt with school details.
               </span>
             </div>
@@ -1156,8 +1177,9 @@ export default function Fees() {
           ) : null}
 
           <section className="surface overflow-hidden">
-            <div className="border-b border-border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-4">
               <h2 className="text-base font-semibold">Invoices</h2>
+              <DownloadMenu action="fees.download" label="Download invoices" disabled={(invoicesQ.data ?? []).length === 0} getTable={invoicesTable} />
             </div>
 
             {invoicesQ.isLoading ? (
@@ -1631,10 +1653,11 @@ export default function Fees() {
           ) : null}
 
           <section className="surface overflow-hidden">
-            <div className="border-b border-border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-4">
               <h2 className="text-base font-semibold">
                 Agreed Installment Schedules &amp; Due Dates
               </h2>
+              <DownloadMenu action="fees.download" label="Download schedules" disabled={allInstallments.length === 0} getTable={installmentsTable} />
             </div>
 
             {allInstallments.length === 0 ? (
