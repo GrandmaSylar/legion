@@ -105,6 +105,9 @@ export const CLOCKIN_ACTIONS = ["clockin.use", "clockin.display", "clockin.view_
 /** Complaints: anyone may raise one; some people handle them. */
 export const COMPLAINT_ACTIONS = ["complaints.submit", "complaints.handle", "complaints.safeguarding"];
 
+/** Payroll: staff read their own payslips; some people look after pay. */
+export const PAYROLL_ACTIONS = ["payroll.view_own", "payroll.view_all", "payroll.manage_pay", "payroll.configure", "payroll.prepare", "payroll.approve", "payroll.pay"];
+
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
   { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true, anyAction: STUDENT_ACTIONS },
@@ -115,6 +118,7 @@ export const NAV: NavItem[] = [
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true, anyAction: STAFF_ACTIONS, feature: "staff" },
   { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS, feature: "messages" },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true, feature: "notices" },
+  { id: "payroll", label: "Payroll", path: "/payroll", roles: [...STAFF], built: true, anyAction: PAYROLL_ACTIONS, feature: "payroll" },
   { id: "complaints", label: "Complaints", path: "/complaints", roles: [...STAFF, "parent", "student"], built: true, anyAction: COMPLAINT_ACTIONS, portalRoles: ["parent", "student"], feature: "complaints" },
   { id: "clockin", label: "Clock-in", path: "/clockin", roles: [...STAFF], built: true, anyAction: CLOCKIN_ACTIONS, feature: "clockin" },
   { id: "lessons", label: "Lesson plans", path: "/lessons", roles: [...STAFF], built: true, anyAction: LESSON_ACTIONS, feature: "lessons" },
