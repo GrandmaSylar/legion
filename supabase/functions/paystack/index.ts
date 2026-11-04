@@ -90,6 +90,13 @@ function allowedOrigin(value: string): string | null {
 
 const money = (n: number) => Math.round(n * 100) / 100;
 
+/** Has this school switched this feature on? A school can switch online payments off. */
+async function featureOn(schoolId: string, key: string): Promise<boolean> {
+  const { data } = await admin.rpc("school_feature_enabled", { p_school: schoolId, p_key: key });
+  return data !== false;
+}
+const SWITCHED_OFF = "Online payments are switched off for this school.";
+
 async function invoiceBalance(invoiceId: string): Promise<number> {
   const { data: items } = await admin.from("invoice_items").select("amount").eq("invoice_id", invoiceId);
   const { data: pays } = await admin.from("payments").select("amount").eq("invoice_id", invoiceId).is("voided_at", null);
@@ -165,11 +172,16 @@ Deno.serve(async (req) => {
     // ── status: can parents pay online right now? ───────────────────────────
     if (action === "status") {
       const key = secretKey();
-      return json({ configured: !!key, mode: key ? modeOf(key) : null });
+      // Parents only see the Pay button when the school has online payments (and fees) switched on.
+      const on = (await featureOn(profile.school_id as string, "online_payments")) && (await featureOn(profile.school_id as string, "fees"));
+      return json({ configured: !!key && on, mode: key ? modeOf(key) : null, switchedOff: !on });
     }
 
     // ── initialize: start a payment for one invoice ─────────────────────────
     if (action === "initialize") {
+      if (!(await featureOn(profile.school_id as string, "online_payments")) || !(await featureOn(profile.school_id as string, "fees"))) {
+        throw new HttpError(503, SWITCHED_OFF);
+      }
       requireKey();
       const invoiceId = str(body.invoiceId);
       const origin = allowedOrigin(str(body.returnUrl));
@@ -245,8 +257,18 @@ Deno.serve(async (req) => {
     if (action === "verify") {
       requireKey();
       const reference = str(body.reference);
-      const { data: op } = await asUser.from("online_payments").select("reference, status, invoice_id").eq("reference", reference).maybeSingle();
-      if (!op) throw new HttpError(404, "That payment was not found.");
+      // Read the attempt here rather than through the caller's own permissions, so a payment made just
+      // before the school switched online payments off can still be checked. Only the person who started
+      // it, or someone who reviews online payments, may.
+      const { data: op } = await admin.from("online_payments").select("reference, status, invoice_id, initiated_by, school_id").eq("reference", reference).maybeSingle();
+      if (!op || op.school_id !== profile.school_id) throw new HttpError(404, "That payment was not found.");
+      if (op.initiated_by !== me.id) {
+        const { data: roleRows } = await admin.from("user_roles").select("role").eq("profile_id", me.id);
+        const { data: held } = await admin.from("user_capabilities").select("capability, expires_at").eq("profile_id", me.id);
+        const mayReview = (roleRows ?? []).some((r) => r.role === "developer") ||
+          (held ?? []).some((r) => r.capability === "fees.review_online" && (!r.expires_at || Date.parse(r.expires_at as string) > Date.now()));
+        if (!mayReview) throw new HttpError(404, "That payment was not found.");
+      }
       if (op.status === "success") {
         const { data: row } = await admin.from("online_payments").select("payment_id").eq("reference", reference).single();
         const { data: pay } = await admin.from("payments").select("receipt_no").eq("id", row.payment_id).maybeSingle();
@@ -270,6 +292,7 @@ Deno.serve(async (req) => {
 
     // ── reconcile: Paystack's list of payments against Legion's receipts ─────
     if (action === "reconcile") {
+      if (!(await featureOn(profile.school_id as string, "online_payments"))) throw new HttpError(503, SWITCHED_OFF);
       requireKey();
       // Allowed to review online payments? Decided by the actions switched on for the person (a developer holds all).
       const { data: roleRows } = await admin.from("user_roles").select("role").eq("profile_id", me.id);
