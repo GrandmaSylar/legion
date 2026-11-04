@@ -34,12 +34,12 @@ function text(c: Cell): string {
   return String(c);
 }
 
-function fileName(base: string, ext: string): string {
+export function fileName(base: string, ext: string): string {
   const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "download";
   return `${slug}-${new Date().toISOString().slice(0, 10)}.${ext}`;
 }
 
-function save(blob: Blob, name: string): void {
+export function saveBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -184,5 +184,5 @@ export async function downloadTable(t: ExportTable, format: ExportFormat): Promi
     default:
       blob = await toImage(t, format);
   }
-  save(blob, fileName(t.filename, ext));
+  saveBlob(blob, fileName(t.filename, ext));
 }

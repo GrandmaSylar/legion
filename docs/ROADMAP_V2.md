@@ -78,6 +78,12 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 - [x] Shared section navigation (`SectionTabs`): one line with a list on phones, one scrolling row of tabs on larger screens. Used on Fees, Messages and Settings. Other screens with filter chips are still to review.
 - [x] Shared download menu (`DownloadMenu`): Excel, CSV, PDF, PNG and JPEG, shown only to someone who holds the module's download action. On Students (all pages of the current filters), Attendance history, Fees (payments, invoices, instalments), Expenses, Staff and Message history. Analytics keeps its own export. Still to cover: Grades results and report lists, Timetable and the calendar (graphic or list) when those arrive. The audit log CSV and the gradebook template are unchanged because no download action covers them.
 
+### Phase 2 progress
+
+- [x] Term calendar: events as dates or runs of days with optional times, six kinds, an audience, and draft or published. Add by tapping a day or the Add event button; month grid on larger screens, a list on phones. Copy a term's events to a new term as drafts, and publish a term in one action that tells staff and parents once. Download as a bulleted or numbered list (PDF, text or Excel), as a picture (PNG, JPEG or PDF), or as a file for a phone's calendar (.ics). Parents and students see the published events meant for them. A switch in Features.
+- [ ] A live calendar link a phone can subscribe to, so changes appear without downloading again. Needs a secret link served by a function.
+- [ ] Exam periods, flexible assessment, timetable flexibility and the student fee notice, which build on the calendar.
+
 ## Open decisions still to make
 
 1. Which Paystack alternative each school may use (on hold).
