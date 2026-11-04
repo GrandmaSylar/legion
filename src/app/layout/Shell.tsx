@@ -70,7 +70,7 @@ function RailLink({ to, end, label, Icon }: { to: string; end: boolean; label: s
       onFocus={() => prefetchRouteAndData(to, qc)}
       className={({ isActive }) =>
         cn(
-          "group relative grid size-12 place-items-center rounded-2xl outline-offset-2 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white [@media(max-height:780px)]:size-10",
+          "group relative grid size-10 place-items-center rounded-2xl outline-offset-2 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white",
           isActive
             ? "bg-white text-primary shadow-lg shadow-black/25"
             : "text-white/90 hover:scale-105 hover:bg-white/15 hover:text-white hover:shadow-[0_0_22px_rgba(255,255,255,0.40)]",
@@ -113,6 +113,97 @@ function RailShape() {
       <path d={RAIL_PATH} style={{ fill: "var(--primary)" }} />
       <path d={RAIL_PATH} fill="url(#rail-shade)" />
     </svg>
+  );
+}
+
+/**
+ * The desktop rail. Its icons sit in the pink part of the blob, which is only so tall, so the number that fit is
+ * measured from the real height (and the real text size) and anything beyond that goes in a "More" menu with
+ * labels, as on phones. Resizing the window, or a school with more or fewer sections, just changes the count.
+ */
+const RAIL_ITEM_REM = 2.5;
+const RAIL_GAP_REM = 0.25;
+const RAIL_USABLE = 0.72; // the share of the blob's height that is pink where the icons are
+
+function DesktopRail({ items }: { items: NavItem[] }) {
+  const location = useLocation();
+  const qc = useQueryClient();
+  const navRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLLIElement>(null);
+  const [fit, setFit] = useState(items.length);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const usable = el.clientHeight * RAIL_USABLE;
+      const pitch = (RAIL_ITEM_REM + RAIL_GAP_REM) * rem;
+      setFit(Math.max(3, Math.floor((usable + RAIL_GAP_REM * rem) / pitch)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const everything = items.length <= fit;
+  const shown = everything ? items : items.slice(0, fit - 1);
+  const rest = everything ? [] : items.slice(fit - 1);
+  const isCurrent = (i: NavItem) => (i.path === "/" ? location.pathname === "/" : location.pathname.startsWith(i.path));
+  const moreActive = rest.some(isCurrent);
+
+  return (
+    <nav ref={navRef} aria-label="Main" className="relative h-[min(100%,72rem)] w-[7rem]">
+      <RailShape />
+      <ul className="absolute inset-x-0 bottom-[18%] top-[10%] flex flex-col items-center justify-center gap-1">
+        {shown.map((item) => (
+          <li key={item.id}>
+            <RailLink to={item.path} end={item.path === "/"} label={item.label} Icon={ICONS[item.id] ?? LayoutDashboard} />
+          </li>
+        ))}
+        {rest.length > 0 ? (
+          <li ref={menuRef} className="relative">
+            <button
+              type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" aria-label={`More sections (${rest.length})`}
+              className={cn(
+                "group relative grid size-10 place-items-center rounded-2xl outline-offset-2 transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-white",
+                moreActive || open ? "bg-white text-primary shadow-lg shadow-black/25" : "text-white/90 hover:scale-105 hover:bg-white/15 hover:text-white",
+              )}
+            >
+              <MoreHorizontal className="size-5" strokeWidth={1.75} aria-hidden />
+            </button>
+            {open ? (
+              <div role="menu" aria-label="More sections" className="absolute bottom-0 left-full z-40 ml-3 w-56 rounded-2xl bg-primary p-2 shadow-xl shadow-black/30">
+                {rest.map((item) => {
+                  const Icon = ICONS[item.id] ?? LayoutDashboard;
+                  return (
+                    <NavLink
+                      key={item.id} to={item.path} role="menuitem" onMouseEnter={() => prefetchRouteAndData(item.path, qc)}
+                      className={({ isActive }) => cn("flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-white", isActive ? "bg-white text-primary" : "text-white/90 hover:bg-white/15")}
+                    >
+                      <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+                      <span className="min-w-0 break-words">{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            ) : null}
+          </li>
+        ) : null}
+      </ul>
+    </nav>
   );
 }
 
@@ -330,18 +421,9 @@ export function Shell() {
     <div className="min-h-dvh p-2 pb-24 sm:p-3 lg:p-5 lg:pb-5 print:p-0">
       <div className="shell-card mx-auto flex min-h-[calc(100dvh-1rem)] max-w-[110rem] lg:min-h-[calc(100dvh-2.5rem)]">
         {/* Icon rail: a blob attached to the card's left edge */}
-        <aside className="hidden w-[7.5rem] shrink-0 lg:block print:hidden">
+        <aside className="relative z-30 hidden w-[7.5rem] shrink-0 lg:block print:hidden">
           <div className="sticky top-5 flex h-[calc(100dvh-2.5rem-2px)] items-center">
-            <nav aria-label="Main" className="relative h-[min(100%,54rem)] w-[7rem]">
-              <RailShape />
-              <ul className="absolute inset-x-0 bottom-[22%] top-[13%] flex flex-col items-center justify-center gap-1.5">
-                {items.map((item) => (
-                  <li key={item.id}>
-                    <RailLink to={item.path} end={item.path === "/"} label={item.label} Icon={ICONS[item.id] ?? LayoutDashboard} />
-                  </li>
-                ))}
-              </ul>
-            </nav>
+            <DesktopRail items={items} />
           </div>
         </aside>
 
