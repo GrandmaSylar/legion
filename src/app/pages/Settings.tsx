@@ -1,4 +1,5 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { TabsContent } from "../components/ui/tabs";
+import { SectionTabs } from "../components/SectionTabs";
 import { useCapabilities } from "../../lib/access/useCapabilities";
 import InstitutionTab from "./settings/InstitutionTab";
 import FeaturesTab from "./settings/FeaturesTab";
@@ -8,7 +9,6 @@ import SubjectsTab from "./settings/SubjectsTab";
 import GradingTab from "./settings/GradingTab";
 import TimetableTab from "./settings/TimetableTab";
 import AuditLogTab from "./settings/AuditLogTab";
-import { DialogShowcase } from "../components/modals/DialogShowcase";
 import { LegionLogo } from "../components/brand/LegionLogo";
 import { DevelopedByPhinova } from "../components/brand/DevelopedByPhinova";
 
@@ -29,19 +29,21 @@ export default function Settings() {
         <LegionLogo variant="compact" size="sm" />
       </div>
 
-      <Tabs defaultValue="institution" className="space-y-4">
-        <div>
-          <TabsList className="h-auto w-full flex-wrap justify-start">
-            <TabsTrigger value="institution">Institution &amp; receipts</TabsTrigger>
-            <TabsTrigger value="features">Features</TabsTrigger>
-            <TabsTrigger value="calendar">Academic year</TabsTrigger>
-            <TabsTrigger value="classes">Classes</TabsTrigger>
-            <TabsTrigger value="subjects">Subjects</TabsTrigger>
-            <TabsTrigger value="grading">Grading</TabsTrigger>
-            {showTimetable ? <TabsTrigger value="timetable">Timetable</TabsTrigger> : null}
-            {showAudit ? <TabsTrigger value="audit">Security &amp; Audit Log</TabsTrigger> : null}
-          </TabsList>
-        </div>
+      <SectionTabs
+        defaultValue="institution"
+        label="Setting"
+        className="space-y-4"
+        items={[
+          { value: "institution", label: "Institution & receipts" },
+          { value: "features", label: "Features" },
+          { value: "calendar", label: "Academic year" },
+          { value: "classes", label: "Classes" },
+          { value: "subjects", label: "Subjects" },
+          { value: "grading", label: "Grading" },
+          ...(showTimetable ? [{ value: "timetable", label: "Timetable" }] : []),
+          ...(showAudit ? [{ value: "audit", label: "Security & Audit Log" }] : []),
+        ]}
+      >
         <TabsContent value="institution"><InstitutionTab /></TabsContent>
         <TabsContent value="features"><FeaturesTab /></TabsContent>
         <TabsContent value="calendar"><CalendarTab /></TabsContent>
@@ -50,11 +52,10 @@ export default function Settings() {
         <TabsContent value="grading"><GradingTab /></TabsContent>
         {showTimetable ? <TabsContent value="timetable"><TimetableTab /></TabsContent> : null}
         {showAudit ? <TabsContent value="audit"><AuditLogTab /></TabsContent> : null}
-      </Tabs>
+      </SectionTabs>
 
       {/* Interactive System Dialogs Showcase & System Credit */}
       <div className="space-y-3 pt-4">
-        <DialogShowcase />
         <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <span>Legion OS Engine v2.4</span>

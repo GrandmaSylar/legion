@@ -60,6 +60,7 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { ReceiptView } from "./ReceiptView";
 import { PayOnlineDialog } from "./PayOnlineDialog";
+import { SectionTabs } from "../../components/SectionTabs";
 import { cn } from "../../components/ui/utils";
 import { CancelReceiptDialog } from "./CancelReceiptDialog";
 import { listOnlinePayments } from "../../../lib/data/onlinePayments";
@@ -580,12 +581,12 @@ export default function Fees() {
       ) : null}
 
       {/* Summary KPI cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <section className="surface p-4">
-          <div className="text-xs font-medium text-muted-foreground">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <section className="surface p-3 sm:p-4">
+          <div className="text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
             Total Billed ({(invoicesQ.data ?? []).length} invoices)
           </div>
-          <div className="mt-1 text-2xl font-bold tabular-nums">
+          <div className="mt-1 break-words text-[15px] font-bold leading-tight tabular-nums sm:text-2xl">
             {invoicesQ.isLoading ? (
               <Skeleton className="h-7 w-28" />
             ) : (
@@ -594,10 +595,10 @@ export default function Fees() {
           </div>
         </section>
         <section className="surface p-4">
-          <div className="text-xs font-medium text-muted-foreground">
+          <div className="text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
             Total Collected ({allPayments.length} receipts)
           </div>
-          <div className="mt-1 text-2xl font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
+          <div className="mt-1 text-[15px] leading-tight break-words sm:text-2xl font-bold text-emerald-700 tabular-nums dark:text-emerald-400">
             {invoicesQ.isLoading ? (
               <Skeleton className="h-7 w-28" />
             ) : (
@@ -606,10 +607,10 @@ export default function Fees() {
           </div>
         </section>
         <section className="surface p-4">
-          <div className="text-xs font-medium text-muted-foreground">
+          <div className="text-[11px] font-medium leading-tight text-muted-foreground sm:text-xs">
             Outstanding Arrears
           </div>
-          <div className="mt-1 text-2xl font-bold text-rose-700 tabular-nums dark:text-rose-400">
+          <div className="mt-1 text-[15px] leading-tight break-words sm:text-2xl font-bold text-rose-700 tabular-nums dark:text-rose-400">
             {invoicesQ.isLoading ? (
               <Skeleton className="h-7 w-28" />
             ) : (
@@ -619,35 +620,22 @@ export default function Fees() {
         </section>
       </div>
 
-      <Tabs defaultValue={canReadInvoices ? "receipts" : "expenses"} className="space-y-4">
-        <TabsList className="h-auto w-full flex-wrap justify-start">
-          <TabsTrigger value="receipts">
-            Receipts &amp; Payments ({allPayments.length})
-          </TabsTrigger>
-          <TabsTrigger value="invoices">
-            Invoices &amp; Batch Billing ({(invoicesQ.data ?? []).length})
-          </TabsTrigger>
-          {canConfigure ? (
-            <TabsTrigger value="discounts">
-              Scholarships &amp; Discounts ({(studentDiscountsQ.data ?? []).length})
-            </TabsTrigger>
-          ) : null}
-          <TabsTrigger value="installments">
-            Installment Plans ({allInstallments.length})
-          </TabsTrigger>
-          {canReview ? (
-            <TabsTrigger value="online">
-              Online payments
-              {needsReview > 0 ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">{needsReview}</span> : null}
-            </TabsTrigger>
-          ) : null}
-          {canConfigure ? (
-            <TabsTrigger value="structure">Fee Structure</TabsTrigger>
-          ) : null}
-          {canAccessExpenses ? (
-            <TabsTrigger value="expenses">Expenses &amp; Approvals</TabsTrigger>
-          ) : null}
-        </TabsList>
+      <SectionTabs
+        defaultValue={canReadInvoices ? "receipts" : "expenses"}
+        label="Fees section"
+        className="space-y-4"
+        items={[
+          ...(canReadInvoices ? [
+            { value: "receipts", label: "Receipts & Payments", count: allPayments.length },
+            { value: "invoices", label: "Invoices & Batch Billing", count: (invoicesQ.data ?? []).length },
+          ] : []),
+          ...(canConfigure ? [{ value: "discounts", label: "Scholarships & Discounts", count: (studentDiscountsQ.data ?? []).length }] : []),
+          ...(canReadInvoices ? [{ value: "installments", label: "Installment Plans", count: allInstallments.length }] : []),
+          ...(canReview ? [{ value: "online", label: "Online payments", alert: needsReview }] : []),
+          ...(canConfigure ? [{ value: "structure", label: "Fee Structure" }] : []),
+          ...(canAccessExpenses ? [{ value: "expenses", label: "Expenses & Approvals" }] : []),
+        ]}
+      >
 
         {/* ─── TAB 1: RECEIPTS & PAYMENTS ─────────────────────────────────── */}
         <TabsContent value="receipts" className="space-y-5">
@@ -1941,7 +1929,7 @@ export default function Fees() {
             />
           </TabsContent>
         ) : null}
-      </Tabs>
+      </SectionTabs>
     </div>
   );
 }
