@@ -5,18 +5,38 @@ import { listAcademicYears, listClasses } from "../../../lib/data/setup";
 import { listClassSubjectsWithDetails } from "../../../lib/data/grades";
 import {
   WEEKDAYS,
+  assignSlotSubject,
   deleteTimetableSlot,
-  generateDefaultClassTimetable,
   listClassTimetable,
   saveTimetableSlot,
 } from "../../../lib/data/timetable";
+import { applyBellSchedule, fillClassSubjects } from "../../../lib/data/schedules";
+import { useCapabilities } from "../../../lib/access/useCapabilities";
+import { SectionTabs } from "../../components/SectionTabs";
+import { TabsContent } from "../../components/ui/tabs";
+import SchoolDayTab from "./SchoolDayTab";
 import { friendlyError } from "../../../lib/data/errors";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
 
+/** The timetable: the school's day, and each class's weekly timetable laid out from it. */
 export default function TimetableTab() {
+  const { can } = useCapabilities();
+  if (!can("timetable.manage_schedule")) return <ClassTimetables />;
+  return (
+    <SectionTabs
+      defaultValue="classes" label="Timetable section" className="space-y-4"
+      items={[{ value: "classes", label: "Class timetables" }, { value: "day", label: "The school day" }]}
+    >
+      <TabsContent value="classes"><ClassTimetables /></TabsContent>
+      <TabsContent value="day"><SchoolDayTab /></TabsContent>
+    </SectionTabs>
+  );
+}
+
+function ClassTimetables() {
   const qc = useQueryClient();
   const yearsQuery = useQuery({
     queryKey: ["academic-years"],
@@ -78,8 +98,24 @@ export default function TimetableTab() {
     },
   });
 
-  const autoFillMutation = useMutation({
-    mutationFn: () => generateDefaultClassTimetable(activeClass!.id),
+  const [note, setNote] = useState<string | null>(null);
+  const applyMutation = useMutation({
+    mutationFn: () => applyBellSchedule(activeClass!.id),
+    onSuccess: (r) => {
+      invalidate();
+      setNote(r.created + r.removed === 0 && r.offSchedule === 0
+        ? "This class already follows the school day."
+        : `Applied the school day: ${r.created} added, ${r.removed} empty ${r.removed === 1 ? "slot" : "slots"} removed${r.offSchedule ? `, ${r.offSchedule} ${r.offSchedule === 1 ? "lesson" : "lessons"} with a subject no longer match the school day and were kept` : ""}.`);
+    },
+    onError: () => setNote(null),
+  });
+  const fillMutation = useMutation({
+    mutationFn: () => fillClassSubjects(activeClass!.id),
+    onSuccess: (n) => { invalidate(); setNote(n === 0 ? "There are no empty lessons to fill." : `Filled ${n} ${n === 1 ? "lesson" : "lessons"} with the class's subjects in turn.`); },
+    onError: () => setNote(null),
+  });
+  const assignMutation = useMutation({
+    mutationFn: (v: { id: string; classSubjectId: string | null }) => assignSlotSubject(v.id, v.classSubjectId),
     onSuccess: invalidate,
   });
 
@@ -130,18 +166,15 @@ export default function TimetableTab() {
           </Field>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={autoFillMutation.isPending || subjects.length === 0}
-          onClick={() => autoFillMutation.mutate()}
-        >
-          <Calendar className="size-4" aria-hidden />
-          {autoFillMutation.isPending
-            ? "Generating..."
-            : "Auto-fill Mon–Fri schedule from class subjects"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={applyMutation.isPending} onClick={() => applyMutation.mutate()}>
+            <Calendar className="size-4" aria-hidden />
+            {applyMutation.isPending ? "Applying..." : "Apply the school day"}
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={fillMutation.isPending || subjects.length === 0} onClick={() => fillMutation.mutate()}>
+            {fillMutation.isPending ? "Filling..." : "Fill empty lessons with subjects"}
+          </Button>
+        </div>
       </section>
 
       {/* Add slot form */}
@@ -224,15 +257,20 @@ export default function TimetableTab() {
       <FormMessage
         error={
           addSlotMutation.isError ||
-          autoFillMutation.isError ||
+          applyMutation.isError ||
+          fillMutation.isError ||
+          assignMutation.isError ||
           removeSlotMutation.isError
             ? friendlyError(
                 addSlotMutation.error ??
-                  autoFillMutation.error ??
+                  applyMutation.error ??
+                  fillMutation.error ??
+                  assignMutation.error ??
                   removeSlotMutation.error,
               )
             : null
         }
+        ok={note}
       />
 
       {/* Weekly Timetable Grid (Monday - Friday) */}
@@ -261,7 +299,8 @@ export default function TimetableTab() {
                 ) : (
                   <ul className="space-y-2">
                     {daySlots.map((slot) => {
-                      const isBreak = !slot.classSubjectId;
+                      const isBreak = slot.kind === "break";
+                      const unassigned = slot.kind === "lesson" && !slot.classSubjectId;
                       return (
                         <li
                           key={slot.id}
@@ -286,8 +325,19 @@ export default function TimetableTab() {
                             </button>
                           </div>
                           <div className="mt-1 font-semibold text-foreground">
-                            {slot.subjectName ?? slot.label ?? "Period"}
+                            {unassigned ? slot.label ?? "Lesson" : slot.subjectName ?? slot.label ?? "Period"}
                           </div>
+                          {unassigned ? (
+                            <select
+                              aria-label={`Subject for ${slot.label ?? "this lesson"} on ${day.name}`} value=""
+                              disabled={assignMutation.isPending}
+                              onChange={(e) => e.target.value && assignMutation.mutate({ id: slot.id, classSubjectId: e.target.value })}
+                              className="mt-1 w-full rounded-md border border-amber-500/60 bg-background px-1.5 py-1 text-[11px] text-amber-700 dark:text-amber-300"
+                            >
+                              <option value="">Not assigned. Choose a subject</option>
+                              {subjects.map((s) => <option key={s.id} value={s.id}>{s.subjectName}</option>)}
+                            </select>
+                          ) : null}
                           {slot.teacherName ? (
                             <div className="text-[11px] text-muted-foreground">
                               {slot.teacherName}

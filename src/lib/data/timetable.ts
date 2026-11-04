@@ -25,6 +25,8 @@ export interface TimetableSlot {
   startTime: string;
   endTime: string;
   label: string | null;
+  /** A lesson (with or without a subject yet) or a break. */
+  kind: "lesson" | "break";
 }
 
 function trimTime(t: string): string {
@@ -39,6 +41,7 @@ type JoinedSlotRow = {
   start_time: string;
   end_time: string;
   label: string | null;
+  kind: string;
   classes?:
     | { section: string; levels?: { name: string } | { name: string }[] | null }
     | { section: string; levels?: { name: string } | { name: string }[] | null }[]
@@ -87,6 +90,7 @@ function mapSlot(r: JoinedSlotRow): TimetableSlot {
     startTime: trimTime(r.start_time),
     endTime: trimTime(r.end_time),
     label: r.label,
+    kind: r.kind === "break" ? "break" : "lesson",
   };
 }
 
@@ -98,7 +102,7 @@ export async function listClassTimetable(
     await supabase
       .from("timetable_slots")
       .select(
-        "id, class_id, class_subject_id, day_of_week, start_time, end_time, label, classes(section, levels(name)), class_subjects(subjects(name), staff(full_name))",
+        "id, class_id, class_subject_id, day_of_week, start_time, end_time, label, kind, classes(section, levels(name)), class_subjects(subjects(name), staff(full_name))",
       )
       .eq("class_id", classId)
       .order("day_of_week", { ascending: true })
@@ -116,7 +120,7 @@ export async function listTodayTimetable(
     await supabase
       .from("timetable_slots")
       .select(
-        "id, class_id, class_subject_id, day_of_week, start_time, end_time, label, classes!inner(academic_year_id, section, levels(name)), class_subjects(subjects(name), staff(full_name))",
+        "id, class_id, class_subject_id, day_of_week, start_time, end_time, label, kind, classes!inner(academic_year_id, section, levels(name)), class_subjects(subjects(name), staff(full_name))",
       )
       .eq("classes.academic_year_id", academicYearId)
       .eq("day_of_week", dayOfWeek)
@@ -142,6 +146,7 @@ export async function saveTimetableSlot(input: {
         end_time: input.endTime,
         class_subject_id: input.classSubjectId || null,
         label: input.label.trim() || null,
+        kind: input.classSubjectId ? "lesson" : "break",
       },
       { onConflict: "class_id,day_of_week,start_time" },
     ),
@@ -152,77 +157,7 @@ export async function deleteTimetableSlot(id: string): Promise<void> {
   check(await supabase.from("timetable_slots").delete().eq("id", id));
 }
 
-/**
- * Generates a standard Monday–Friday timetable rotating through the class's
- * assigned subjects plus morning break and lunch break.
- */
-export async function generateDefaultClassTimetable(
-  classId: string,
-): Promise<void> {
-  const csRows = check(
-    await supabase
-      .from("class_subjects")
-      .select("id, subjects(name)")
-      .eq("class_id", classId),
-  );
-
-  const subjectIds = csRows.map((r) => r.id);
-
-  const slotsToUpsert: {
-    class_id: string;
-    day_of_week: number;
-    start_time: string;
-    end_time: string;
-    class_subject_id: string | null;
-    label: string | null;
-  }[] = [];
-
-  const teachingBlocks = [
-    { start: "08:30", end: "09:30" },
-    { start: "09:30", end: "10:30" },
-    { start: "11:00", end: "12:00" },
-    { start: "12:00", end: "13:00" },
-    { start: "14:00", end: "15:00" },
-  ];
-
-  let cursor = 0;
-  for (let day = 1; day <= 5; day++) {
-    slotsToUpsert.push({
-      class_id: classId,
-      day_of_week: day,
-      start_time: "10:30",
-      end_time: "11:00",
-      class_subject_id: null,
-      label: "Snack Break",
-    });
-    slotsToUpsert.push({
-      class_id: classId,
-      day_of_week: day,
-      start_time: "13:00",
-      end_time: "14:00",
-      class_subject_id: null,
-      label: "Lunch Break",
-    });
-
-    if (subjectIds.length > 0) {
-      for (const block of teachingBlocks) {
-        const csId = subjectIds[cursor % subjectIds.length];
-        cursor += 1;
-        slotsToUpsert.push({
-          class_id: classId,
-          day_of_week: day,
-          start_time: block.start,
-          end_time: block.end,
-          class_subject_id: csId,
-          label: null,
-        });
-      }
-    }
-  }
-
-  check(
-    await supabase
-      .from("timetable_slots")
-      .upsert(slotsToUpsert, { onConflict: "class_id,day_of_week,start_time" }),
-  );
+/** Put a subject into a lesson slot (or take it out, leaving the lesson empty). */
+export async function assignSlotSubject(id: string, classSubjectId: string | null): Promise<void> {
+  check(await supabase.from("timetable_slots").update({ class_subject_id: classSubjectId, kind: "lesson" }).eq("id", id));
 }
