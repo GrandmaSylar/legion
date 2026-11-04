@@ -5,8 +5,10 @@ import type { RunStatus } from "../payroll";
 
 const num = (v: unknown) => Number(v ?? 0);
 
+export type ProrateMethod = "none" | "calendar_days" | "working_days";
+
 export interface PayrollConfig {
-  requireSeparateApprover: boolean; currency: string;
+  requireSeparateApprover: boolean; currency: string; prorateMethod: ProrateMethod;
   rulesConfirmedBy: string | null; rulesConfirmedNote: string | null; rulesConfirmedAt: string | null; activeRules: number;
 }
 
@@ -18,6 +20,11 @@ export async function getPayrollConfig(): Promise<PayrollConfig> {
 
 export async function savePayrollSettings(separate: boolean, currency: string): Promise<void> {
   const { error } = await supabase.rpc("save_payroll_settings", { p_separate: separate, p_currency: currency });
+  if (error) throw error;
+}
+
+export async function savePayrollProration(method: ProrateMethod): Promise<void> {
+  const { error } = await supabase.rpc("save_payroll_proration", { p_method: method });
   if (error) throw error;
 }
 
@@ -42,13 +49,18 @@ export async function getMyPayslipLines(slipId: string): Promise<SlipLine[]> {
 
 // ─── Staff pay ───────────────────────────────────────────────────────────────
 
-export interface PayStaff { staffId: string; name: string; staffNo: string | null; job: string | null; status: string; basic: number | null; effectiveFrom: string | null; hasAccount: boolean }
+export interface PayStaff { staffId: string; name: string; staffNo: string | null; job: string | null; status: string; basic: number | null; effectiveFrom: string | null; hasAccount: boolean; hiredOn: string | null; leftOn: string | null }
 
 export async function listPayStaff(): Promise<PayStaff[]> {
   const { data, error } = await supabase.rpc("payroll_staff_list");
   if (error) throw error;
-  return ((data ?? []) as { staff_id: string; full_name: string; staff_no: string | null; job: string | null; status: string; basic: string | null; effective_from: string | null; has_account: boolean }[])
-    .map((r) => ({ staffId: r.staff_id, name: r.full_name, staffNo: r.staff_no, job: r.job, status: r.status, basic: r.basic === null ? null : num(r.basic), effectiveFrom: r.effective_from, hasAccount: r.has_account }));
+  return ((data ?? []) as { staff_id: string; full_name: string; staff_no: string | null; job: string | null; status: string; basic: string | null; effective_from: string | null; has_account: boolean; hired_on: string | null; left_on: string | null }[])
+    .map((r) => ({ staffId: r.staff_id, name: r.full_name, staffNo: r.staff_no, job: r.job, status: r.status, basic: r.basic === null ? null : num(r.basic), effectiveFrom: r.effective_from, hasAccount: r.has_account, hiredOn: r.hired_on, leftOn: r.left_on }));
+}
+
+export async function setStaffPayDates(staffId: string, hired: string, left: string): Promise<void> {
+  const { error } = await supabase.rpc("set_staff_pay_dates", { p_staff: staffId, p_hired: hired || null, p_left: left || null });
+  if (error) throw error;
 }
 
 export interface PayHistoryRow { id: string; effectiveFrom: string; basic: number; note: string | null }
