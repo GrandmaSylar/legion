@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "../lib/auth/AuthProvider";
 import { useCapabilities } from "../lib/access/useCapabilities";
+import { useFeatures } from "../lib/access/useFeatures";
 import { NAV, hasAnyRole } from "../lib/permissions";
 import { Button } from "./components/ui/button";
 import { ThemeProvider } from "../theme/ThemeProvider";
@@ -74,12 +75,17 @@ function RequireAuth({ children }: { children: ReactElement }) {
 }
 
 // Role decides what the person may do; their switched-on sections can only narrow that.
-function RequireRole({ allowed, module, anyAction, portalRoles, children }: { allowed: string[]; module?: string; anyAction?: string[]; portalRoles?: string[]; children: ReactElement }) {
+function RequireRole({ allowed, module, anyAction, portalRoles, feature, children }: { allowed: string[]; module?: string; anyAction?: string[]; portalRoles?: string[]; feature?: string; children: ReactElement }) {
   const { roles, profile } = useAuth();
+  const { isOn } = useFeatures();
   const { caps, isLoading } = useCapabilities();
+  // A feature the school has switched off is closed to everyone, portal accounts included.
+  // (Decided here, after every hook has run, so the number of hooks never changes between renders.)
+  const featureOff = !!feature && !isOn(feature);
   const modules = profile?.modules ?? null;
   const moduleOn = !module || module === "dashboard" || modules === null || modules.includes(module);
   // A module decided by actions opens for anyone holding one of them; the rest still follow the role.
+  if (featureOff) return <Navigate to="/" replace />;
   if (anyAction) {
     // Parents and students are portal accounts: they get in by role, staff by action.
     if (portalRoles && hasAnyRole(roles, portalRoles as never) && moduleOn) return children;
@@ -129,7 +135,7 @@ export default function App() {
                       key={item.id}
                       path={item.path}
                       element={
-                        <RequireRole allowed={item.roles} module={item.id} anyAction={item.anyAction} portalRoles={item.portalRoles}>
+                        <RequireRole allowed={item.roles} module={item.id} anyAction={item.anyAction} portalRoles={item.portalRoles} feature={item.feature}>
                           {item.id === "dashboard" ? (
                             <Dashboard />
                           ) : item.id === "settings" ? (

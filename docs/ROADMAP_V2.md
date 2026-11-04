@@ -70,7 +70,8 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
   - [x] Messages, Students, Attendance, Grades, Fees and Expenses, Notices, Staff, Analytics (screens by section)
   - [x] Timetable, Users, Settings, the audit trail
   - [x] Every staff-facing rule is now decided by actions. Roles remain only as job labels that carry a preset, and as the parent and student portal accounts. Handing out a role is limited to roles whose preset you hold in full.
-- [ ] Features page and per-school settings.
+- [x] Features page: ten switches per school (attendance, grades, fees, online payments, expenses, analytics, staff, SMS, notices, timetable). A feature that is off disappears for everyone and the database stops allowing it; online payments need fees. Parents' fee views and the paystack and messaging functions follow it too. Not yet enforced in the database for portal views of grades, attendance and notices (the screens hide them).
+- [ ] Per-school settings for how a school operates (lesson-plan frequency, exam periods and so on) as each module arrives.
 - [ ] Notification layer and email.
 - [ ] Shared navigation (section picker) and download menu components.
 

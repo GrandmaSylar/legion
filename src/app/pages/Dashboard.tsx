@@ -1,4 +1,5 @@
 import { useCapabilities } from "../../lib/access/useCapabilities";
+import { useFeatures } from "../../lib/access/useFeatures";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -165,13 +166,14 @@ function QuickActionsPanel() {
   const modules = profile?.modules ?? null;
   // Shown by what the person may do (their actions), still narrowed by any sections switched off for them.
   const { caps } = useCapabilities();
+  const { disabled } = useFeatures();
   const actions = QUICK_ACTIONS.filter((a) => {
     const item = NAV.find((n) => n.id === a.module);
     const allowed =
       a.always ||
       (!!a.portalRoles && hasAnyRole(roles, a.portalRoles)) ||
       (!!caps && !!a.any && a.any.some((x) => caps.includes(x)) && !(a.unless && caps.includes(a.unless)));
-    return allowed && (!item || canSee(item, roles, modules, caps));
+    return allowed && (!item || canSee(item, roles, modules, caps, disabled));
   });
   return (
     <Panel title="Quick actions" icon={ClipboardCheck}>

@@ -102,6 +102,24 @@ def make_login(email, pw, role):
 results = []
 
 
+def set_feature(key, enabled):
+    """Switch a school feature on or off for the test school and remember what it was before."""
+    out = sql(f"select enabled from public.school_features where feature = '{key}' and school_id = (select id from public.schools where name = 'Pinks Academy')")
+    before = None if '"enabled"' not in out else ('"enabled": true' in out)
+    sql(f"""insert into public.school_features (school_id, feature, enabled)
+            select id, '{key}', {str(enabled).lower()} from public.schools where name = 'Pinks Academy'
+            on conflict (school_id, feature) do update set enabled = excluded.enabled""")
+    return before
+
+
+def restore_feature(key, before):
+    """Put the switch back exactly as it was: no row at all, or the value it had."""
+    if before is None:
+        sql(f"delete from public.school_features where feature = '{key}' and school_id = (select id from public.schools where name = 'Pinks Academy')")
+    else:
+        sql(f"update public.school_features set enabled = {str(before).lower()} where feature = '{key}' and school_id = (select id from public.schools where name = 'Pinks Academy')")
+
+
 def check(label, ok):
     results.append(bool(ok))
     print(("PASS " if ok else "FAIL ") + label)
@@ -297,6 +315,22 @@ try:
         check("receipts Paystack has no record of are listed (our test payments were simulated)", {ref1, ref2, refA} <= flagged)
         check("a refunded receipt is not accused", refC not in flagged)
         check("Legion's total counts only live receipts", rep.get("legion", {}).get("count", 0) >= 3)
+
+        # ── a school can switch online payments off ───────────────────────
+        prior = set_feature("online_payments", False)
+        try:
+            code, r = fn(t1, action="initialize", invoiceId=inv1, amount=5, returnUrl=RET)
+            check("with online payments switched off a payment cannot be started", code == 503 and "switched off" in str(r.get("error", "")))
+            code, r = fn(t1, action="status")
+            check("and parents are told it is not available, so the Pay button hides", code == 200 and r.get("configured") is False)
+            check("and the Paystack check is refused", fn(tacc, action="reconcile", **{"from": d0, "to": d1})[0] == 503)
+            # money already paid must still be recorded: the webhook is not switched off
+            code, r = fn(t1, action="verify", reference=ref1)
+            check("a payment already made can still be checked", code == 200 and r.get("status") == "success")
+        finally:
+            restore_feature("online_payments", prior)
+        code, r = fn(t1, action="status")
+        check("switched back on, parents can pay again", code == 200 and r.get("configured") is True)
 
         # ── a paid-off invoice cannot be paid again ──────────────────────────
         check("the other family's invoice is untouched",

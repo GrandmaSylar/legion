@@ -273,6 +273,9 @@ Deno.serve(async (req) => {
     const feeOnly = !canSend && can("messages.send_fee_reminders"); // may send fee reminders and nothing else
     const canManage = can("messages.manage_setup");
     if (!canSend && !feeOnly) throw new HttpError(403, "You do not have permission to send messages.");
+    // The school may have switched text messages off altogether.
+    const { data: smsOn } = await admin.rpc("school_feature_enabled", { p_school: profile.school_id as string, p_key: "messages" });
+    if (smsOn === false) throw new HttpError(403, "Text messages are switched off for this school.");
 
     const { data: school } = await admin.from("schools").select("name").eq("id", schoolId).maybeSingle();
     const schoolName = (school?.name as string) ?? "School";

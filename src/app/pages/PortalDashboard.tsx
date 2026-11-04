@@ -25,6 +25,7 @@ import { listNotices } from "../../lib/data/notices";
 import { WEEKDAYS, listClassTimetable } from "../../lib/data/timetable";
 import { StudentAvatar, usePhotoUrls } from "../components/StudentAvatar";
 import { FeesSummaryCard } from "./FeesSummaryCard";
+import { useFeatures } from "../../lib/access/useFeatures";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../components/ui/utils";
@@ -64,6 +65,8 @@ export function PortalDashboard() {
     queryFn: () => listNotices(8),
   });
 
+  // Features the school has switched off disappear from the portal too.
+  const { isOn } = useFeatures();
   const students = studentsQuery.data ?? [];
   const [selectedId, setSelectedId] = useState("");
   const activeStudent =
@@ -228,6 +231,7 @@ export function PortalDashboard() {
 
           {/* Summary Stat Cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+            {isOn("attendance") ? (
             <section
               className="lift relative isolate flex flex-col justify-between overflow-hidden rounded-3xl p-5 text-white shadow-lg shadow-primary/30"
               style={{
@@ -265,7 +269,9 @@ export function PortalDashboard() {
                 ) : null}
               </div>
             </section>
+            ) : null}
 
+            {isOn("grades") ? (
             <section className="surface lift flex flex-col justify-between rounded-3xl p-5">
               <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                 <span>Latest term average</span>
@@ -288,7 +294,9 @@ export function PortalDashboard() {
                   : "No terminal results published yet"}
               </div>
             </section>
+            ) : null}
 
+            {isOn("notices") ? (
             <section className="surface lift flex flex-col justify-between rounded-3xl p-5">
               <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                 <span>School notices</span>
@@ -310,14 +318,16 @@ export function PortalDashboard() {
                 </Link>
               </div>
             </section>
+            ) : null}
           </div>
 
           {/* Fees: what is owed for this child, with a way to pay it now */}
-          {isParent ? <FeesSummaryCard studentId={activeStudent.id} studentName={activeStudent.fullName} /> : null}
+          {isParent && isOn("fees") ? <FeesSummaryCard studentId={activeStudent.id} studentName={activeStudent.fullName} /> : null}
 
           {/* 3 Main Content Panels */}
           <div className="grid gap-4 lg:grid-cols-3">
             {/* Panel 1: Attendance Log */}
+            {isOn("attendance") ? (
             <section className="surface space-y-3 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="flex items-center gap-2 text-base font-semibold">
@@ -399,8 +409,10 @@ export function PortalDashboard() {
                 </>
               )}
             </section>
+            ) : null}
 
             {/* Panel 2: Latest Grades & Remarks */}
+            {isOn("grades") ? (
             <section className="surface space-y-3 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="flex items-center gap-2 text-base font-semibold">
@@ -471,8 +483,10 @@ export function PortalDashboard() {
                 </div>
               )}
             </section>
+            ) : null}
 
             {/* Panel 3: Announcements */}
+            {isOn("notices") ? (
             <section className="surface space-y-3 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="flex items-center gap-2 text-base font-semibold">
@@ -519,8 +533,9 @@ export function PortalDashboard() {
                 </ul>
               )}
             </section>
+            ) : null}
           </div>
-          {currentEnrol && timetableSlots.length > 0 ? (
+          {currentEnrol && timetableSlots.length > 0 && isOn("timetable") ? (
             <section className="surface space-y-3 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="flex items-center gap-2 text-base font-semibold">
