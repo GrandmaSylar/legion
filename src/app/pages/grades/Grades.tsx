@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { ExamTimetableCard } from "./ExamTimetableCard";
 import { getClassScheme } from "../../../lib/data/schemes";
 import { listExamPeriods, windowState } from "../../../lib/data/examPeriods";
 import { Link, useSearchParams } from "react-router";
@@ -172,6 +173,8 @@ function PortalGradesView() {
           View and print terminal results and teacher remarks.
         </p>
       </div>
+
+      <div className="print:hidden"><ExamTimetableCard /></div>
 
       <section className="surface grid gap-3 p-4 sm:grid-cols-2 print:hidden">
         {students.length > 1 ? (
@@ -1506,6 +1509,8 @@ function StaffGradesPage() {
               : "Record assessments, term grades, and printable report cards"}
           </p>
         </div>
+
+        <div className="w-full print:hidden"><ExamTimetableCard /></div>
 
         <div className="inline-flex rounded-2xl border border-border bg-background/60 p-1">
           <button

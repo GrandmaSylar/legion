@@ -21,14 +21,16 @@ export interface ExamPeriod {
   entryOpensOn: string | null;
   entryClosesOn: string | null;
   showOnCalendar: boolean;
+  useTimetable: boolean;
+  timetablePublished: boolean;
 }
 
 interface Row {
   id: string; term_id: string; name: string; kind: string; starts_on: string; ends_on: string; all_classes: boolean;
-  restrict_entry: boolean; entry_opens_on: string | null; entry_closes_on: string | null; show_on_calendar: boolean;
+  restrict_entry: boolean; entry_opens_on: string | null; entry_closes_on: string | null; show_on_calendar: boolean; use_timetable: boolean; timetable_published: boolean;
 }
 
-const COLUMNS = "id, term_id, name, kind, starts_on, ends_on, all_classes, restrict_entry, entry_opens_on, entry_closes_on, show_on_calendar";
+const COLUMNS = "id, term_id, name, kind, starts_on, ends_on, all_classes, restrict_entry, entry_opens_on, entry_closes_on, show_on_calendar, use_timetable, timetable_published";
 
 export async function listExamPeriods(): Promise<ExamPeriod[]> {
   const [p, c] = await Promise.all([
@@ -42,7 +44,7 @@ export async function listExamPeriods(): Promise<ExamPeriod[]> {
   return ((p.data ?? []) as Row[]).map((r) => ({
     id: r.id, termId: r.term_id, name: r.name, kind: r.kind as ExamKind, startsOn: r.starts_on, endsOn: r.ends_on,
     allClasses: r.all_classes, classIds: byPeriod.get(r.id) ?? [], restrictEntry: r.restrict_entry,
-    entryOpensOn: r.entry_opens_on, entryClosesOn: r.entry_closes_on, showOnCalendar: r.show_on_calendar,
+    entryOpensOn: r.entry_opens_on, entryClosesOn: r.entry_closes_on, showOnCalendar: r.show_on_calendar, useTimetable: r.use_timetable, timetablePublished: r.timetable_published,
   }));
 }
 
@@ -58,13 +60,14 @@ export interface ExamPeriodInput {
   entryOpensOn: string;
   entryClosesOn: string;
   showOnCalendar: boolean;
+  useTimetable: boolean;
 }
 
 function toRow(i: ExamPeriodInput) {
   return {
     term_id: i.termId, name: i.name.trim(), kind: i.kind, starts_on: i.startsOn, ends_on: i.endsOn, all_classes: i.allClasses,
     restrict_entry: i.restrictEntry, entry_opens_on: i.restrictEntry ? i.entryOpensOn : null,
-    entry_closes_on: i.restrictEntry ? i.entryClosesOn : null, show_on_calendar: i.showOnCalendar,
+    entry_closes_on: i.restrictEntry ? i.entryClosesOn : null, show_on_calendar: i.showOnCalendar, use_timetable: i.useTimetable,
   };
 }
 
