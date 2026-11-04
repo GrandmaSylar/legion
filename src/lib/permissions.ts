@@ -96,6 +96,9 @@ export const CALENDAR_ACTIONS = ["calendar.view", "calendar.manage"];
 /** Tasks: seeing and ticking off your own, seeing everyone's, and assigning. */
 export const TASK_ACTIONS = ["tasks.view_own", "tasks.view_all", "tasks.assign"];
 
+/** Lesson plans: the syllabus, writing plans, and reviewing them. */
+export const LESSON_ACTIONS = ["lessons.view_syllabus", "lessons.write_own", "lessons.view_all", "lessons.review", "lessons.manage_syllabus"];
+
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Overview", path: "/", roles: [...STAFF, "parent", "student"], built: true },
   { id: "students", label: "Students", path: "/students", roles: ["school_admin", "principal", "teacher", "receptionist", "accountant"], built: true, anyAction: STUDENT_ACTIONS },
@@ -106,6 +109,7 @@ export const NAV: NavItem[] = [
   { id: "staff", label: "Staff", path: "/staff", roles: ["school_admin", "hr_officer", "principal"], built: true, anyAction: STAFF_ACTIONS, feature: "staff" },
   { id: "messages", label: "Messages", path: "/messages", roles: ["school_admin", "principal", "accountant"], built: true, anyAction: MESSAGE_ACTIONS, feature: "messages" },
   { id: "notices", label: "Notices", path: "/notices", roles: [...STAFF, "parent", "student"], built: true, feature: "notices" },
+  { id: "lessons", label: "Lesson plans", path: "/lessons", roles: [...STAFF], built: true, anyAction: LESSON_ACTIONS, feature: "lessons" },
   { id: "tasks", label: "Tasks", path: "/tasks", roles: [...STAFF], built: true, anyAction: TASK_ACTIONS, feature: "tasks" },
   { id: "calendar", label: "Calendar", path: "/calendar", roles: [...STAFF, "parent", "student"], built: true, anyAction: CALENDAR_ACTIONS, portalRoles: ["parent", "student"], feature: "calendar" },
   { id: "users", label: "Users", path: "/users", roles: ["school_admin"], built: true, anyAction: USERS_ACTIONS },
