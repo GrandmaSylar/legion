@@ -82,6 +82,8 @@ export interface Assessment {
   examPeriodId: string | null;
   /** The part of the result (in the class's assessment scheme) this belongs to, if any. */
   componentId: string | null;
+  /** Whether pupils may see the marks of this assessment before the report is published. Hidden until the teacher shows it. */
+  visibleToStudents: boolean;
 }
 
 export interface GradebookStudentRow {
@@ -424,7 +426,7 @@ export async function listAssessments(
   const rows = check(
     await supabase
       .from("assessments")
-      .select("id, class_subject_id, term_id, type, title, max_score, weight, exam_period_id, component_id, created_at")
+      .select("id, class_subject_id, term_id, type, title, max_score, weight, exam_period_id, component_id, visible_to_students, created_at")
       .eq("class_subject_id", classSubjectId)
       .eq("term_id", termId)
       .order("created_at", { ascending: true }),
@@ -443,6 +445,7 @@ export async function listAssessments(
     weight: Number(r.weight),
     examPeriodId: (r.exam_period_id as string | null) ?? null,
     componentId: (r.component_id as string | null) ?? null,
+    visibleToStudents: !!r.visible_to_students,
   }));
 }
 
@@ -506,6 +509,53 @@ export async function createStandardGesAssessments(
       },
     ]),
   );
+}
+
+export interface PupilMark {
+  id: string;
+  subject: string;
+  title: string;
+  score: number;
+  maxScore: number;
+  addedAt: string;
+}
+
+/** The marks the pupil may see for an enrollment: only those the teacher has shown, or all once the report is published. */
+export async function getVisibleMarks(enrollmentId: string): Promise<PupilMark[]> {
+  const rows = check(
+    await supabase
+      .from("scores")
+      .select("id, score, assessments!inner(title, max_score, created_at, class_subjects(subjects(name)))")
+      .eq("enrollment_id", enrollmentId)
+      .not("score", "is", null),
+  );
+  const first = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+  return rows
+    .map((r) => {
+      const a = first(r.assessments);
+      const cs = first(a?.class_subjects as unknown as { subjects: { name: string } | { name: string }[] | null } | { subjects: { name: string } | { name: string }[] | null }[] | null);
+      return {
+        id: r.id,
+        subject: first(cs?.subjects)?.name ?? "",
+        title: a?.title ?? "Assessment",
+        score: Number(r.score),
+        maxScore: Number(a?.max_score ?? 0),
+        addedAt: a?.created_at ?? "",
+      };
+    })
+    .sort((x, y) => y.addedAt.localeCompare(x.addedAt) || x.subject.localeCompare(y.subject));
+}
+
+/** Show or hide one assessment's marks to the pupils. Until the report is published they see only what is shown. */
+export async function setAssessmentVisibility(id: string, visible: boolean): Promise<void> {
+  check(await supabase.from("assessments").update({ visible_to_students: visible }).eq("id", id));
+}
+
+/** Show or hide every assessment of a subject for a term at once. Returns how many changed. */
+export async function setMarksVisibility(classSubjectId: string, termId: string, visible: boolean): Promise<number> {
+  const { data, error } = await supabase.rpc("set_marks_visibility", { p_class_subject: classSubjectId, p_term: termId, p_visible: visible });
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 /** Moves an assessment into another part of the class's scheme (or out of any part). Results are recalculated. */
