@@ -11,6 +11,7 @@ import { FormMessage } from "../../components/fields";
 import { useAuth } from "../../../lib/auth/AuthProvider";
 import { createSubject, deleteSubject, listSubjects, updateSubject, type ListItem } from "../../../lib/data/setup";
 import { DeleteButton } from "../../components/DeleteButton";
+import { Columns } from "../../components/Columns";
 import { friendlyError } from "../../../lib/data/errors";
 
 function Row({ item }: { item: ListItem }) {
@@ -80,20 +81,22 @@ export default function SubjectsTab() {
   const submit = (e: FormEvent) => { e.preventDefault(); add.mutate(name.trim()); };
 
   return (
-    <div className="max-w-xl space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Subjects and learning areas share one list. Basic levels score them; creche to KG 2 write a remark for each.
-        Turn one off to stop using it without losing past records.
-      </p>
-
-      <form onSubmit={submit} className="flex items-start gap-2">
-        <div className="flex-1 space-y-1">
-          <Input aria-label="New subject" value={name} onChange={(e) => setName(e.target.value)} placeholder="New subject" />
-          <FormMessage error={add.isError ? friendlyError(add.error) : null} />
-        </div>
-        <Button type="submit" disabled={add.isPending || !name.trim()}>Add</Button>
-      </form>
-
+    <Columns layout="narrow" sticky
+      side={<section className="surface space-y-3 p-4">
+        <h2 className="text-base font-medium">Add a subject</h2>
+        <p className="text-sm text-muted-foreground">
+          Subjects and learning areas share one list. Basic levels score them; creche to KG 2 write a remark for each.
+          Turn one off to stop using it without losing past records.
+        </p>
+        <form onSubmit={submit} className="flex items-start gap-2">
+          <div className="flex-1 space-y-1">
+            <Input aria-label="New subject" value={name} onChange={(e) => setName(e.target.value)} placeholder="New subject" />
+            <FormMessage error={add.isError ? friendlyError(add.error) : null} />
+          </div>
+          <Button type="submit" disabled={add.isPending || !name.trim()}>Add</Button>
+        </form>
+      </section>}
+      main={<>
       {items.isError ? <p role="alert" className="text-sm text-destructive">Could not load the list.</p> : null}
       {items.data?.length === 0 ? <p className="text-sm text-muted-foreground">Nothing here yet.</p> : null}
       {items.data && items.data.length > 0 ? (
@@ -101,6 +104,7 @@ export default function SubjectsTab() {
           {items.data.map((item) => <Row key={item.id} item={item} />)}
         </ul>
       ) : null}
-    </div>
+      </>}
+    />
   );
 }
