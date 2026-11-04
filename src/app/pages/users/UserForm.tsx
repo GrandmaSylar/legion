@@ -1,5 +1,7 @@
 // Create a user, or edit one: details, roles, and which sections are switched on.
 import { AccessPanel } from "./AccessPanel";
+import { JobPreview } from "./JobPreview";
+import { Columns } from "../../components/Columns";
 import { useCapabilities } from "../../../lib/access/useCapabilities";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
@@ -148,7 +150,8 @@ function CreateUser() {
 
   const ready = email.trim() && fullName.trim() && roles.length > 0 && password.length >= 8;
   return (
-    <form onSubmit={(e) => { e.preventDefault(); create.mutate(); }} className="space-y-4">
+    <form onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+     <Columns sticky side={<JobPreview roles={roles} />} main={<>
       <section className="surface space-y-4 p-4">
         <h2 className="text-base font-medium">Details</h2>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -196,6 +199,7 @@ function CreateUser() {
         <Button type="submit" disabled={create.isPending || !ready}>{create.isPending ? "Creating" : "Create user"}</Button>
         <Button type="button" variant="ghost" asChild><Link to="/users">Cancel</Link></Button>
       </div>
+     </>} />
     </form>
   );
 }
@@ -228,35 +232,7 @@ function EditUser({ user }: { user: UserRow }) {
   const reset = useMutation({ mutationFn: () => resetUserPassword(user.id, resetPw), onSuccess: () => setResetPw("") });
   const remove = useMutation({ mutationFn: () => deleteUser(user.id), onSuccess: () => { refresh(); navigate("/users"); } });
 
-  return (
-    <div className="space-y-4">
-      {readOnly ? (
-        <p role="status" className="surface p-3 text-sm">Only a developer can change this account.</p>
-      ) : null}
-
-      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
-        <section className="surface space-y-4 p-4">
-          <h2 className="text-base font-medium">Details</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Full name" htmlFor="name"><Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={readOnly} required /></Field>
-            <Field label="Email" htmlFor="email"><Input id="email" value={user.email ?? ""} readOnly tabIndex={-1} /></Field>
-            <Field label="Phone" htmlFor="phone"><Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} /></Field>
-          </div>
-        </section>
-        <RolesAndModules
-          roles={roles} setRoles={setRoles}
-          canGrantDeveloper={iAmDev} disabled={readOnly} lockedDeveloper={isSelf}
-        />
-        <FormMessage error={save.isError ? message(save.error) : null} ok={save.isSuccess ? "Saved" : null} />
-        {!readOnly ? <Button type="submit" disabled={save.isPending || !fullName.trim() || roles.length === 0}>{save.isPending ? "Saving" : "Save changes"}</Button> : null}
-      </form>
-
-      {/* Staff only: parents and students are portal accounts, and a developer holds everything. */}
-      {!readOnly && !isSelf && !targetPrivileged && can("access.manage") && user.roles.some((r) => r !== "parent" && r !== "student") ? (
-        <AccessPanel userId={user.id} userName={user.fullName} roles={user.roles} />
-      ) : null}
-
-      {!readOnly && !isSelf ? (
+  const AccountCard = () => (
         <section className="surface space-y-4 p-4">
           <h2 className="text-base font-medium">Account</h2>
 
@@ -297,18 +273,51 @@ function EditUser({ user }: { user: UserRow }) {
             </div>
           ) : null}
         </section>
+  );
+
+  const showAccess = !readOnly && !isSelf && !targetPrivileged && can("access.manage") && user.roles.some((r) => r !== "parent" && r !== "student");
+  const showAccount = !readOnly && !isSelf;
+
+  return (
+    <Columns layout="balanced" side={showAccess || showAccount ? <>
+      {showAccess ? <AccessPanel userId={user.id} userName={user.fullName} roles={user.roles} /> : null}
+      {showAccount ? <AccountCard /> : null}
+    </> : undefined} main={<>
+      {readOnly ? (
+        <p role="status" className="surface p-3 text-sm">Only a developer can change this account.</p>
       ) : null}
-    </div>
+
+      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="space-y-4">
+        <section className="surface space-y-4 p-4">
+          <h2 className="text-base font-medium">Details</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Full name" htmlFor="name"><Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={readOnly} required /></Field>
+            <Field label="Email" htmlFor="email"><Input id="email" value={user.email ?? ""} readOnly tabIndex={-1} /></Field>
+            <Field label="Phone" htmlFor="phone"><Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={readOnly} /></Field>
+          </div>
+        </section>
+        <RolesAndModules
+          roles={roles} setRoles={setRoles}
+          canGrantDeveloper={iAmDev} disabled={readOnly} lockedDeveloper={isSelf}
+        />
+        <FormMessage error={save.isError ? message(save.error) : null} ok={save.isSuccess ? "Saved" : null} />
+        {!readOnly ? <Button type="submit" disabled={save.isPending || !fullName.trim() || roles.length === 0}>{save.isPending ? "Saving" : "Save changes"}</Button> : null}
+      </form>
+
+    </>} />
   );
 }
 
 export function NewUserPage() {
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <Link to="/users" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Users
       </Link>
-      <h1 className="text-2xl font-semibold">Add a user</h1>
+      <div>
+        <h1 className="text-2xl font-semibold">Add a user</h1>
+        <p className="text-sm text-muted-foreground">Make a login for a member of staff, a parent or a student.</p>
+      </div>
       <CreateUser />
     </div>
   );
@@ -318,7 +327,7 @@ export default function UserPage() {
   const { id = "" } = useParams();
   const q = useQuery({ queryKey: ["users", id], queryFn: () => getUser(id), enabled: !!id });
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <Link to="/users" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Users
       </Link>
@@ -327,9 +336,13 @@ export default function UserPage() {
       {q.isSuccess && !q.data ? <p className="text-sm text-muted-foreground">User not found.</p> : null}
       {q.data ? (
         <>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold">{q.data.fullName}</h1>
-            {!q.data.isActive ? <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">Deactivated</span> : null}
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="break-words text-2xl font-semibold">{q.data.fullName}</h1>
+              {!q.data.isActive ? <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">Deactivated</span> : null}
+              {q.data.roles.map((r) => <span key={r} className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">{ROLE_LABELS[r] ?? r}</span>)}
+            </div>
+            {q.data.email ? <p className="break-all text-sm text-muted-foreground">{q.data.email}</p> : null}
           </div>
           <EditUser key={q.data.id + String(q.dataUpdatedAt)} user={q.data} />
         </>

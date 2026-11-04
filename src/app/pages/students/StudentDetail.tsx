@@ -20,6 +20,7 @@ import { PhotoPicker } from "../../components/PhotoPicker";
 import { StudentAvatar, usePhotoUrls } from "../../components/StudentAvatar";
 import { DocumentFields, HealthFields, HistoryFields, PersonalFields } from "./fieldsets";
 import { StatusPill } from "./StudentsList";
+import { Columns } from "../../components/Columns";
 import { ChangeClassCard, DeleteStudentCard, GuardiansCard } from "./StudentManage";
 
 function today(): string {
@@ -382,7 +383,7 @@ export default function StudentDetailPage() {
   const name = s ? [s.fields.firstName, s.fields.middleName, s.fields.lastName].filter(Boolean).join(" ") : "";
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="w-full space-y-4">
       <Link to="/students" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Students
       </Link>
@@ -412,33 +413,33 @@ export default function StudentDetailPage() {
             <StatusPill status={s.status} />
           </div>
 
-          <PhotoCard s={s} url={s.photoPath ? urls[s.id] : undefined} canEdit={canEdit} />
-
-          <AttendanceCard studentId={s.id} />
-
-          <GradesCard s={s} />
-
-          <GuardiansCard s={s} canEdit={canEdit} />
-
-          <DetailsForm key={s.id} s={s} canEdit={canEdit} />
-
-          <section className="surface space-y-2 p-4">
-            <h2 className="text-base font-medium">Classes</h2>
-            {s.enrollments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Not placed in a class yet.</p>
-            ) : (
-              <ul className="divide-y divide-border text-sm">
-                {s.enrollments.map((e) => (
-                  <li key={e.id} className="flex justify-between py-2"><span>{e.className}</span><span className="text-muted-foreground">{e.yearName}</span></li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {canEdit && s.status === "active" ? <ChangeClassCard s={s} /> : null}
-          {s.enrollments[0]?.sitsBece ? <BeceCard s={s} canEdit={can("grades.manage_bece")} /> : null}
-          {canEdit ? <StatusCard s={s} /> : null}
-          {isDev ? <DeleteStudentCard s={s} /> : null}
+          <Columns layout="balanced"
+            main={<>
+              <DetailsForm key={s.id} s={s} canEdit={canEdit} />
+              <GuardiansCard s={s} canEdit={canEdit} />
+              <section className="surface space-y-2 p-4">
+                <h2 className="text-base font-medium">Classes</h2>
+                {s.enrollments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Not placed in a class yet.</p>
+                ) : (
+                  <ul className="divide-y divide-border text-sm">
+                    {s.enrollments.map((e) => (
+                      <li key={e.id} className="flex justify-between py-2"><span>{e.className}</span><span className="text-muted-foreground">{e.yearName}</span></li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              {canEdit && s.status === "active" ? <ChangeClassCard s={s} /> : null}
+            </>}
+            side={<>
+              <PhotoCard s={s} url={s.photoPath ? urls[s.id] : undefined} canEdit={canEdit} />
+              <AttendanceCard studentId={s.id} />
+              <GradesCard s={s} />
+              {s.enrollments[0]?.sitsBece ? <BeceCard s={s} canEdit={can("grades.manage_bece")} /> : null}
+              {canEdit ? <StatusCard s={s} /> : null}
+              {isDev ? <DeleteStudentCard s={s} /> : null}
+            </>}
+          />
         </>
       ) : null}
     </div>

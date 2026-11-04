@@ -16,6 +16,7 @@ import { Input } from "../../components/ui/input";
 import { Field, FormMessage, NativeSelect } from "../../components/fields";
 import { PhotoPicker } from "../../components/PhotoPicker";
 import { cn } from "../../components/ui/utils";
+import { Columns } from "../../components/Columns";
 import { DocumentFields, HealthFields, HistoryFields, PersonalFields } from "./fieldsets";
 
 const STEPS = ["Student", "Health", "Family", "School history", "Review"] as const;
@@ -118,6 +119,56 @@ function GuardianCard({
   );
 }
 
+const ageText = (dob: string) => {
+  if (!dob) return "";
+  const d = new Date(dob + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  let years = now.getFullYear() - d.getFullYear();
+  if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) years--;
+  return years >= 0 ? `${years} ${years === 1 ? "year" : "years"} old` : "";
+};
+
+/** A card that fills in as the form is completed: who is being admitted, and what is still needed to go on. */
+function AdmissionSummary({ name, dob, gender, classLabel, people, steps, step, missing }: {
+  name: string; dob: string; gender: string; classLabel: string; people: { name: string; phone: string }[]; steps: readonly string[]; step: number; missing: string[][];
+}) {
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+  const row = (label: string, value: string) => (
+    <div className="flex items-baseline justify-between gap-3 text-sm"><dt className="shrink-0 text-muted-foreground">{label}</dt><dd className="min-w-0 break-words text-right font-medium">{value || <span className="font-normal text-muted-foreground">Not yet</span>}</dd></div>
+  );
+  return (
+    <section className="surface space-y-4 p-4" aria-label="Admission summary">
+      <div className="flex items-center gap-3">
+        <span className="grid size-14 shrink-0 place-items-center rounded-full bg-primary/15 text-lg font-semibold text-primary" aria-hidden>{initials || "?"}</span>
+        <div className="min-w-0">
+          <p className="break-words text-base font-semibold">{name || "New student"}</p>
+          <p className="text-xs text-muted-foreground">{[ageText(dob), gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : ""].filter(Boolean).join(" · ") || "Details appear here as you fill them in"}</p>
+        </div>
+      </div>
+      <dl className="space-y-1.5 border-t border-border pt-3">
+        {row("Class", classLabel)}
+        {row("Guardians", people.map((g) => g.name).join(", "))}
+        {row("Contact phone", people.find((g) => g.phone)?.phone ?? "")}
+      </dl>
+      <div className="border-t border-border pt-3">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Progress</p>
+        <ol className="space-y-1">
+          {steps.map((label, i) => {
+            const done = i < step && missing[i].length === 0;
+            return (
+              <li key={label} className="flex items-start gap-2 text-sm" aria-current={i === step ? "step" : undefined}>
+                <span className={`mt-1 size-2.5 shrink-0 rounded-full ${done ? "bg-emerald-500" : i === step ? "bg-primary" : "bg-foreground/20"}`} aria-hidden />
+                <span className={`min-w-0 ${i === step ? "font-medium" : ""}`}>{label}{missing[i].length > 0 && i <= step ? <span className="block text-xs font-normal text-amber-700 dark:text-amber-300">Needs {missing[i].join(" and ")}</span> : null}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 export default function AddStudent() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -186,7 +237,7 @@ export default function AddStudent() {
   const fullName = [fields.firstName, fields.middleName, fields.lastName].filter(Boolean).join(" ");
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <Link to="/students" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden /> Students
       </Link>
@@ -222,6 +273,10 @@ export default function AddStudent() {
         ))}
       </ol>
 
+      <Columns sticky layout="narrow"
+        side={<AdmissionSummary name={fullName} dob={fields.dateOfBirth} gender={fields.gender} classLabel={className ? `${className.levelName} ${className.section}` : ""}
+          people={named.map((g) => ({ name: g.fullName || "Existing guardian", phone: g.phone }))} steps={STEPS} step={step} missing={problems} />}
+        main={<>
       {noClasses && step === 0 ? (
         <section className="surface p-4 text-sm" role="status">
           There is no current academic year with classes yet, so the student cannot be placed in a class. You can still admit
@@ -303,6 +358,8 @@ export default function AddStudent() {
         )}
         <Button type="button" variant="ghost" asChild><Link to="/students">Cancel</Link></Button>
       </div>
+        </>}
+      />
     </div>
   );
 }
