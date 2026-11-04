@@ -5,6 +5,7 @@ import InstitutionTab from "./settings/InstitutionTab";
 import FeaturesTab from "./settings/FeaturesTab";
 import NotificationsTab from "./settings/NotificationsTab";
 import ExamPeriodsTab from "./settings/ExamPeriodsTab";
+import SchemesTab from "./settings/SchemesTab";
 import CalendarTab from "./settings/CalendarTab";
 import ClassesTab from "./settings/ClassesTab";
 import SubjectsTab from "./settings/SubjectsTab";
@@ -20,6 +21,7 @@ export default function Settings() {
   const showTimetable = canAny(["timetable.view", "timetable.edit", "timetable.edit_own_classes"]);
   const showAudit = can("audit.view");
   const showExams = can("grades.manage_exam_periods");
+  const showSchemes = can("grades.manage_assessment_schemes");
   return (
     <div className="w-full space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -44,6 +46,7 @@ export default function Settings() {
           { value: "classes", label: "Classes" },
           { value: "subjects", label: "Subjects" },
           { value: "grading", label: "Grading" },
+          ...(showSchemes ? [{ value: "schemes", label: "How marks add up" }] : []),
           ...(showExams ? [{ value: "exams", label: "Exam periods" }] : []),
           ...(showTimetable ? [{ value: "timetable", label: "Timetable" }] : []),
           ...(showAudit ? [{ value: "audit", label: "Security & Audit Log" }] : []),
@@ -52,6 +55,7 @@ export default function Settings() {
         <TabsContent value="institution"><InstitutionTab /></TabsContent>
         <TabsContent value="features"><FeaturesTab /></TabsContent>
         <TabsContent value="notifications"><NotificationsTab /></TabsContent>
+        {showSchemes ? <TabsContent value="schemes"><SchemesTab /></TabsContent> : null}
         {showExams ? <TabsContent value="exams"><ExamPeriodsTab /></TabsContent> : null}
         <TabsContent value="calendar"><CalendarTab /></TabsContent>
         <TabsContent value="classes"><ClassesTab /></TabsContent>

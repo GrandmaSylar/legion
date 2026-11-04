@@ -8,6 +8,7 @@ export function friendlyError(e: unknown): string {
       return "This still has records attached to it (such as grades), so it cannot be removed.";
     case "23514":
       return "Some of the values are not valid. Check the dates and try again.";
+    case "ASM01":
     case "EXW01":
       // Written for people to read ("Mark entry for Mock exam closed on 12 Nov 2026.").
       return err?.message || "That is not allowed right now.";
