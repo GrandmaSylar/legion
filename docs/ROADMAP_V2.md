@@ -82,7 +82,9 @@ Today modules use a strip of tabs that wraps onto several rows on a phone. Propo
 
 - [x] Term calendar: events as dates or runs of days with optional times, six kinds, an audience, and draft or published. Add by tapping a day or the Add event button; month grid on larger screens, a list on phones. Copy a term's events to a new term as drafts, and publish a term in one action that tells staff and parents once. Download as a bulleted or numbered list (PDF, text or Excel), as a picture (PNG, JPEG or PDF), or as a file for a phone's calendar (.ics). Parents and students see the published events meant for them. A switch in Features.
 - [ ] A live calendar link a phone can subscribe to, so changes appear without downloading again. Needs a secret link served by a function.
-- [ ] Exam periods, flexible assessment, timetable flexibility and the student fee notice, which build on the calendar.
+- [x] Exam periods (Settings, Exam periods): a named period for a mock, mid-term or term exam, with dates, all classes or chosen ones, an optional window for entering marks, and a switch to show it on the calendar. The window is enforced by the database for adding, changing and removing marks and for deleting a marked assessment; the head and anyone who may enter marks for any class are not held to it. A period's calendar entry is kept in step as a draft. Assessments can be linked to a period in the gradebook. Presets for mock, mid-term and term exam fill in sensible dates and windows.
+- [ ] Exam timetable, invigilation duties and report weighting for a period. They depend on timetable flexibility, tasks and flexible assessment.
+- [ ] Flexible assessment, timetable flexibility and the student fee notice.
 
 ## Open decisions still to make
 
